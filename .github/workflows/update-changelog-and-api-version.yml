@@ -6,7 +6,7 @@ on:
     paths-ignore: ['docs/**', 'Tests/**', 'Tools/**', '.github/**']
 
   pull_request:
-    branches: [ main, 'release/**' ]
+    branches: [ main, 'release/**',develop ]
     paths-ignore: ['docs/**', 'Tests/**', 'Tools/**', '.github/**']
 
 
