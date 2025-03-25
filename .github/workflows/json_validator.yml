@@ -19,7 +19,6 @@ jobs:
         with:
           files: |
             **/*.json
-
       - name: Validate the json files
         id: validate-json-files
         run : |
