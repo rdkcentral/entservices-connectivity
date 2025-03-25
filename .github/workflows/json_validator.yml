@@ -2,9 +2,9 @@ name: json-validator
 
 on:
   push:
-    branches: [ main, 'sprint/**', 'release/**', 'topic/tj-action' ]
-  pull_request:
     branches: [ main, 'sprint/**', 'release/**' ]
+  pull_request:
+    branches: [ main, 'sprint/**', 'release/**',develop ]
 
 jobs:
   build:
