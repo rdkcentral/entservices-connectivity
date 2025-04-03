@@ -32,7 +32,7 @@ git clone --branch R4.4.1 https://github.com/rdkcentral/Thunder.git
 
 git clone --branch main https://github.com/rdkcentral/entservices-apis.git
 
-git clone https://github.com/rdkcentral/entservices-casting.git
+git clone https://github.com/rdkcentral/entservices-connectivity.git
 
 git clone https://$GITHUB_TOKEN@github.com/rdkcentral/entservices-testframework.git
 
@@ -172,7 +172,7 @@ cp -r /usr/include/gstreamer-1.0/gst /usr/include/glib-2.0/* /usr/lib/x86_64-lin
 echo "======================================================================================"
 echo "buliding entservices-deviceanddisplay"
 cd $GITHUB_WORKSPACE
-cmake -G Ninja -S entservices-casting -B build/entservices-casting \
+cmake -G Ninja -S entservices-connectivity -B build/entservices-connectivity \
   -DUSE_THUNDER_R4=ON \
   -DCMAKE_INSTALL_PREFIX="$GITHUB_WORKSPACE/install/usr" \
   -DCMAKE_MODULE_PATH="$GITHUB_WORKSPACE/install/tools/cmake" \
@@ -213,6 +213,6 @@ cmake -G Ninja -S entservices-casting -B build/entservices-casting \
   -DPLUGIN_BLUETOOTH=ON \
 
 
-cmake --build build/entservices-casting --target install
+cmake --build build/entservices-connectivity --target install
 echo "======================================================================================"
 exit 0
