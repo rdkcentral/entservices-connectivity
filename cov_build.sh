@@ -34,7 +34,7 @@ git clone --branch main https://github.com/rdkcentral/entservices-apis.git
 
 git clone https://github.com/rdkcentral/entservices-connectivity.git
 
-git clone https://$GITHUB_TOKEN@github.com/rdkcentral/entservices-testframework.git
+git clone --branch R4_4 https://$GITHUB_TOKEN@github.com/rdkcentral/entservices-testframework.git
 
 ############################
 # Build Thunder-Tools
@@ -188,6 +188,9 @@ cmake -G Ninja -S entservices-connectivity -B build/entservices-connectivity \
                       -I ${PWD}/entservices-testframework/Tests/headers/rdk/iarmmgrs-hal \
                       -I ${PWD}/entservices-testframework/Tests/headers/ccec/drivers \
                       -I ${PWD}/entservices-testframework/Tests/headers/network \
+                      -I ${PWD}/entservices-testframework/Tests \
+                      -I ${PWD}/Thunder/Source \
+                      -I ${PWD}/Thunder/Source/core \
                       -include ${PWD}/entservices-testframework/Tests/mocks/devicesettings.h \
                       -include ${PWD}/entservices-testframework/Tests/mocks/Iarm.h \
                       -include ${PWD}/entservices-testframework/Tests/mocks/Rfc.h \
