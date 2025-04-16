@@ -29,6 +29,7 @@
 
 #include <stdlib.h>
 
+
 // IMPLEMENTATION NOTE
 //
 // Bluetooth Settings API in Thunder follows the schema proposed by Metrological what differs from the underlying
