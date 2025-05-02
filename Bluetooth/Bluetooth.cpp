@@ -147,7 +147,7 @@ namespace WPEFramework
         BTRMGR_Result_t bluetoothSrv_EventCallback (BTRMGR_EventMessage_t eventMsg)
         {
             if (!Bluetooth::_instance) {
-                LOGERR ("Invalid pointer. Bluetooth is not initialized (yet?). Event of type %d ignored.", eventMsg.m_eventType);
+                LOGERR ("Invalid pointer. Bluetooth is not initialized (yet?). Event of type %d ignored.");
                 return BTRMGR_RESULT_INIT_FAILED;
             } else {
                 Bluetooth::_instance->notifyEventWrapper(eventMsg);
