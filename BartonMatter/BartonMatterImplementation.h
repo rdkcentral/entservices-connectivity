@@ -27,7 +27,6 @@
 #include <mutex>
 #include <thread>
 #include <vector>
-using namespace JsRuntime;
 
 namespace WPEFramework
 {
