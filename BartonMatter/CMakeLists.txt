@@ -15,7 +15,10 @@ set_target_properties(${MODULE_NAME} PROPERTIES
         CXX_STANDARD_REQUIRED YES)
 
 #target_include_directories(${MODULE_NAME} PRIVATE ../helpers $ENV{PKG_CONFIG_SYSROOT_DIR}/usr/include/jsruntime ${CMAKE_CURRENT_SOURCE_DIR} )
-
+target_include_directories(${MODULE_NAME} PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../helpers
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
 link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../build/BartonMatter)
 
 target_link_libraries(${MODULE_NAME} PRIVATE
