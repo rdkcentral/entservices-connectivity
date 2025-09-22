@@ -25,7 +25,6 @@
 #include <interfaces/Ids.h>
 
 #include <mutex>
-#include "NativeJSRenderer.h"
 #include <thread>
 #include <vector>
 using namespace JsRuntime;
@@ -55,7 +54,6 @@ namespace WPEFramework
         private:
             std::thread mRenderThread;
             bool mRunning;
-            std::shared_ptr<NativeJSRenderer> mNativeJSRenderer;
         };
     } // namespace Plugin
 } // namespace WPEFramework

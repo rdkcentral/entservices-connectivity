@@ -40,119 +40,46 @@ namespace WPEFramework
         BartonMatterImplementation::~BartonMatterImplementation()
         {
             TRACE(Trace::Information, (_T("Destructing BartonMatterImplementation Service: %p"), this));
-            mNativeJSRenderer = nullptr;
         }
 
         Core::hresult BartonMatterImplementation::Initialize(string waylandDisplay)
         {   
             std::cout << "initialize called on BartonMatter implementation " << std::endl;
-            mRenderThread = std::thread([=](std::string waylandDisplay) {
-                mNativeJSRenderer = std::make_shared<NativeJSRenderer>(waylandDisplay);
-                //if (!gPendingUrlRequest.empty())
-                //{
-		//    ModuleSettings moduleSettings;
-                //    moduleSettings.fromString(gPendingUrlOptionsRequest);
-                //    mNativeJSRenderer->launchApplication(gPendingUrlRequest, moduleSettings);
-		//    gPendingUrlRequest = "";
-                //    gPendingUrlOptionsRequest = "";
-                //}
-		
-		mNativeJSRenderer->run();
-		
-		printf("After launch application execution ... \n"); fflush(stdout);
-		mNativeJSRenderer.reset();
-
-            }, waylandDisplay);
             return (Core::ERROR_NONE);
         }
 
         Core::hresult BartonMatterImplementation::Deinitialize()
         {
            LOGINFO("deinitializing BartonMatter process");
-           if (mNativeJSRenderer)
-           {
-               mNativeJSRenderer->terminate();
-               if (mRenderThread.joinable())
-               {
-                   mRenderThread.join();
-               }
-           }
 	   return (Core::ERROR_NONE);
         }
 
 	Core::hresult BartonMatterImplementation::CreateApplication(const std::string options, uint32_t& id)
 	{
-		LOGINFO("createApplication invoked");
-		if(mNativeJSRenderer)
-		{
-			std::string optionsVal(options);
-			ModuleSettings moduleSettings;
-			moduleSettings.fromString(optionsVal);
-			id = mNativeJSRenderer->createApplication(moduleSettings);
-		}
-		else 
-		{
-			gPendingIdOptionsRequest = options;
-		}
 		return (Core::ERROR_NONE);
 	}
 
 	Core::hresult BartonMatterImplementation::RunApplication(uint32_t id, const std::string url)
 	{
 		LOGINFO("runApplication invoked");
-		if(mNativeJSRenderer)
-		{
-			std::string Url(url);
-			mNativeJSRenderer->runApplication(id, Url);
-		}
-		else
-		{
-			gPendingUrl = url;
-			LOGINFO("runApplication Couldn't execute");
-		}
 		return (Core::ERROR_NONE);
 	}
 
 	Core::hresult BartonMatterImplementation::RunJavaScript(uint32_t id, const std::string code)
 	{
 		LOGINFO("runJavaScript invoked");
-		if(mNativeJSRenderer)
-		{
-			std::string Code(code);
-			mNativeJSRenderer->runJavaScript(id, Code);
-		}
-		else
-		{
-			LOGINFO("runJavaScript couldn't execute");
-		}
 		return (Core::ERROR_NONE);
 	}
 
 	Core::hresult BartonMatterImplementation::GetApplications()
 	{
 		LOGINFO("getApplication invoked");
-		if(mNativeJSRenderer)
-		{
-			mNativeJSRenderer->getApplications();
-		}
-		else
-		{
-			LOGINFO("getApplication couldn't execute");
-		}
 		return (Core::ERROR_NONE);
 	}
 
 	Core::hresult BartonMatterImplementation::TerminateApplication(uint32_t id)
 	{
 		LOGINFO("terminateApplication invoked");
-		if(mNativeJSRenderer)
-		{
-			mNativeJSRenderer->terminateApplication(id);
-		}
-		else
-		{
-			LOGINFO("Application couldn't be terminated");
-		}
 		return (Core::ERROR_NONE);
 	}
 } // namespace Plugin
