@@ -59,7 +59,6 @@ namespace WPEFramework {
                 return message;
             }
             mConfig.FromString(service->ConfigLine());
-            mBartonMatter->Initialize(waylandDisplay);
 	    Exchange::JBartonMatter::Register(*this, mBartonMatter);
             return "";
         }
