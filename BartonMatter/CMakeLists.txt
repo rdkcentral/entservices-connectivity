@@ -14,43 +14,6 @@ set_target_properties(${MODULE_NAME} PROPERTIES
         CXX_STANDARD 17
         CXX_STANDARD_REQUIRED YES)
 
-find_path(BARTON_INCLUDE_DIR
-    NAMES barton-core-client.h
-    PATHS
-        ${CMAKE_SYSROOT}/usr/include/barton
-        ${CMAKE_SYSROOT}/usr/include
-    NO_DEFAULT_PATH
-)
-
-# Library path (libBartonCore.so)
-find_library(BARTON_CORE_LIB
-    NAMES BartonCore
-    PATHS
-        ${CMAKE_SYSROOT}/usr/lib
-        ${CMAKE_SYSROOT}/usr/lib64
-        ${CMAKE_SYSROOT}/lib
-    NO_DEFAULT_PATH
-)
-
-if(NOT BARTON_INCLUDE_DIR)
-    message(FATAL_ERROR "barton-core-client.h not found in sysroot!")
-else()
-    message(STATUS "Found Barton headers in: ${BARTON_INCLUDE_DIR}")
-endif()
-
-if(NOT BARTON_CORE_LIB)
-    message(FATAL_ERROR "libBartonCore.so not found in sysroot!")
-else()
-    message(STATUS "Found Barton lib: ${BARTON_CORE_LIB}")
-endif()
-# --- Done ---
-
-target_include_directories(${MODULE_NAME} PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/../helpers
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${BARTON_INCLUDE_DIR}
-)
-
 #target_include_directories(${MODULE_NAME} PRIVATE ../helpers $ENV{PKG_CONFIG_SYSROOT_DIR}/usr/include/jsruntime ${CMAKE_CURRENT_SOURCE_DIR} )
 target_include_directories(${MODULE_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../helpers
@@ -61,11 +24,9 @@ link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../build/BartonMatter)
 target_link_libraries(${MODULE_NAME} PRIVATE
     ${NAMESPACE}Plugins::${NAMESPACE}Plugins
     ${NAMESPACE}Definitions::${NAMESPACE}Definitions
-    ${BARTON_CORE_LIB}
 )
 
 install(TARGETS ${MODULE_NAME}
         DESTINATION lib/${STORAGE_DIRECTORY}/plugins)
 
 write_config(${PLUGIN_NAME})
-
