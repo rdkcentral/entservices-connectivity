@@ -40,19 +40,11 @@ namespace WPEFramework
             virtual ~BartonMatterImplementation();
             virtual Core::hresult Initialize(const string waylandDisplay) override;
             virtual Core::hresult Deinitialize() override;
-	    virtual Core::hresult CreateApplication(const std::string options, uint32_t& id) override;
-	    virtual Core::hresult GetApplications() override;
-	    virtual Core::hresult RunApplication(uint32_t id, const std::string url) override;
-	    virtual Core::hresult RunJavaScript(uint32_t id, const std::string code) override;
-	    virtual Core::hresult TerminateApplication(uint32_t id) override;
-            
 	    BEGIN_INTERFACE_MAP(BartonMatterImplementation)
             INTERFACE_ENTRY(Exchange::IBartonMatter)
             END_INTERFACE_MAP
 
         private:
-            std::thread mRenderThread;
-            bool mRunning;
         };
     } // namespace Plugin
 } // namespace WPEFramework

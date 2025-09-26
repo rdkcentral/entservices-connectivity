@@ -54,33 +54,5 @@ namespace WPEFramework
 	   return (Core::ERROR_NONE);
         }
 
-	Core::hresult BartonMatterImplementation::CreateApplication(const std::string options, uint32_t& id)
-	{
-		return (Core::ERROR_NONE);
-	}
-
-	Core::hresult BartonMatterImplementation::RunApplication(uint32_t id, const std::string url)
-	{
-		LOGINFO("runApplication invoked");
-		return (Core::ERROR_NONE);
-	}
-
-	Core::hresult BartonMatterImplementation::RunJavaScript(uint32_t id, const std::string code)
-	{
-		LOGINFO("runJavaScript invoked");
-		return (Core::ERROR_NONE);
-	}
-
-	Core::hresult BartonMatterImplementation::GetApplications()
-	{
-		LOGINFO("getApplication invoked");
-		return (Core::ERROR_NONE);
-	}
-
-	Core::hresult BartonMatterImplementation::TerminateApplication(uint32_t id)
-	{
-		LOGINFO("terminateApplication invoked");
-		return (Core::ERROR_NONE);
-	}
 } // namespace Plugin
 } // namespace WPEFramework
