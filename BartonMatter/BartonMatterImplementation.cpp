@@ -44,7 +44,7 @@ namespace WPEFramework
 
         Core::hresult BartonMatterImplementation::Initialize()
         {   
-            std::cout << "initialize called on BartonMatter implementation " << std::endl;
+            LOGINFO("initialize called on BartonMatter implementation ");
             return (Core::ERROR_NONE);
         }
 
@@ -53,6 +53,37 @@ namespace WPEFramework
            LOGINFO("deinitializing BartonMatter process");
 	   return (Core::ERROR_NONE);
         }
+
+	Core::hresult SetWifiCredentials(const std::string ssid /* @in */, const std::string password /* @in */)
+	{
+		LOGINFO("Setting wifi credentials");
+		return (Core::ERROR_NONE);
+	}
+
+	Core::hresult CommissionDevice(const std::string passcode /* @in */)
+	{
+		LOGINFO("Starting commissioning process");
+		return (Core::ERROR_NONE);
+	}
+
+	Core::hresult ReadResource()
+	{
+		LOGINFO("Reading the current status of the resource");
+		return (Core::ERROR_NONE);
+	}
+
+	Core::hresult WriteResource()
+	{
+		LOGINFO("Writing the resource");
+		return (Core::ERROR_NONE);
+	}
+
+	Core::hresult DisconnectDevice()
+	{
+		LOGINFO("Disconnecting the device");
+		return (Core::ERROR_NONE);
+	}
+
 
 } // namespace Plugin
 } // namespace WPEFramework
