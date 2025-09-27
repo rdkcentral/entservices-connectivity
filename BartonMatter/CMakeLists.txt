@@ -5,6 +5,7 @@ find_package(${NAMESPACE}Plugins REQUIRED)
 find_package(${NAMESPACE}Definitions REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GLIB REQUIRED glib-2.0 gobject-2.0)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-variable -Wno-error=unused-variable" CACHE STRING "" FORCE)
 
 add_library(${MODULE_NAME} SHARED
 	BartonMatterPlugin.cpp
