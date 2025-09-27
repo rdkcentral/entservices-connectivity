@@ -3,6 +3,8 @@ set(MODULE_NAME ${NAMESPACE}${PLUGIN_NAME})
 
 find_package(${NAMESPACE}Plugins REQUIRED)
 find_package(${NAMESPACE}Definitions REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(GLIB REQUIRED glib-2.0 gobject-2.0)
 
 add_library(${MODULE_NAME} SHARED
 	BartonMatterPlugin.cpp
@@ -49,19 +51,15 @@ target_include_directories(${MODULE_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../helpers
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${BARTON_INCLUDE_DIR}
+    ${GLIB_INCLUDE_DIRS}
 )
 
 #target_include_directories(${MODULE_NAME} PRIVATE ../helpers $ENV{PKG_CONFIG_SYSROOT_DIR}/usr/include/jsruntime ${CMAKE_CURRENT_SOURCE_DIR} )
-target_include_directories(${MODULE_NAME} PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/../helpers
-    ${CMAKE_CURRENT_SOURCE_DIR}
-)
-link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../build/BartonMatter)
-
 target_link_libraries(${MODULE_NAME} PRIVATE
     ${NAMESPACE}Plugins::${NAMESPACE}Plugins
     ${NAMESPACE}Definitions::${NAMESPACE}Definitions
     ${BARTON_CORE_LIB}
+    ${GLIB_LIBRARIES}
 )
 
 install(TARGETS ${MODULE_NAME}
