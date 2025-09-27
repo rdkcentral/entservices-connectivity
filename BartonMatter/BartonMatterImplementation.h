@@ -23,6 +23,7 @@
 #include "UtilsLogging.h"
 #include <interfaces/IBartonMatter.h>
 #include <interfaces/Ids.h>
+#include <barton-core-client.h>
 
 #include <mutex>
 #include <thread>
