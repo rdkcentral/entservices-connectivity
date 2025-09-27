@@ -58,21 +58,7 @@ namespace WPEFramework {
                 mService = nullptr;
                 return message;
             }
-            std::string waylandDisplay("");
-            mConfig.FromString(service->ConfigLine());
-            if (mConfig.Display.IsSet() == true)
-            {
-                waylandDisplay = mConfig.Display.Value();
-            }
-            else
-            {
-                const char* display = getenv("WAYLAND_DISPLAY");
-                if (NULL != display)
-                {
-                   waylandDisplay = display;
-                }
-            }
-            mBartonMatter->Initialize(waylandDisplay);
+            mBartonMatter->Initialize();
 	    Exchange::JBartonMatter::Register(*this, mBartonMatter);
             return "";
         }

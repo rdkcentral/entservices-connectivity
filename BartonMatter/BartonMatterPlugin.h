@@ -32,28 +32,6 @@ namespace WPEFramework {
 
         class BartonMatter : public PluginHost::IPlugin, public PluginHost::JSONRPC {
         public:
-            class Config : public Core::JSON::Container
-            {
-                private:
-                    Config(const Config&) = delete;
-                    Config& operator=(const Config&) = delete;
-
-                public:
-                    Config()
-                        : Core::JSON::Container()
-                          , Display(_T(""))
-                    {
-                        Add(_T("embedthunderjs"), &EmbedThunderJS);
-                        Add(_T("clientidentifier"), &Display);
-                    }
-                    ~Config()
-                    {
-                    }
-
-                public:
-                    Core::JSON::Boolean EmbedThunderJS;
-                    Core::JSON::String Display;
-            };
 
             BEGIN_INTERFACE_MAP(BartonMatterPlugin)
             INTERFACE_AGGREGATE(Exchange::IBartonMatter, mBartonMatter)
@@ -82,7 +60,6 @@ namespace WPEFramework {
             PluginHost::IShell* mService;
             uint32_t mConnectionId;
             Exchange::IBartonMatter* mBartonMatter;
-            Config mConfig;
         };
     } // namespace Plugin
 } // namespace WPEFramework
