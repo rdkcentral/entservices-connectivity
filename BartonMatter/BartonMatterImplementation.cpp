@@ -45,7 +45,8 @@ namespace WPEFramework
 		{   
 			LOGINFO("initialize called on BartonMatter implementation ");
 			g_autofree gchar *confDir = GetDefaultConfigDir();
-			g_autofree gchar *histFile = stringBuilder("%s/%s", confDir, HISTORY_FILE);
+			g_autofree gchar *histFile = g_strdup_printf("%s/%s", confDir, HISTORY_FILE);
+
 			g_autoptr(BCoreClient) client = InitializeClient(confDir);
 
 			/*Start the client*/
@@ -93,17 +94,17 @@ namespace WPEFramework
 
 		gchar *GetDefaultConfigDir()
 		{
-			g_autofree gchar *histFile = g_strdup_printf("%s/%s", confDir, HISTORY_FILE);
+			g_autofree gchar *confDir = g_strdup_printf("/opt/.brtn-ds");
 			g_mkdir_with_parents(confDir, DEFAULT_CONF_DIR_MODE);
 			return confDir;
 		}
 
-		static BCoreClient *InitializeClient(gchar *confDir)
+		BCoreClient *InitializeClient(gchar *confDir)
 		{
 			g_autoptr(BCoreInitializeParamsContainer) params = b_core_initialize_params_container_new();
 			b_core_initialize_params_container_set_storage_dir(params, confDir);
 
-			g_autofree gchar *matterConfDir = stringBuilder("%s/matter", confDir);
+			g_autofree gchar *matterConfigDir = g_strdup_printf("%s/matter", confDir);
 			g_mkdir_with_parents(matterConfDir, DEFAULT_CONF_DIR_MODE);
 			b_core_initialize_params_container_set_matter_storage_dir(params, matterConfDir);
 			b_core_initialize_params_container_set_matter_attestation_trust_store_dir(params, matterConfDir);
@@ -125,7 +126,7 @@ namespace WPEFramework
 			return client;
 		}
 
-		static void SetDefaultParameters(BCoreInitializeParamsContainer *params)
+		void SetDefaultParameters(BCoreInitializeParamsContainer *params)
 		{
 			BCorePropertyProvider *propProvider =
 				b_core_initialize_params_container_get_property_provider(params);

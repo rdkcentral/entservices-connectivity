@@ -54,6 +54,8 @@ namespace WPEFramework
 
 	    gchar *GetDefaultConfigDir();
 	    void RegisterEventHandlers(BCoreClient *client);
+	    void SetDefaultParameters(BCoreInitializeParamsContainer *params);
+	    BCoreClient *InitializeClient(gchar *confDir);
 
 	    BEGIN_INTERFACE_MAP(BartonMatterImplementation)
             INTERFACE_ENTRY(Exchange::IBartonMatter)
