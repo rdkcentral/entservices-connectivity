@@ -51,7 +51,7 @@ namespace WPEFramework
 			/*Start the client*/
 			b_core_client_start(client);
 			b_core_client_set_system_property(client, "deviceDescriptorBypass", "true");
-			RegisterEventHandlers(BCoreClient *client);
+			RegisterEventHandlers(client);
 			return (Core::ERROR_NONE);
 		}
 
@@ -93,7 +93,7 @@ namespace WPEFramework
 
 		gchar *GetDefaultConfigDir()
 		{
-			gchar *confDir = stringBuilder("/opt/.brtn-ds");
+			g_autofree gchar *histFile = g_strdup_printf("%s/%s", confDir, HISTORY_FILE);
 			g_mkdir_with_parents(confDir, DEFAULT_CONF_DIR_MODE);
 			return confDir;
 		}

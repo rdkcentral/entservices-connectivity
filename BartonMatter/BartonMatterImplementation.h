@@ -24,6 +24,7 @@
 #include <interfaces/IBartonMatter.h>
 #include <interfaces/Ids.h>
 #include <barton-core-client.h>
+#include <barton-core-properties.h>
 
 #include <mutex>
 #include <thread>
@@ -52,8 +53,6 @@ namespace WPEFramework
 	    virtual Core::hresult DisconnectDevice()override;
 
 	    gchar *GetDefaultConfigDir();
-	    static BCoreClient *InitializeClient(gchar *confDir);
-	    static void SetDefaultParameters(BCoreInitializeParamsContainer *params);
 	    void RegisterEventHandlers(BCoreClient *client);
 
 	    BEGIN_INTERFACE_MAP(BartonMatterImplementation)
