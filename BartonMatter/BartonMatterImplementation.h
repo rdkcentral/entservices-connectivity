@@ -29,6 +29,10 @@
 #include <thread>
 #include <vector>
 
+#define HISTORY_FILE          ".barton-ds-reference-history"
+#define HISTORY_MAX           100
+#define DEFAULT_CONF_DIR_MODE (0755)
+
 namespace WPEFramework
 {
     namespace Plugin
@@ -46,6 +50,11 @@ namespace WPEFramework
 	    virtual Core::hresult ReadResource()override;
 	    virtual Core::hresult WriteResource()override;
 	    virtual Core::hresult DisconnectDevice()override;
+
+	    void gchar *GetDefaultConfigDir();
+	    static BCoreClient *InitializeClient(gchar *confDir);
+	    static void SetDefaultParameters(BCoreInitializeParamsContainer *params);
+	    void RegisterEventHandlers(BCoreClient *client);
 
 	    BEGIN_INTERFACE_MAP(BartonMatterImplementation)
             INTERFACE_ENTRY(Exchange::IBartonMatter)
