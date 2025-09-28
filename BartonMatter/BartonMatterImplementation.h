@@ -51,7 +51,7 @@ namespace WPEFramework
 	    virtual Core::hresult WriteResource()override;
 	    virtual Core::hresult DisconnectDevice()override;
 
-	    void gchar *GetDefaultConfigDir();
+	    gchar *GetDefaultConfigDir();
 	    static BCoreClient *InitializeClient(gchar *confDir);
 	    static void SetDefaultParameters(BCoreInitializeParamsContainer *params);
 	    void RegisterEventHandlers(BCoreClient *client);

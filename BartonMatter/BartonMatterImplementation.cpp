@@ -91,7 +91,7 @@ namespace WPEFramework
 			return (Core::ERROR_NONE);
 		}
 
-		void gchar *GetDefaultConfigDir()
+		gchar *GetDefaultConfigDir()
 		{
 			gchar *confDir = stringBuilder("/opt/.brtn-ds");
 			g_mkdir_with_parents(confDir, DEFAULT_CONF_DIR_MODE);
