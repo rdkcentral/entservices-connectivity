@@ -99,15 +99,15 @@ namespace WPEFramework
 			return confDir;
 		}
 
-		BCoreClient *InitializeClient(gchar *confDir)
+		BCoreClient* BartonMatterImplementation::InitializeClient(gchar *confDir)
 		{
 			g_autoptr(BCoreInitializeParamsContainer) params = b_core_initialize_params_container_new();
 			b_core_initialize_params_container_set_storage_dir(params, confDir);
 
 			g_autofree gchar *matterConfigDir = g_strdup_printf("%s/matter", confDir);
-			g_mkdir_with_parents(matterConfDir, DEFAULT_CONF_DIR_MODE);
-			b_core_initialize_params_container_set_matter_storage_dir(params, matterConfDir);
-			b_core_initialize_params_container_set_matter_attestation_trust_store_dir(params, matterConfDir);
+			g_mkdir_with_parents(matterConfigDir, DEFAULT_CONF_DIR_MODE);
+			b_core_initialize_params_container_set_matter_storage_dir(params, matterConfigDir);
+			b_core_initialize_params_container_set_matter_attestation_trust_store_dir(params, matterConfigDir);
 
 			b_core_initialize_params_container_set_account_id(params, "1");
 			/*implement the network credentials provider*/
@@ -126,7 +126,7 @@ namespace WPEFramework
 			return client;
 		}
 
-		void SetDefaultParameters(BCoreInitializeParamsContainer *params)
+		void BartonMatterImplementation::SetDefaultParameters(BCoreInitializeParamsContainer *params)
 		{
 			BCorePropertyProvider *propProvider =
 				b_core_initialize_params_container_get_property_provider(params);
