@@ -40,7 +40,7 @@ namespace WPEFramework
         public:
             BartonMatterImplementation();
             virtual ~BartonMatterImplementation();
-            virtual Core::hresult Initialize(const string waylandDisplay) override;
+            virtual Core::hresult Initialize() override;
             virtual Core::hresult Deinitialize() override;
 	    virtual Core::hresult SetWifiCredentials(const std::string ssid /* @in */, const std::string password /* @in */)override;
 	    virtual Core::hresult CommissionDevice(const std::string passcode /* @in */)override;
