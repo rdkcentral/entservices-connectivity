@@ -23,6 +23,8 @@
 #include "UtilsLogging.h"
 #include <interfaces/IBartonMatter.h>
 #include <interfaces/Ids.h>
+#include <barton-core-client.h>
+#include <barton-core-properties.h>
 
 #include <mutex>
 #include <thread>
@@ -40,11 +42,11 @@ namespace WPEFramework
             virtual ~BartonMatterImplementation();
             virtual Core::hresult Initialize(const string waylandDisplay) override;
             virtual Core::hresult Deinitialize() override;
-	    virtual Core::hresult CreateApplication(const std::string options, uint32_t& id) override;
-	    virtual Core::hresult GetApplications() override;
-	    virtual Core::hresult RunApplication(uint32_t id, const std::string url) override;
-	    virtual Core::hresult RunJavaScript(uint32_t id, const std::string code) override;
-	    virtual Core::hresult TerminateApplication(uint32_t id) override;
+	    virtual Core::hresult SetWifiCredentials(const std::string ssid /* @in */, const std::string password /* @in */)override;
+	    virtual Core::hresult CommissionDevice(const std::string passcode /* @in */)override;
+	    virtual Core::hresult ReadResource()override;
+	    virtual Core::hresult WriteResource()override;
+	    virtual Core::hresult DisconnectDevice()override;
             
 	    BEGIN_INTERFACE_MAP(BartonMatterImplementation)
             INTERFACE_ENTRY(Exchange::IBartonMatter)
