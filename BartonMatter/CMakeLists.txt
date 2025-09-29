@@ -4,8 +4,8 @@ set(MODULE_NAME ${NAMESPACE}${PLUGIN_NAME})
 find_package(${NAMESPACE}Plugins REQUIRED)
 find_package(${NAMESPACE}Definitions REQUIRED)
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(GLIB REQUIRED glib-2.0 gobject-2.0)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-variable -Wno-error=unused-variable" CACHE STRING "" FORCE)
+#pkg_check_modules(GLIB REQUIRED glib-2.0 gobject-2.0)
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-variable -Wno-error=unused-variable" CACHE STRING "" FORCE)
 
 add_library(${MODULE_NAME} SHARED
 	BartonMatterPlugin.cpp
@@ -51,16 +51,16 @@ endif()
 target_include_directories(${MODULE_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../helpers
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ${BARTON_INCLUDE_DIR}
-    ${GLIB_INCLUDE_DIRS}
+    #${BARTON_INCLUDE_DIR}
+    #${GLIB_INCLUDE_DIRS}
 )
 
 #target_include_directories(${MODULE_NAME} PRIVATE ../helpers $ENV{PKG_CONFIG_SYSROOT_DIR}/usr/include/jsruntime ${CMAKE_CURRENT_SOURCE_DIR} )
 target_link_libraries(${MODULE_NAME} PRIVATE
     ${NAMESPACE}Plugins::${NAMESPACE}Plugins
     ${NAMESPACE}Definitions::${NAMESPACE}Definitions
-    ${BARTON_CORE_LIB}
-    ${GLIB_LIBRARIES}
+    #${BARTON_CORE_LIB}
+    #${GLIB_LIBRARIES}
 )
 
 install(TARGETS ${MODULE_NAME}
