@@ -59,12 +59,6 @@ namespace WPEFramework {
                 return message;
             }
             mConfig.FromString(service->ConfigLine());
-            if (mConfig.Display.IsSet() == true)
-            {
-            }
-            else
-            {
-            }
 	    Exchange::JBartonMatter::Register(*this, mBartonMatter);
             return "";
         }
