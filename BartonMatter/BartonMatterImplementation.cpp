@@ -42,18 +42,6 @@ namespace WPEFramework
             TRACE(Trace::Information, (_T("Destructing BartonMatterImplementation Service: %p"), this));
         }
 
-        Core::hresult BartonMatterImplementation::Initialize(string waylandDisplay)
-        {   
-            std::cout << "initialize called on BartonMatter implementation " << std::endl;
-            return (Core::ERROR_NONE);
-        }
-
-        Core::hresult BartonMatterImplementation::Deinitialize()
-        {
-           LOGINFO("deinitializing BartonMatter process");
-	   return (Core::ERROR_NONE);
-        }
-
 	Core::hresult BartonMatterImplementation::CreateApplication(const std::string options, uint32_t& id)
 	{
 		return (Core::ERROR_NONE);

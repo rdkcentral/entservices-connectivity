@@ -58,21 +58,13 @@ namespace WPEFramework {
                 mService = nullptr;
                 return message;
             }
-            std::string waylandDisplay("");
             mConfig.FromString(service->ConfigLine());
             if (mConfig.Display.IsSet() == true)
             {
-                waylandDisplay = mConfig.Display.Value();
             }
             else
             {
-                const char* display = getenv("WAYLAND_DISPLAY");
-                if (NULL != display)
-                {
-                   waylandDisplay = display;
-                }
             }
-            mBartonMatter->Initialize(waylandDisplay);
 	    Exchange::JBartonMatter::Register(*this, mBartonMatter);
             return "";
         }
@@ -83,7 +75,6 @@ namespace WPEFramework {
             if (mBartonMatter != nullptr) {
 
                 Exchange::JBartonMatter::Unregister(*this);
-                mBartonMatter->Deinitialize();
 
                 mBartonMatter->Release();
                 mBartonMatter = nullptr;
