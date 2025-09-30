@@ -72,7 +72,7 @@ namespace WPEFramework {
                    waylandDisplay = display;
                 }
             }
-            mBartonMatter->Initialize();
+            mBartonMatter->Initialize(waylandDisplay);
 	    Exchange::JBartonMatter::Register(*this, mBartonMatter);
             return "";
         }
