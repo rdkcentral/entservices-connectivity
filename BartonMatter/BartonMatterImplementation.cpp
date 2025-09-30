@@ -44,6 +44,7 @@ namespace WPEFramework
 	{
 		TRACE(Trace::Information, (_T("Destructing BartonMatterImplementation Service: %p"), this));
 		std::cout<<"Tanuj: wifiID:"<<ssid<<" "<<"Wifi pass:"<<password<<endl;
+		return (Core::ERROR_NONE);
 	}
 
 } // namespace Plugin
