@@ -32,7 +32,6 @@ namespace WPEFramework
 	SERVICE_REGISTRATION(BartonMatterImplementation, 1, 0);
 
         BartonMatterImplementation::BartonMatterImplementation()
-            : mRunning(true)
         {
             TRACE(Trace::Information, (_T("Constructing BartonMatterImplementation Service: %p"), this));
         }
