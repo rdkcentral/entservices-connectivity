@@ -40,6 +40,11 @@ namespace WPEFramework
         {
             TRACE(Trace::Information, (_T("Destructing BartonMatterImplementation Service: %p"), this));
         }
+	Core::hresult BartonMatterImplementation::SetWifiCredentials(const std::string ssid /* @in */, const std::string password /* @in */)
+	{
+		TRACE(Trace::Information, (_T("Destructing BartonMatterImplementation Service: %p"), this));
+		std::cout<<"Tanuj: wifiID:"<<ssid<<" "<<"Wifi pass:"<<password<<endl;
+	}
 
 } // namespace Plugin
 } // namespace WPEFramework
