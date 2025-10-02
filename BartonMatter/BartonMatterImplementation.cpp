@@ -52,6 +52,7 @@ namespace WPEFramework
 	Core::hresult BartonMatterImplementation::InitializeCommissioner()
 	{
 		GetConfigDirectory();
+		return (Core::ERROR_NONE);
 	}
 
 	void BartonMatterImplementation::printWifiDetails() const
