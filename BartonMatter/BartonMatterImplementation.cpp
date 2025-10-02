@@ -49,7 +49,7 @@ namespace WPEFramework
 		return (Core::ERROR_NONE);
 	}
 
-	void BartonMatterImplementation::Initliaze()
+	Core::hresult BartonMatterImplementation::InitializeCommissioner()
 	{
 		GetConfigDirectory();
 	}

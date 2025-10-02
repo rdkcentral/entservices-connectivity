@@ -60,7 +60,6 @@ namespace WPEFramework {
             }
             mConfig.FromString(service->ConfigLine());
 	    Exchange::JBartonMatter::Register(*this, mBartonMatter);
-	    mBartonMatter->Initliaze();
             return "";
         }
 

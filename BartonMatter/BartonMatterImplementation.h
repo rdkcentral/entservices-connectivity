@@ -41,8 +41,8 @@ namespace WPEFramework
             BartonMatterImplementation();
             virtual ~BartonMatterImplementation();
 	    virtual Core::hresult SetWifiCredentials(const std::string ssid /* @in */, const std::string password /* @in */)override;
+	    virtual Core::hresult InitializeCommissioner()override;
 
-	    void Initliaze();
 	    BEGIN_INTERFACE_MAP(BartonMatterImplementation)
             INTERFACE_ENTRY(Exchange::IBartonMatter)
             END_INTERFACE_MAP
