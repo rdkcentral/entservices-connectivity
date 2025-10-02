@@ -49,7 +49,7 @@ namespace WPEFramework
 		return (Core::ERROR_NONE);
 	}
 
-	void BartonMatterImplementation::printWifiDetails()
+	void BartonMatterImplementation::printWifiDetails() const
 	{
 		std::cout << "---- WiFi Details ----\n";
     		std::cout << "SSID: " << wifiSSID << "\n";
