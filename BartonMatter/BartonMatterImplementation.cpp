@@ -42,9 +42,19 @@ namespace WPEFramework
         }
 	Core::hresult BartonMatterImplementation::SetWifiCredentials(const std::string ssid /* @in */, const std::string password /* @in */)
 	{
-		TRACE(Trace::Information, (_T("Destructing BartonMatterImplementation Service: %p"), this));
-		std::cout<<"Tanuj: wifiID:"<<ssid<<" "<<"Wifi pass:"<<password<<endl;
+		wifiSSID = ssid;
+		wifiPassword = password;
+		if(!wifiSSID.empty() && !wifiPassword.empty())
+			printWifiDetails();
 		return (Core::ERROR_NONE);
+	}
+
+	void BartonMatterImplementation::printWifiDetails()
+	{
+		std::cout << "---- WiFi Details ----\n";
+    		std::cout << "SSID: " << wifiSSID << "\n";
+		std::cout << "Password: " << wifiPassword << "\n";
+    		std::cout << "----------------------\n";
 	}
 
 } // namespace Plugin
