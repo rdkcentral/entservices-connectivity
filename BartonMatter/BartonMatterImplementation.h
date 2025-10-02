@@ -50,7 +50,7 @@ namespace WPEFramework
         private:
 	    std::string wifiSSID;
 	    std::string wifiPassword;
-	    void PrintWifiDetails() const;
+	    void printWifiDetails() const;
 
         };
     } // namespace Plugin
