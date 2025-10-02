@@ -49,12 +49,25 @@ namespace WPEFramework
 		return (Core::ERROR_NONE);
 	}
 
+	void BartonMatterImplementation::Initliaze()
+	{
+		GetConfigDirectory();
+	}
+
 	void BartonMatterImplementation::printWifiDetails() const
 	{
 		std::cout << "---- WiFi Details ----\n";
     		std::cout << "SSID: " << wifiSSID << "\n";
 		std::cout << "Password: " << wifiPassword << "\n";
     		std::cout << "----------------------\n";
+	}
+
+	static gchar* BartonMatterImplementation::GetConfigDirectory()
+	{
+		std::string pathStr = "/opt/.brtn-ds";
+		gchar* confDir = g_strdup(pathStr.c_str());
+		g_mkdir_with_parents(confDir, 0755);
+		return confDir;
 	}
 
 } // namespace Plugin

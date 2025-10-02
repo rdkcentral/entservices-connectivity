@@ -42,7 +42,7 @@ namespace WPEFramework
             virtual ~BartonMatterImplementation();
 	    virtual Core::hresult SetWifiCredentials(const std::string ssid /* @in */, const std::string password /* @in */)override;
 
-
+	    void Initliaze();
 	    BEGIN_INTERFACE_MAP(BartonMatterImplementation)
             INTERFACE_ENTRY(Exchange::IBartonMatter)
             END_INTERFACE_MAP
@@ -51,6 +51,7 @@ namespace WPEFramework
 	    std::string wifiSSID;
 	    std::string wifiPassword;
 	    void printWifiDetails() const;
+	    static gchar* GetConfigDirectory();
 
         };
     } // namespace Plugin
