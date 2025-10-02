@@ -62,7 +62,7 @@ namespace WPEFramework
     		std::cout << "----------------------\n";
 	}
 
-	static gchar* BartonMatterImplementation::GetConfigDirectory()
+	gchar* BartonMatterImplementation::GetConfigDirectory()
 	{
 		std::string pathStr = "/opt/.brtn-ds";
 		gchar* confDir = g_strdup(pathStr.c_str());
