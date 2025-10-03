@@ -43,6 +43,7 @@ namespace WPEFramework
 	    virtual Core::hresult SetWifiCredentials(const std::string ssid /* @in */, const std::string password /* @in */)override;
 	    virtual Core::hresult InitializeCommissioner()override;
 
+	    static BCoreClient *InitializeClient(gchar *confDir);
 	    BEGIN_INTERFACE_MAP(BartonMatterImplementation)
             INTERFACE_ENTRY(Exchange::IBartonMatter)
             END_INTERFACE_MAP
