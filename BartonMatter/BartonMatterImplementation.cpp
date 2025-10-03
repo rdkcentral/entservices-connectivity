@@ -143,6 +143,8 @@ namespace WPEFramework
 		{
 			gchar* confDir = GetConfigDirectory();
 			g_autoptr(BCoreClient) client = InitializeClient(confDir);
+			b_core_client_start(client);
+			b_core_client_set_system_property(client, "deviceDescriptorBypass", "true");
 			return (Core::ERROR_NONE);
 		}
 
