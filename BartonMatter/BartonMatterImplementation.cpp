@@ -57,7 +57,7 @@ namespace WPEFramework
 			return (Core::ERROR_NONE);
 		}
 
-		bool Commission(BCoreClient *client, gchar *setupPayload,guint16 timeoutSeconds)
+		bool BartonMatterImplementation::Commission(BCoreClient *client, gchar *setupPayload,guint16 timeoutSeconds)
 		{
 			bool rc = true;
 			g_autoptr(GError) error = NULL;

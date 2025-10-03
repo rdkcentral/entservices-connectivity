@@ -46,6 +46,7 @@ namespace WPEFramework
 
 	    void InitializeClient(gchar *confDir);
 	    static void SetDefaultParameters(BCoreInitializeParamsContainer *params);
+	    bool Commission(BCoreClient *client, gchar *setupPayload,guint16 timeoutSeconds);
 	    BEGIN_INTERFACE_MAP(BartonMatterImplementation)
             INTERFACE_ENTRY(Exchange::IBartonMatter)
             END_INTERFACE_MAP
@@ -55,8 +56,6 @@ namespace WPEFramework
 	    std::string wifiPassword;
 	    BCoreClient *bartonClient;
 	    static gchar* GetConfigDirectory();
-	    static bool Commission(BCoreClient *client, gchar *setupPayload,guint16 timeoutSeconds);
-
         };
     } // namespace Plugin
 } // namespace WPEFramework
