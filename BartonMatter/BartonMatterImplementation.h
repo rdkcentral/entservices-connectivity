@@ -42,6 +42,7 @@ namespace WPEFramework
             virtual ~BartonMatterImplementation();
 	    virtual Core::hresult SetWifiCredentials(const std::string ssid /* @in */, const std::string password /* @in */)override;
 	    virtual Core::hresult InitializeCommissioner()override;
+	    virtual Core::hresult CommissionDevice(const std::string passcode /* @in*/)override;
 
 	    void InitializeClient(gchar *confDir);
 	    static void SetDefaultParameters(BCoreInitializeParamsContainer *params);
@@ -54,6 +55,7 @@ namespace WPEFramework
 	    std::string wifiPassword;
 	    BCoreClient *bartonClient;
 	    static gchar* GetConfigDirectory();
+	    static bool Commission(BCoreClient *client, gchar *setupPayload,guint16 timeoutSeconds);
 
         };
     } // namespace Plugin

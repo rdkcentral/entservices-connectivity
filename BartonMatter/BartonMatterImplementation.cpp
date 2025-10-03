@@ -49,6 +49,36 @@ namespace WPEFramework
 				LOGWARN("BartonMatter wifi cred processed successfully ssid: %s | pass: %s",wifiSSID.c_str(), wifiPassword.c_str());
 			return (Core::ERROR_NONE);
 		}
+		Core::hresult BartonMatterImplementation::CommissionDevice(const std::string passcode)
+		{
+			LOGWARN("Commission called with passcode: %s",passcode);
+			g_autofree gchar* setupPlayload = g_strdup(passcode.c_str());
+			bool result = Commission(bartonClient, setupPayload, 120);
+			return (Core::ERROR_NONE);
+		}
+
+		bool Commission(BCoreClient *client, gchar *setupPayload,guint16 timeoutSeconds)
+		{
+			bool rc = true;
+			g_autoptr(GError) error = NULL;
+			rc = b_core_client_commission_device(client, setupPayload, timeoutSeconds, &error);
+			if(rc)
+			{
+				LOGWARN("Attempting to commission device");
+			}
+			else
+			{
+				if(error != NULL && error->message != NULL)
+				{
+					LOGWARN("Failed to commission device: %s", error->message);
+				}
+				else
+				{
+					LOGWARN("Failed to commission device: Unknown error");
+				}
+			}
+			return rc;
+		}
 
 		void BartonMatterImplementation::InitializeClient(gchar *confDir)
 		{
