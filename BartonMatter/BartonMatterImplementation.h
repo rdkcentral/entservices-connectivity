@@ -50,7 +50,6 @@ namespace WPEFramework
         private:
 	    std::string wifiSSID;
 	    std::string wifiPassword;
-	    void printWifiDetails() const;
 	    static gchar* GetConfigDirectory();
 
         };

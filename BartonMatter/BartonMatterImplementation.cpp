@@ -42,10 +42,11 @@ namespace WPEFramework
         }
 	Core::hresult BartonMatterImplementation::SetWifiCredentials(const std::string ssid /* @in */, const std::string password /* @in */)
 	{
+		LOGWARN("BartonMatter: set wifi cred invoked");
 		wifiSSID = ssid;
 		wifiPassword = password;
 		if(!wifiSSID.empty() && !wifiPassword.empty())
-			printWifiDetails();
+			LOGWARN("BartonMatter wifi cred processed successfully ssid: %s | pas:s %s", wifiSSID, wifiPassword);
 		return (Core::ERROR_NONE);
 	}
 
@@ -53,14 +54,6 @@ namespace WPEFramework
 	{
 		GetConfigDirectory();
 		return (Core::ERROR_NONE);
-	}
-
-	void BartonMatterImplementation::printWifiDetails() const
-	{
-		std::cout << "---- WiFi Details ----\n";
-    		std::cout << "SSID: " << wifiSSID << "\n";
-		std::cout << "Password: " << wifiPassword << "\n";
-    		std::cout << "----------------------\n";
 	}
 
 	gchar* BartonMatterImplementation::GetConfigDirectory()
