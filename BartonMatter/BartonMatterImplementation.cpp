@@ -52,7 +52,9 @@ namespace WPEFramework
 
 	Core::hresult BartonMatterImplementation::InitializeCommissioner()
 	{
-		GetConfigDirectory();
+		gchar* confDir = GetConfigDirectory();
+		g_autoptr(BCoreInitializeParamsContainer) params = b_core_initialize_params_container_new();
+		b_core_initialize_params_container_set_storage_dir(params, confDir);
 		return (Core::ERROR_NONE);
 	}
 
