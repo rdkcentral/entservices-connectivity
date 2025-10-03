@@ -51,8 +51,8 @@ namespace WPEFramework
 		}
 		Core::hresult BartonMatterImplementation::CommissionDevice(const std::string passcode)
 		{
-			LOGWARN("Commission called with passcode: %s",passcode);
-			g_autofree gchar* setupPlayload = g_strdup(passcode.c_str());
+			LOGWARN("Commission called with passcode: %s",passcode.c_str);
+			g_autofree gchar* setupPayload = g_strdup(passcode.c_str());
 			bool result = Commission(bartonClient, setupPayload, 120);
 			return (Core::ERROR_NONE);
 		}
