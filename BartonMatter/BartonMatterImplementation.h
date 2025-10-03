@@ -44,6 +44,7 @@ namespace WPEFramework
 	    virtual Core::hresult InitializeCommissioner()override;
 
 	    static BCoreClient *InitializeClient(gchar *confDir);
+	    static void SetDefaultParameters(BCoreInitializeParamsContainer *params);
 	    BEGIN_INTERFACE_MAP(BartonMatterImplementation)
             INTERFACE_ENTRY(Exchange::IBartonMatter)
             END_INTERFACE_MAP
