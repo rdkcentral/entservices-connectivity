@@ -46,7 +46,7 @@ namespace WPEFramework
 		wifiSSID = ssid;
 		wifiPassword = password;
 		if(!wifiSSID.empty() && !wifiPassword.empty())
-			LOGWARN("BartonMatter wifi cred processed successfully ssid: %s | pas:s %s", wifiSSID, wifiPassword);
+			LOGWARN("BartonMatter wifi cred processed successfully ssid: %s | pass: %s",wifiSSID.c_str(), wifiPassword.c_str());
 		return (Core::ERROR_NONE);
 	}
 
