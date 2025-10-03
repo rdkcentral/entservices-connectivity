@@ -50,7 +50,7 @@ namespace WPEFramework
 			return (Core::ERROR_NONE);
 		}
 
-		BCoreClient* BartonMatterImplementation::InitializeClient(gchar *confDir)
+		void BartonMatterImplementation::InitializeClient(gchar *confDir)
 		{
 			g_autoptr(BCoreInitializeParamsContainer) params = b_core_initialize_params_container_new();
 			b_core_initialize_params_container_set_storage_dir(params, confDir);
@@ -61,7 +61,7 @@ namespace WPEFramework
 			b_core_initialize_params_container_set_account_id(params, "1");
 			//g_autoptr(BReferenceNetworkCredentialsProvider) networkCredentialsProvider = b_reference_network_credentials_provider_new();
 			//b_core_initialize_params_container_set_network_credentials_provider(params, B_CORE_NETWORK_CREDENTIALS_PROVIDER(networkCredentialsProvider));
-			BCoreClient *client = b_core_client_new(params);
+			bartonClient = b_core_client_new(params);
 			BCorePropertyProvider *propProvider = b_core_initialize_params_container_get_property_provider(params);
 			if(propProvider != NULL)
 			{
@@ -69,7 +69,6 @@ namespace WPEFramework
 			}
 
 			SetDefaultParameters(params);
-			return client;
 		}
 
 		void BartonMatterImplementation::SetDefaultParameters(BCoreInitializeParamsContainer *params)
@@ -142,9 +141,16 @@ namespace WPEFramework
 		Core::hresult BartonMatterImplementation::InitializeCommissioner()
 		{
 			gchar* confDir = GetConfigDirectory();
-			g_autoptr(BCoreClient) client = InitializeClient(confDir);
-			b_core_client_start(client);
-			b_core_client_set_system_property(client, "deviceDescriptorBypass", "true");
+			InitializeClient(confDir);
+			if(!bartonClient)
+			{
+				LOGERR("Barton client not initliazed");
+			}
+			else
+			{
+				b_core_client_start(bartonClient);
+				b_core_client_set_system_property(bartonClient, "deviceDescriptorBypass", "true");
+			}
 			return (Core::ERROR_NONE);
 		}
 

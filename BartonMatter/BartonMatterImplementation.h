@@ -52,6 +52,7 @@ namespace WPEFramework
         private:
 	    std::string wifiSSID;
 	    std::string wifiPassword;
+	    BCoreClient *bartonClient;
 	    static gchar* GetConfigDirectory();
 
         };
