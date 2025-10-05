@@ -23,7 +23,7 @@ using namespace std;
 
 static gchar *network_ssid = NULL;
 static gchar *network_psk = NULL;
-std::mutex BartonMatterImplementation::networkCredsMtx;
+std::mutex networkCredsMtx;
 
 namespace WPEFramework
 {

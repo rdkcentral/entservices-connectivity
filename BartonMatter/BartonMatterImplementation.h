@@ -71,7 +71,6 @@ namespace WPEFramework
             END_INTERFACE_MAP
 
         private:
-	    static std::mutex networkCredsMtx;
 	    BCoreClient *bartonClient;
 	    static gchar* GetConfigDirectory();
         };
