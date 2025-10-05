@@ -21,6 +21,10 @@
 
 using namespace std;
 
+static gchar *network_ssid = NULL;
+static gchar *network_psk = NULL;
+std::mutex BartonMatterImplementation::networkCredsMtx;
+
 namespace WPEFramework
 {
 	namespace Plugin
@@ -43,10 +47,8 @@ namespace WPEFramework
 		Core::hresult BartonMatterImplementation::SetWifiCredentials(const std::string ssid /* @in */, const std::string password /* @in */)
 		{
 			LOGWARN("BartonMatter: set wifi cred invoked");
-			wifiSSID = ssid;
-			wifiPassword = password;
-			if(!wifiSSID.empty() && !wifiPassword.empty())
-				LOGWARN("BartonMatter wifi cred processed successfully ssid: %s | pass: %s",wifiSSID.c_str(), wifiPassword.c_str());
+			b_reference_network_credentials_provider_set_wifi_network_credentials(ssid.c_str(), password.c_str());
+			LOGWARN("BartonMatter wifi cred processed successfully ssid: %s | pass: %s", ssid.c_str(), password.c_str());
 			return (Core::ERROR_NONE);
 		}
 		Core::hresult BartonMatterImplementation::CommissionDevice(const std::string passcode)
@@ -89,8 +91,10 @@ namespace WPEFramework
 			b_core_initialize_params_container_set_matter_storage_dir(params, matterConfDir);
 			b_core_initialize_params_container_set_matter_attestation_trust_store_dir(params, matterConfDir);
 			b_core_initialize_params_container_set_account_id(params, "1");
-			//g_autoptr(BReferenceNetworkCredentialsProvider) networkCredentialsProvider = b_reference_network_credentials_provider_new();
-			//b_core_initialize_params_container_set_network_credentials_provider(params, B_CORE_NETWORK_CREDENTIALS_PROVIDER(networkCredentialsProvider));
+			g_autoptr(BReferenceNetworkCredentialsProvider) networkCredentialsProvider = b_reference_network_credentials_provider_new();
+			b_core_initialize_params_container_set_network_credentials_provider(params, B_CORE_NETWORK_CREDENTIALS_PROVIDER(networkCredentialsProvider));
+
+
 			bartonClient = b_core_client_new(params);
 			BCorePropertyProvider *propProvider = b_core_initialize_params_container_get_property_provider(params);
 			if(propProvider != NULL)
@@ -194,3 +198,91 @@ namespace WPEFramework
 
 	} // namespace Plugin
 } // namespace WPEFramework
+
+// C-style GLib implementation for network credentials provider
+extern "C" {
+
+struct _BReferenceNetworkCredentialsProvider
+{
+    GObject parent_instance;
+};
+
+static void
+b_reference_network_credentials_provider_interface_init(BCoreNetworkCredentialsProviderInterface *iface);
+
+G_DEFINE_TYPE_WITH_CODE(BReferenceNetworkCredentialsProvider,
+                        b_reference_network_credentials_provider,
+                        G_TYPE_OBJECT,
+                        G_IMPLEMENT_INTERFACE(B_CORE_NETWORK_CREDENTIALS_PROVIDER_TYPE,
+                                              b_reference_network_credentials_provider_interface_init))
+
+/*
+ * Implementation of BCoreNetworkCredentialsProvider get_wifi_network_credentials
+ */
+static BCoreWifiNetworkCredentials *
+b_reference_network_credentials_provider_get_wifi_network_credentials(
+    BCoreNetworkCredentialsProvider *self,
+    GError **error)
+{
+    g_return_val_if_fail(B_REFERENCE_IS_NETWORK_CREDENTIALS_PROVIDER(self), NULL);
+    g_return_val_if_fail(error == NULL || *error == NULL, NULL);
+
+    g_autoptr(BCoreWifiNetworkCredentials) wifiCredentials = NULL;
+
+    wifiCredentials = b_core_wifi_network_credentials_new();
+
+    std::lock_guard<std::mutex> lock(networkCredsMtx);
+    if (network_ssid != NULL && network_psk != NULL)
+    {
+        g_object_set(wifiCredentials,
+                     B_CORE_WIFI_NETWORK_CREDENTIALS_PROPERTY_NAMES
+                         [B_CORE_WIFI_NETWORK_CREDENTIALS_PROP_SSID],
+                     network_ssid,
+                     B_CORE_WIFI_NETWORK_CREDENTIALS_PROPERTY_NAMES
+                         [B_CORE_WIFI_NETWORK_CREDENTIALS_PROP_PSK],
+                     network_psk,
+                     NULL);
+    }
+
+    return g_steal_pointer(&wifiCredentials);
+}
+
+static void
+b_reference_network_credentials_provider_interface_init(BCoreNetworkCredentialsProviderInterface *iface)
+{
+    iface->get_wifi_network_credentials =
+        b_reference_network_credentials_provider_get_wifi_network_credentials;
+}
+
+static void b_reference_network_credentials_provider_init(BReferenceNetworkCredentialsProvider *self)
+{
+    // No instance initialization needed
+}
+
+static void
+b_reference_network_credentials_provider_class_init(BReferenceNetworkCredentialsProviderClass *klass)
+{
+    // No class initialization needed
+}
+
+void b_reference_network_credentials_provider_set_wifi_network_credentials(const gchar *ssid, const gchar *password)
+{
+    g_return_if_fail(ssid != NULL);
+    g_return_if_fail(password != NULL);
+
+    std::lock_guard<std::mutex> lock(networkCredsMtx);
+    g_free(network_ssid);
+    g_free(network_psk);
+
+    network_ssid = g_strdup(ssid);
+    network_psk = g_strdup(password);
+}
+
+BReferenceNetworkCredentialsProvider *b_reference_network_credentials_provider_new(void)
+{
+    return B_REFERENCE_NETWORK_CREDENTIALS_PROVIDER(
+        g_object_new(B_REFERENCE_NETWORK_CREDENTIALS_PROVIDER_TYPE, NULL));
+}
+
+} // extern "C"
+

@@ -25,10 +25,15 @@
 #include <interfaces/Ids.h>
 #include <barton-core-client.h>
 #include <barton-core-properties.h>
+#include <provider/barton-core-network-credentials-provider.h>
 
 #include <mutex>
 #include <thread>
 #include <vector>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define B_REFERENCE_NETWORK_CREDENTIALS_PROVIDER_TYPE (b_reference_network_credentials_provider_get_type())
 
@@ -38,6 +43,12 @@ G_DECLARE_FINAL_TYPE(BReferenceNetworkCredentialsProvider,
                      NETWORK_CREDENTIALS_PROVIDER,
                      GObject);
 
+BReferenceNetworkCredentialsProvider *b_reference_network_credentials_provider_new(void);
+void b_reference_network_credentials_provider_set_wifi_network_credentials(const gchar *ssid, const gchar *password);
+
+#ifdef __cplusplus
+}
+#endif
 namespace WPEFramework
 {
     namespace Plugin
@@ -55,15 +66,11 @@ namespace WPEFramework
 	    void InitializeClient(gchar *confDir);
 	    static void SetDefaultParameters(BCoreInitializeParamsContainer *params);
 	    bool Commission(BCoreClient *client, gchar *setupPayload,guint16 timeoutSeconds);
-	    BReferenceNetworkCredentialsProvider *b_reference_network_credentials_provider_new(void);
-	    void b_reference_network_credentials_provider_set_wifi_network_credentials(const gchar *ssid, const gchar *password);
 	    BEGIN_INTERFACE_MAP(BartonMatterImplementation)
             INTERFACE_ENTRY(Exchange::IBartonMatter)
             END_INTERFACE_MAP
 
         private:
-	    static std::string wifiSSID;
-	    static std::string wifiPassword;
 	    static std::mutex networkCredsMtx;
 	    BCoreClient *bartonClient;
 	    static gchar* GetConfigDirectory();
