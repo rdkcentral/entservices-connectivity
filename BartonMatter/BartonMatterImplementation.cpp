@@ -21,12 +21,6 @@
 
 using namespace std;
 
-G_DEFINE_TYPE_WITH_CODE(BReferenceNetworkCredentialsProvider,
-                b_reference_network_credentials_provider,
-                G_TYPE_OBJECT,
-                G_IMPLEMENT_INTERFACE(B_CORE_NETWORK_CREDENTIALS_PROVIDER_TYPE,
-                        b_reference_network_credentials_provider_interface_init))
-
 namespace WPEFramework
 {
 	namespace Plugin
@@ -63,58 +57,6 @@ namespace WPEFramework
 			return (Core::ERROR_NONE);
 		}
 
-			void BartonMatterImplementation::b_reference_network_credentials_provider_set_wifi_network_credentials(const gchar *ssid, const gchar *password)
-			{
-				g_return_if_fail(ssid != NULL);
-				g_return_if_fail(password != NULL);
-
-				mutexLock(&network_creds_mtx);
-				g_free(network_ssid);
-				g_free(network_psk);
-
-				network_ssid = g_strdup(ssid);
-				network_psk = g_strdup(password);
-				mutexUnlock(&network_creds_mtx);
-			}
-
-		BCoreWifiNetworkCredentials* BartonMatterImplementation::b_reference_network_credentials_provider_get_wifi_network_credentials(
-					BCoreNetworkCredentialsProvider *self,
-					GError **error)
-			{
-				g_return_val_if_fail(B_REFERENCE_IS_NETWORK_CREDENTIALS_PROVIDER(self), NULL);
-				g_return_val_if_fail(error == NULL || *error == NULL, NULL);
-
-				g_autoptr(BCoreWifiNetworkCredentials) wifiCredentials = NULL;
-
-				wifiCredentials = b_core_wifi_network_credentials_new();
-
-				mutexLock(&network_creds_mtx);
-				if (network_ssid != NULL && network_psk != NULL)
-				{
-					g_object_set(wifiCredentials,
-							B_CORE_WIFI_NETWORK_CREDENTIALS_PROPERTY_NAMES
-							[B_CORE_WIFI_NETWORK_CREDENTIALS_PROP_SSID],
-							network_ssid,
-							B_CORE_WIFI_NETWORK_CREDENTIALS_PROPERTY_NAMES
-							[B_CORE_WIFI_NETWORK_CREDENTIALS_PROP_PSK],
-							network_psk,
-							NULL);
-				}
-				mutexUnlock(&network_creds_mtx);
-
-				return g_steal_pointer(&wifiCredentials);
-			}
-
-		void
-			BartonMatterImplementation::b_reference_network_credentials_provider_interface_init(BCoreNetworkCredentialsProviderInterface *iface)
-			{
-				iface->get_wifi_network_credentials =
-					b_reference_network_credentials_provider_get_wifi_network_credentials;
-			}
-
-
-
-
 		bool BartonMatterImplementation::Commission(BCoreClient *client, gchar *setupPayload,guint16 timeoutSeconds)
 		{
 			bool rc = true;
@@ -137,13 +79,6 @@ namespace WPEFramework
 			}
 			return rc;
 		}
-
-		BReferenceNetworkCredentialsProvider *b_reference_network_credentials_provider_new(void)
-		{
-			return B_REFERENCE_NETWORK_CREDENTIALS_PROVIDER(
-					g_object_new(B_REFERENCE_NETWORK_CREDENTIALS_PROVIDER_TYPE, NULL));
-		}
-
 
 		void BartonMatterImplementation::InitializeClient(gchar *confDir)
 		{
@@ -237,7 +172,6 @@ namespace WPEFramework
 		{
 			gchar* confDir = GetConfigDirectory();
 			InitializeClient(confDir);
-			b_reference_network_credentials_provider_set_wifi_network_credentials("MySSID", "MyPassword");
 			if(!bartonClient)
 			{
 				LOGERR("Barton client not initliazed");
