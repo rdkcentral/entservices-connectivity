@@ -36,6 +36,7 @@ namespace WPEFramework
 		SERVICE_REGISTRATION(BartonMatterImplementation, 1, 0);
 
 		BartonMatterImplementation::BartonMatterImplementation()
+			: bartonClient(nullptr)
 		{
 			TRACE(Trace::Information, (_T("Constructing BartonMatterImplementation Service: %p"), this));
 		}
@@ -43,20 +44,60 @@ namespace WPEFramework
 		BartonMatterImplementation::~BartonMatterImplementation()
 		{
 			TRACE(Trace::Information, (_T("Destructing BartonMatterImplementation Service: %p"), this));
+			
+			// Cleanup barton client if initialized
+			if (bartonClient) {
+				b_core_client_stop(bartonClient);
+				g_object_unref(bartonClient);
+				bartonClient = nullptr;
+			}
+			
+			// Cleanup network credentials
+			std::lock_guard<std::mutex> lock(networkCredsMtx);
+			g_free(network_ssid);
+			g_free(network_psk);
+			network_ssid = nullptr;
+			network_psk = nullptr;
 		}
 		Core::hresult BartonMatterImplementation::SetWifiCredentials(const std::string ssid /* @in */, const std::string password /* @in */)
 		{
 			LOGWARN("BartonMatter: set wifi cred invoked");
+			
+			// Validate input parameters
+			if (ssid.empty()) {
+				LOGERR("Invalid SSID: cannot be empty");
+				return (Core::ERROR_INVALID_INPUT_LENGTH);
+			}
+			
+			if (password.empty()) {
+				LOGERR("Invalid password: cannot be empty");
+				return (Core::ERROR_INVALID_INPUT_LENGTH);
+			}
+			
+			// Use the integrated network credentials provider
 			b_reference_network_credentials_provider_set_wifi_network_credentials(ssid.c_str(), password.c_str());
+			
 			LOGWARN("BartonMatter wifi cred processed successfully ssid: %s | pass: %s", ssid.c_str(), password.c_str());
 			return (Core::ERROR_NONE);
 		}
 		Core::hresult BartonMatterImplementation::CommissionDevice(const std::string passcode)
 		{
-			LOGWARN("Commission called with passcode: %s",passcode.c_str());
+			LOGWARN("Commission called with passcode: %s", passcode.c_str());
+			
+			if (!bartonClient) {
+				LOGERR("Barton client not initialized");
+				return (Core::ERROR_GENERAL);
+			}
+			
+			if (passcode.empty()) {
+				LOGERR("Invalid passcode provided");
+				return (Core::ERROR_INVALID_INPUT_LENGTH);
+			}
+			
 			g_autofree gchar* setupPayload = g_strdup(passcode.c_str());
 			bool result = Commission(bartonClient, setupPayload, 120);
-			return (Core::ERROR_NONE);
+			
+			return result ? Core::ERROR_NONE : Core::ERROR_GENERAL;
 		}
 
 		bool BartonMatterImplementation::Commission(BCoreClient *client, gchar *setupPayload,guint16 timeoutSeconds)
@@ -174,26 +215,32 @@ namespace WPEFramework
 
 		Core::hresult BartonMatterImplementation::InitializeCommissioner()
 		{
-			gchar* confDir = GetConfigDirectory();
+			g_autofree gchar* confDir = GetConfigDirectory();
 			InitializeClient(confDir);
+			
 			if(!bartonClient)
 			{
-				LOGERR("Barton client not initliazed");
+				LOGERR("Barton client not initialized");
+				return (Core::ERROR_GENERAL);
 			}
-			else
-			{
-				b_core_client_start(bartonClient);
-				b_core_client_set_system_property(bartonClient, "deviceDescriptorBypass", "true");
+			
+			g_autoptr(GError) error = NULL;
+			if (!b_core_client_start(bartonClient)) {
+				LOGERR("Failed to start Barton client");
+				return (Core::ERROR_GENERAL);
 			}
+			
+			b_core_client_set_system_property(bartonClient, "deviceDescriptorBypass", "true");
+			LOGINFO("BartonMatter Commissioner initialized successfully");
+			
 			return (Core::ERROR_NONE);
 		}
 
 		gchar* BartonMatterImplementation::GetConfigDirectory()
 		{
-			std::string pathStr = "/opt/.brtn-ds";
-			gchar* confDir = g_strdup(pathStr.c_str());
-			g_mkdir_with_parents(confDir, 0755);
-			return confDir;
+			const std::string pathStr = "/opt/.brtn-ds";
+			g_mkdir_with_parents(pathStr.c_str(), 0755);
+			return g_strdup(pathStr.c_str()); // Caller must free with g_free()
 		}
 
 	} // namespace Plugin
