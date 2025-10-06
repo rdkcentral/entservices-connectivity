@@ -215,11 +215,18 @@ namespace WPEFramework
 
 		Core::hresult BartonMatterImplementation::InitializeCommissioner()
 		{
-			if (ssid.empty() && password.empty())
+			// Check if both credentials are unset and provide defaults if so
+			bool needsDefaults = false;
 			{
+				std::lock_guard<std::mutex> lock(networkCredsMtx);
+				needsDefaults = (!network_ssid && !network_psk);
+			}
+			
+			if (needsDefaults) {
 				LOGWARN("Using default wifi credentials");
 				b_reference_network_credentials_provider_set_wifi_network_credentials("MySSID", "MyPassword");
 			}
+			
 			g_autofree gchar* confDir = GetConfigDirectory();
 			InitializeClient(confDir);
 			
