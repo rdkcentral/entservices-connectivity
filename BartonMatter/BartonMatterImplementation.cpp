@@ -27,238 +27,294 @@ std::mutex networkCredsMtx;
 
 namespace WPEFramework
 {
-	namespace Plugin
-	{
+    namespace Plugin
+    {
+        std::string gPendingIdRequest("");
+        std::string gPendingIdOptionsRequest("");
+        std::string gPendingUrl("");
+        SERVICE_REGISTRATION(BartonMatterImplementation, 1, 0);
 
-		std::string gPendingIdRequest("");
-		std::string gPendingIdOptionsRequest("");
-		std::string gPendingUrl("");
-		SERVICE_REGISTRATION(BartonMatterImplementation, 1, 0);
+        BartonMatterImplementation::BartonMatterImplementation()
+            : bartonClient(nullptr)
+        {
+            TRACE(Trace::Information, (_T("Constructing BartonMatterImplementation Service: %p"), this));
+        }
 
-		BartonMatterImplementation::BartonMatterImplementation()
-			: bartonClient(nullptr)
-		{
-			TRACE(Trace::Information, (_T("Constructing BartonMatterImplementation Service: %p"), this));
-		}
+        BartonMatterImplementation::~BartonMatterImplementation()
+        {
+            TRACE(Trace::Information, (_T("Destructing BartonMatterImplementation Service: %p"), this));
+            
+            // Cleanup barton client if initialized
+            if (bartonClient) {
+                b_core_client_stop(bartonClient);
+                g_object_unref(bartonClient);
+                bartonClient = nullptr;
+            }
+            
+            // Cleanup network credentials
+            std::lock_guard<std::mutex> lock(networkCredsMtx);
+            g_free(network_ssid);
+            g_free(network_psk);
+            network_ssid = nullptr;
+            network_psk = nullptr;
+        }
+        Core::hresult BartonMatterImplementation::SetWifiCredentials(const std::string ssid /* @in */, const std::string password /* @in */)
+        {
+            LOGWARN("BartonMatter: set wifi cred invoked");
+            
+            // Validate input parameters
+            if (ssid.empty()) {
+                LOGERR("Invalid SSID: cannot be empty");
+                return (Core::ERROR_INVALID_INPUT_LENGTH);
+            }
+            
+            if (password.empty()) {
+                LOGERR("Invalid password: cannot be empty");
+                return (Core::ERROR_INVALID_INPUT_LENGTH);
+            }
+            
+            // Use the integrated network credentials provider
+            b_reference_network_credentials_provider_set_wifi_network_credentials(ssid.c_str(), password.c_str());
+            
+            LOGWARN("BartonMatter wifi cred processed successfully ssid: %s | pass: %s", ssid.c_str(), password.c_str());
+            return (Core::ERROR_NONE);
+        }
+        Core::hresult BartonMatterImplementation::CommissionDevice(const std::string passcode)
+        {
+            LOGWARN("Commission called with passcode: %s", passcode.c_str());
+            
+            if (!bartonClient) {
+                LOGERR("Barton client not initialized");
+                return (Core::ERROR_GENERAL);
+            }
+            
+            if (passcode.empty()) {
+                LOGERR("Invalid passcode provided");
+                return (Core::ERROR_INVALID_INPUT_LENGTH);
+            }
+            
+            g_autofree gchar* setupPayload = g_strdup(passcode.c_str());
+            bool result = Commission(bartonClient, setupPayload, 120);
+            
+            return result ? Core::ERROR_NONE : Core::ERROR_GENERAL;
+        }
 
-		BartonMatterImplementation::~BartonMatterImplementation()
-		{
-			TRACE(Trace::Information, (_T("Destructing BartonMatterImplementation Service: %p"), this));
-			
-			// Cleanup barton client if initialized
-			if (bartonClient) {
-				b_core_client_stop(bartonClient);
-				g_object_unref(bartonClient);
-				bartonClient = nullptr;
-			}
-			
-			// Cleanup network credentials
-			std::lock_guard<std::mutex> lock(networkCredsMtx);
-			g_free(network_ssid);
-			g_free(network_psk);
-			network_ssid = nullptr;
-			network_psk = nullptr;
-		}
-		Core::hresult BartonMatterImplementation::SetWifiCredentials(const std::string ssid /* @in */, const std::string password /* @in */)
-		{
-			LOGWARN("BartonMatter: set wifi cred invoked");
-			
-			// Validate input parameters
-			if (ssid.empty()) {
-				LOGERR("Invalid SSID: cannot be empty");
-				return (Core::ERROR_INVALID_INPUT_LENGTH);
-			}
-			
-			if (password.empty()) {
-				LOGERR("Invalid password: cannot be empty");
-				return (Core::ERROR_INVALID_INPUT_LENGTH);
-			}
-			
-			// Use the integrated network credentials provider
-			b_reference_network_credentials_provider_set_wifi_network_credentials(ssid.c_str(), password.c_str());
-			
-			LOGWARN("BartonMatter wifi cred processed successfully ssid: %s | pass: %s", ssid.c_str(), password.c_str());
-			return (Core::ERROR_NONE);
-		}
-		Core::hresult BartonMatterImplementation::CommissionDevice(const std::string passcode)
-		{
-			LOGWARN("Commission called with passcode: %s", passcode.c_str());
-			
-			if (!bartonClient) {
-				LOGERR("Barton client not initialized");
-				return (Core::ERROR_GENERAL);
-			}
-			
-			if (passcode.empty()) {
-				LOGERR("Invalid passcode provided");
-				return (Core::ERROR_INVALID_INPUT_LENGTH);
-			}
-			
-			g_autofree gchar* setupPayload = g_strdup(passcode.c_str());
-			bool result = Commission(bartonClient, setupPayload, 120);
-			
-			return result ? Core::ERROR_NONE : Core::ERROR_GENERAL;
-		}
+        bool BartonMatterImplementation::Commission(BCoreClient *client, gchar *setupPayload, guint16 timeoutSeconds)
+        {
+            bool rc = true;
+            g_autoptr(GError) error = NULL;
+            rc = b_core_client_commission_device(client, setupPayload, timeoutSeconds, &error);
+            if(rc)
+            {
+                LOGWARN("Attempting to commission device");
+            }
+            else
+            {
+                if(error != NULL && error->message != NULL)
+                {
+                    LOGWARN("Failed to commission device: %s", error->message);
+                }
+                else
+                {
+                    LOGWARN("Failed to commission device: Unknown error");
+                }
+            }
+            return rc;
+        }
 
-		bool BartonMatterImplementation::Commission(BCoreClient *client, gchar *setupPayload,guint16 timeoutSeconds)
-		{
-			bool rc = true;
-			g_autoptr(GError) error = NULL;
-			rc = b_core_client_commission_device(client, setupPayload, timeoutSeconds, &error);
-			if(rc)
-			{
-				LOGWARN("Attempting to commission device");
-			}
-			else
-			{
-				if(error != NULL && error->message != NULL)
-				{
-					LOGWARN("Failed to commission device: %s", error->message);
-				}
-				else
-				{
-					LOGWARN("Failed to commission device: Unknown error");
-				}
-			}
-			return rc;
-		}
+        void BartonMatterImplementation::InitializeClient(gchar *confDir)
+        {
+            g_autoptr(BCoreInitializeParamsContainer) params = b_core_initialize_params_container_new();
+            b_core_initialize_params_container_set_storage_dir(params, confDir);
+            g_autofree gchar* matterConfDir = g_strdup((std::string(confDir) + "/matter").c_str());
+            g_mkdir_with_parents(matterConfDir, 0755);
+            b_core_initialize_params_container_set_matter_storage_dir(params, matterConfDir);
+            b_core_initialize_params_container_set_matter_attestation_trust_store_dir(params, matterConfDir);
+            b_core_initialize_params_container_set_account_id(params, "1");
+            g_autoptr(BReferenceNetworkCredentialsProvider) networkCredentialsProvider = b_reference_network_credentials_provider_new();
+            b_core_initialize_params_container_set_network_credentials_provider(params, B_CORE_NETWORK_CREDENTIALS_PROVIDER(networkCredentialsProvider));
 
-		void BartonMatterImplementation::InitializeClient(gchar *confDir)
-		{
-			g_autoptr(BCoreInitializeParamsContainer) params = b_core_initialize_params_container_new();
-			b_core_initialize_params_container_set_storage_dir(params, confDir);
-			g_autofree gchar* matterConfDir = g_strdup((std::string(confDir) + "/matter").c_str());
-			g_mkdir_with_parents(matterConfDir, 0755);
-			b_core_initialize_params_container_set_matter_storage_dir(params, matterConfDir);
-			b_core_initialize_params_container_set_matter_attestation_trust_store_dir(params, matterConfDir);
-			b_core_initialize_params_container_set_account_id(params, "1");
-			g_autoptr(BReferenceNetworkCredentialsProvider) networkCredentialsProvider = b_reference_network_credentials_provider_new();
-			b_core_initialize_params_container_set_network_credentials_provider(params, B_CORE_NETWORK_CREDENTIALS_PROVIDER(networkCredentialsProvider));
+            bartonClient = b_core_client_new(params);
+            BCorePropertyProvider *propProvider = b_core_initialize_params_container_get_property_provider(params);
+            if(propProvider != NULL)
+            {
+                b_core_property_provider_set_property_string(propProvider, "device.subsystem.disable", "thread,zigbee");
+            }
 
+            // Connect endpoint added signal handler
+            g_signal_connect(bartonClient, B_CORE_CLIENT_SIGNAL_NAME_ENDPOINT_ADDED, G_CALLBACK(EndpointAddedHandler), this);
 
-			bartonClient = b_core_client_new(params);
-			BCorePropertyProvider *propProvider = b_core_initialize_params_container_get_property_provider(params);
-			if(propProvider != NULL)
-			{
-				b_core_property_provider_set_property_string(propProvider, "device.subsystem.disable", "thread,zigbee");
-			}
+            SetDefaultParameters(params);
+        }
 
-			SetDefaultParameters(params);
-		}
+        void BartonMatterImplementation::SetDefaultParameters(BCoreInitializeParamsContainer *params)
+        {
+            BCorePropertyProvider *propProvider =
+                b_core_initialize_params_container_get_property_provider(params);
+            if (propProvider != NULL)
+            {
+                // Set Matter's Device Instance Info details
+                b_core_property_provider_set_property_string(
+                        propProvider, B_CORE_BARTON_MATTER_VENDOR_NAME, "Barton");
 
-		void BartonMatterImplementation::SetDefaultParameters(BCoreInitializeParamsContainer *params)
-		{
-			BCorePropertyProvider *propProvider =
-				b_core_initialize_params_container_get_property_provider(params);
-			if (propProvider != NULL)
-			{
-				// Set Matter's Device Instance Info details
-				b_core_property_provider_set_property_string(
-						propProvider, B_CORE_BARTON_MATTER_VENDOR_NAME, "Barton");
+                b_core_property_provider_set_property_uint16(
+                        propProvider, B_CORE_BARTON_MATTER_VENDOR_ID, 0xFFF1);
 
-				b_core_property_provider_set_property_uint16(
-						propProvider, B_CORE_BARTON_MATTER_VENDOR_ID, 0xFFF1);
+                b_core_property_provider_set_property_string(
+                        propProvider, B_CORE_BARTON_MATTER_PRODUCT_NAME, "Barton Device");
 
-				b_core_property_provider_set_property_string(
-						propProvider, B_CORE_BARTON_MATTER_PRODUCT_NAME, "Barton Device");
+                b_core_property_provider_set_property_uint16(
+                        propProvider, B_CORE_BARTON_MATTER_PRODUCT_ID, 0x5678);
 
-				b_core_property_provider_set_property_uint16(
-						propProvider, B_CORE_BARTON_MATTER_PRODUCT_ID, 0x5678);
+                b_core_property_provider_set_property_uint16(
+                        propProvider, B_CORE_BARTON_MATTER_HARDWARE_VERSION, 1);
 
-				b_core_property_provider_set_property_uint16(
-						propProvider, B_CORE_BARTON_MATTER_HARDWARE_VERSION, 1);
+                b_core_property_provider_set_property_string(
+                        propProvider, B_CORE_BARTON_MATTER_HARDWARE_VERSION_STRING, "Barton Hardware Version 1.0");
 
-				b_core_property_provider_set_property_string(
-						propProvider, B_CORE_BARTON_MATTER_HARDWARE_VERSION_STRING, "Barton Hardware Version 1.0");
+                b_core_property_provider_set_property_string(
+                        propProvider, B_CORE_BARTON_MATTER_PART_NUMBER, "Barton-Part-001");
 
-				b_core_property_provider_set_property_string(
-						propProvider, B_CORE_BARTON_MATTER_PART_NUMBER, "Barton-Part-001");
+                b_core_property_provider_set_property_string(
+                        propProvider, B_CORE_BARTON_MATTER_PRODUCT_URL, "https://www.example.com/device");
 
-				b_core_property_provider_set_property_string(
-						propProvider, B_CORE_BARTON_MATTER_PRODUCT_URL, "https://www.example.com/device");
+                b_core_property_provider_set_property_string(
+                        propProvider, B_CORE_BARTON_MATTER_PRODUCT_LABEL, "Barton Device Label");
 
-				b_core_property_provider_set_property_string(
-						propProvider, B_CORE_BARTON_MATTER_PRODUCT_LABEL, "Barton Device Label");
+                b_core_property_provider_set_property_string(
+                        propProvider, B_CORE_BARTON_MATTER_SERIAL_NUMBER, "SN-123456789");
 
-				b_core_property_provider_set_property_string(
-						propProvider, B_CORE_BARTON_MATTER_SERIAL_NUMBER, "SN-123456789");
+                // Set Manufacturing Date to "now"
+                time_t now = time(NULL);
+                struct tm *tm = localtime(&now);
+                gchar manufacturingDate[11]; // YYYY-MM-DD format
+                strftime(manufacturingDate, sizeof(manufacturingDate), "%Y-%m-%d", tm);
+                b_core_property_provider_set_property_string(
+                        propProvider, B_CORE_BARTON_MATTER_MANUFACTURING_DATE, manufacturingDate);
 
-				// Set Manufacturing Date to "now"
-				time_t now = time(NULL);
-				struct tm *tm = localtime(&now);
-				gchar manufacturingDate[11]; // YYYY-MM-DD format
-				strftime(manufacturingDate, sizeof(manufacturingDate), "%Y-%m-%d", tm);
-				b_core_property_provider_set_property_string(
-						propProvider, B_CORE_BARTON_MATTER_MANUFACTURING_DATE, manufacturingDate);
+                // set default discriminator if not already set
+                guint16 discriminator = b_core_property_provider_get_property_as_uint16(
+                        propProvider, B_CORE_BARTON_MATTER_SETUP_DISCRIMINATOR, 0);
+                if (discriminator == 0)
+                {
+                    // Use the well-known development discriminator 3840
+                    b_core_property_provider_set_property_uint16(
+                            propProvider, B_CORE_BARTON_MATTER_SETUP_DISCRIMINATOR, 3840);
+                }
 
-				// set default discriminator if not already set
-				guint16 discriminator = b_core_property_provider_get_property_as_uint16(
-						propProvider, B_CORE_BARTON_MATTER_SETUP_DISCRIMINATOR, 0);
-				if (discriminator == 0)
-				{
-					// Use the well-known development discriminator 3840
-					b_core_property_provider_set_property_uint16(
-							propProvider, B_CORE_BARTON_MATTER_SETUP_DISCRIMINATOR, 3840);
-				}
+                // set default passcode if not already set
+                guint32 passcode = b_core_property_provider_get_property_as_uint32(
+                        propProvider, B_CORE_BARTON_MATTER_SETUP_PASSCODE, 0);
+                if (passcode == 0)
+                {
+                    // Use the well-known development passcode 20202021
+                    b_core_property_provider_set_property_uint32(
+                            propProvider, B_CORE_BARTON_MATTER_SETUP_PASSCODE, 20202021);
+                }
+            }
+        }
 
-				// set default passcode if not already set
-				guint32 passcode = b_core_property_provider_get_property_as_uint32(
-						propProvider, B_CORE_BARTON_MATTER_SETUP_PASSCODE, 0);
-				if (passcode == 0)
-				{
-					// Use the well-known development passcode 20202021
-					b_core_property_provider_set_property_uint32(
-							propProvider, B_CORE_BARTON_MATTER_SETUP_PASSCODE, 20202021);
-				}
-			}
-		}
+        Core::hresult BartonMatterImplementation::InitializeCommissioner()
+        {
+            // Check if both credentials are unset and provide defaults if so
+            bool needsDefaults = false;
+            {
+                std::lock_guard<std::mutex> lock(networkCredsMtx);
+                needsDefaults = (!network_ssid && !network_psk);
+            }
+            
+            if (needsDefaults) {
+                LOGWARN("Using default wifi credentials");
+                b_reference_network_credentials_provider_set_wifi_network_credentials("MySSID", "MyPassword");
+            }
+            
+            g_autofree gchar* confDir = GetConfigDirectory();
+            InitializeClient(confDir);
+            
+            if(!bartonClient)
+            {
+                LOGERR("Barton client not initialized");
+                return (Core::ERROR_GENERAL);
+            }
+            
+            g_autoptr(GError) error = NULL;
+            if (!b_core_client_start(bartonClient)) {
+                LOGERR("Failed to start Barton client");
+                return (Core::ERROR_GENERAL);
+            }
+            
+            b_core_client_set_system_property(bartonClient, "deviceDescriptorBypass", "true");
+            LOGINFO("BartonMatter Commissioner initialized successfully");
+            
+            return (Core::ERROR_NONE);
+        }
 
-		Core::hresult BartonMatterImplementation::InitializeCommissioner()
-		{
-			// Check if both credentials are unset and provide defaults if so
-			bool needsDefaults = false;
-			{
-				std::lock_guard<std::mutex> lock(networkCredsMtx);
-				needsDefaults = (!network_ssid && !network_psk);
-			}
-			
-			if (needsDefaults) {
-				LOGWARN("Using default wifi credentials");
-				b_reference_network_credentials_provider_set_wifi_network_credentials("MySSID", "MyPassword");
-			}
-			
-			g_autofree gchar* confDir = GetConfigDirectory();
-			InitializeClient(confDir);
-			
-			if(!bartonClient)
-			{
-				LOGERR("Barton client not initialized");
-				return (Core::ERROR_GENERAL);
-			}
-			
-			g_autoptr(GError) error = NULL;
-			if (!b_core_client_start(bartonClient)) {
-				LOGERR("Failed to start Barton client");
-				return (Core::ERROR_GENERAL);
-			}
-			
-			b_core_client_set_system_property(bartonClient, "deviceDescriptorBypass", "true");
-			LOGINFO("BartonMatter Commissioner initialized successfully");
-			
-			return (Core::ERROR_NONE);
-		}
+        gchar* BartonMatterImplementation::GetConfigDirectory()
+        {
+            const std::string pathStr = "/opt/.brtn-ds";
+            g_mkdir_with_parents(pathStr.c_str(), 0755);
+            return g_strdup(pathStr.c_str()); // Caller must free with g_free()
+        }
 
-		gchar* BartonMatterImplementation::GetConfigDirectory()
-		{
-			const std::string pathStr = "/opt/.brtn-ds";
-			g_mkdir_with_parents(pathStr.c_str(), 0755);
-			return g_strdup(pathStr.c_str()); // Caller must free with g_free()
-		}
+        // Static callback handler for endpoint added events
+        void BartonMatterImplementation::EndpointAddedHandler(BCoreClient *source, BCoreEndpointAddedEvent *event, gpointer userData)
+        {
+            LOGINFO("Endpoint added event received");
+            
+            g_autoptr(BCoreEndpoint) endpoint = NULL;
+            g_object_get(
+                G_OBJECT(event),
+                B_CORE_ENDPOINT_ADDED_EVENT_PROPERTY_NAMES[B_CORE_ENDPOINT_ADDED_EVENT_PROP_ENDPOINT],
+                &endpoint,
+                NULL);
 
-	} // namespace Plugin
+            g_return_if_fail(endpoint != NULL);
+
+            g_autofree gchar *deviceUuid = NULL;
+            g_autofree gchar *id = NULL;
+            g_autofree gchar *uri = NULL;
+            g_autofree gchar *profile = NULL;
+            guint profileVersion = 0;
+            
+            g_object_get(G_OBJECT(endpoint),
+                         B_CORE_ENDPOINT_PROPERTY_NAMES[B_CORE_ENDPOINT_PROP_DEVICE_UUID],
+                         &deviceUuid,
+                         B_CORE_ENDPOINT_PROPERTY_NAMES[B_CORE_ENDPOINT_PROP_ID],
+                         &id,
+                         B_CORE_ENDPOINT_PROPERTY_NAMES[B_CORE_ENDPOINT_PROP_URI],
+                         &uri,
+                         B_CORE_ENDPOINT_PROPERTY_NAMES[B_CORE_ENDPOINT_PROP_PROFILE],
+                         &profile,
+                         B_CORE_ENDPOINT_PROPERTY_NAMES[B_CORE_ENDPOINT_PROP_PROFILE_VERSION],
+                         &profileVersion,
+                         NULL);
+            
+            LOGWARN("Endpoint added! deviceUuid=%s, id=%s, uri=%s, profile=%s, profileVersion=%d",
+                    deviceUuid ? deviceUuid : "NULL",
+                    id ? id : "NULL", 
+                    uri ? uri : "NULL",
+                    profile ? profile : "NULL",
+                    profileVersion);
+
+            // Get the plugin instance from userData if needed for further processing
+            BartonMatterImplementation* plugin = static_cast<BartonMatterImplementation*>(userData);
+            if (plugin) {
+                // You can add additional processing here if needed
+                LOGINFO("Processing endpoint in plugin context");
+            }
+        }
+
+    } // namespace Plugin
 } // namespace WPEFramework
 
-// C to CPP glue for GLib implementation for network credentials provider
+// C to C++ Glue for GLib Network Credentials Provider
+//
+// - Barton Core library expects a GObject-based interface (pure C)
+// - Thunder plugin is written in C++ 
+// - This glue bridges the gap by implementing the required C interface
+//   while allowing the C++ plugin to store/manage credentials
+// - Data flows: Thunder API (C++) -> Global vars -> GLib interface (C) -> Barton Core
+//
 extern "C" {
 
 struct _BReferenceNetworkCredentialsProvider

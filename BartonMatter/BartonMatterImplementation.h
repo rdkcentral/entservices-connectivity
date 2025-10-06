@@ -53,26 +53,29 @@ namespace WPEFramework
 {
     namespace Plugin
     {
-
         class BartonMatterImplementation : public Exchange::IBartonMatter
         {
         public:
             BartonMatterImplementation();
             virtual ~BartonMatterImplementation();
-	    virtual Core::hresult SetWifiCredentials(const std::string ssid /* @in */, const std::string password /* @in */)override;
-	    virtual Core::hresult InitializeCommissioner()override;
-	    virtual Core::hresult CommissionDevice(const std::string passcode /* @in*/)override;
+            virtual Core::hresult SetWifiCredentials(const std::string ssid /* @in */, const std::string password /* @in */) override;
+            virtual Core::hresult InitializeCommissioner() override;
+            virtual Core::hresult CommissionDevice(const std::string passcode /* @in*/) override;
 
-	    void InitializeClient(gchar *confDir);
-	    static void SetDefaultParameters(BCoreInitializeParamsContainer *params);
-	    bool Commission(BCoreClient *client, gchar *setupPayload,guint16 timeoutSeconds);
-	    BEGIN_INTERFACE_MAP(BartonMatterImplementation)
-            INTERFACE_ENTRY(Exchange::IBartonMatter)
+            void InitializeClient(gchar *confDir);
+            static void SetDefaultParameters(BCoreInitializeParamsContainer *params);
+            bool Commission(BCoreClient *client, gchar *setupPayload, guint16 timeoutSeconds);
+            
+            // Endpoint event handlers
+            static void EndpointAddedHandler(BCoreClient *source, BCoreEndpointAddedEvent *event, gpointer userData);
+            
+            BEGIN_INTERFACE_MAP(BartonMatterImplementation)
+                INTERFACE_ENTRY(Exchange::IBartonMatter)
             END_INTERFACE_MAP
 
         private:
-	    BCoreClient *bartonClient;
-	    static gchar* GetConfigDirectory();
+            BCoreClient *bartonClient;
+            static gchar* GetConfigDirectory();
         };
     } // namespace Plugin
 } // namespace WPEFramework
