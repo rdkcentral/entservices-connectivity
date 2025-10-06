@@ -67,11 +67,9 @@ namespace WPEFramework
             static void SetDefaultParameters(BCoreInitializeParamsContainer *params);
             bool Commission(BCoreClient *client, gchar *setupPayload, guint16 timeoutSeconds);
             
-            // Endpoint event handlers
-            static void EndpointAddedHandler(BCoreClient *source, BCoreEndpointAddedEvent *event, gpointer userData);
-            
+            static void DeviceAddedHandler(BCoreClient *source, BCoreDeviceAddedEvent *event);
             BEGIN_INTERFACE_MAP(BartonMatterImplementation)
-                INTERFACE_ENTRY(Exchange::IBartonMatter)
+            INTERFACE_ENTRY(Exchange::IBartonMatter)
             END_INTERFACE_MAP
 
         private:
