@@ -215,6 +215,11 @@ namespace WPEFramework
 
 		Core::hresult BartonMatterImplementation::InitializeCommissioner()
 		{
+			if (ssid.empty() && password.empty())
+			{
+				LOGWARN("Using default wifi credentials");
+				b_reference_network_credentials_provider_set_wifi_network_credentials("MySSID", "MyPassword");
+			}
 			g_autofree gchar* confDir = GetConfigDirectory();
 			InitializeClient(confDir);
 			
@@ -246,7 +251,7 @@ namespace WPEFramework
 	} // namespace Plugin
 } // namespace WPEFramework
 
-// C-style GLib implementation for network credentials provider
+// C to CPP glue for GLib implementation for network credentials provider
 extern "C" {
 
 struct _BReferenceNetworkCredentialsProvider
