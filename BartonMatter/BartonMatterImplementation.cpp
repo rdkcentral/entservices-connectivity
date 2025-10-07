@@ -111,8 +111,8 @@ namespace WPEFramework
                     result = false;
                     return Core::ERROR_GENERAL;
                 }
-                // Construct full URI: /48df4d95b86dd505/ep/1/r/isOn
-                fullUri = savedDeviceUri + "/ep/1/r/isOn";
+                // Construct full URI: /48df4d95b86dd505/r/isOn
+                fullUri = savedDeviceUri + "/r/isOn";
             }
             
             g_autoptr(GError) err = NULL;
@@ -150,7 +150,7 @@ namespace WPEFramework
                     return Core::ERROR_GENERAL;
                 }
                 // Construct full URI: /48df4d95b86dd505/ep/1/r/isOn
-                fullUri = savedDeviceUri + "/ep/1/r/isOn";
+                fullUri = savedDeviceUri + "/r/isOn";
             }
             g_autoptr(GError) err = NULL;
             if(!b_core_client_write_resource(bartonClient, fullUri.c_str(), value.c_str()))
