@@ -26,7 +26,7 @@
 #include <barton-core-client.h>
 #include <barton-core-properties.h>
 #include <provider/barton-core-network-credentials-provider.h>
-#include <events/barton-core-device-added-event.h>
+#include <events/barton-core-endpoint-added-event.h>
 
 #include <mutex>
 #include <thread>
