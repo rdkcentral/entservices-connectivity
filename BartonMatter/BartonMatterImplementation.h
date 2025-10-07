@@ -75,7 +75,9 @@ namespace WPEFramework
             END_INTERFACE_MAP
 
         private:
-            BCoreClient *bartonClient;
+            BCoreClient *bartonClient; // Pointer to Barton Core client instance
+            std::string savedDeviceUri; // Store the device URI from endpoint
+            std::mutex deviceUriMtx; // Protect access to savedDeviceUri
             static gchar* GetConfigDirectory();
         };
     } // namespace Plugin

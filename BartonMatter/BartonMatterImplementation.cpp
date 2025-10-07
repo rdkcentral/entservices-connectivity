@@ -99,27 +99,40 @@ namespace WPEFramework
             return result ? Core::ERROR_NONE : Core::ERROR_GENERAL;
         }
 
-        Core::hresult BartonMatterImplementation::ReadResource(std::string uri /* @in*/, bool &result)
+        Core::hresult BartonMatterImplementation::ReadResource(std::string resourcePath /* @in*/, bool &result)
         {
-            g_autoptr(GError) err = NULL;
-            g_autofree gchar *value = b_core_client_read_resource(bartonClient, uri.c_str(), &err);
-
-            if(err == NULL)
+            std::string fullUri;
+            
+            // Get the saved device URI and construct full path
             {
-                LOGWARN("Read resource successful: %s", value);
+                std::lock_guard<std::mutex> lock(deviceUriMtx);
+                if (savedDeviceUri.empty()) {
+                    LOGERR("No device URI saved. Commission a device first.");
+                    result = false;
+                    return Core::ERROR_GENERAL;
+                }
+                // Construct full URI: /48df4d95b86dd505/ep/1/r/isOn
+                fullUri = savedDeviceUri + "/ep/1/r/isOn";
+            }
+            
+            g_autoptr(GError) err = NULL;
+            g_autofree gchar *value = b_core_client_read_resource(bartonClient, fullUri.c_str(), &err);
+
+            if(err == NULL && value != NULL)
+            {
+                LOGWARN("Read resource successful: %s = %s", fullUri.c_str(), value);
                 if(g_strcmp0(value, "true") == 0) {
                     result = true;
                 } else if(g_strcmp0(value, "false") == 0) {
                     result = false;
-                }
-                else {
+                } else {
                     LOGERR("Unexpected resource value: %s", value);
                     result = false;
                 }
             }
             else
             {
-                LOGERR("Read resource failed: %s", err->message);
+                LOGERR("Read resource failed for %s: %s", fullUri.c_str(), err ? err->message : "Unknown error");
                 result = false;
             }
             return result ? Core::ERROR_NONE : Core::ERROR_GENERAL;
@@ -127,9 +140,21 @@ namespace WPEFramework
 
         Core::hresult BartonMatterImplementation::WriteResource(std::string uri /* @in*/, std::string value /* @in*/)
         {
+            std::string fullUri;
             bool result = true;
+            {
+                std::lock_guard<std::mutex> lock(deviceUriMtx);
+                if (savedDeviceUri.empty()) {
+                    LOGERR("No device URI saved. Commission a device first.");
+                    result = false;
+                    return Core::ERROR_GENERAL;
+                }
+                // Construct full URI: /48df4d95b86dd505/ep/1/r/isOn
+                fullUri = savedDeviceUri + "/ep/1/r/isOn";
+            }
+            std::string fullUri;
             g_autoptr(GError) err = NULL;
-            if(!b_core_client_write_resource(bartonClient, uri.c_str(), value.c_str()))
+            if(!b_core_client_write_resource(bartonClient, fullUri.c_str(), value.c_str()))
             {
                 LOGERR("Write resource failed: %s", err->message);
                 result = false;
@@ -339,8 +364,9 @@ namespace WPEFramework
             // Get the plugin instance from userData if needed for further processing
             BartonMatterImplementation* plugin = static_cast<BartonMatterImplementation*>(userData);
             if (plugin) {
-                // You can add additional processing here if needed
-                LOGINFO("Processing endpoint in plugin context save the endpoint details");
+                std::lock_guard<std::mutex> lock(plugin->deviceUriMtx);
+                plugin->savedDeviceUri = std::string(uri);
+                LOGINFO("Saved device URI: %s", plugin->savedDeviceUri.c_str());
             }
         }
 
