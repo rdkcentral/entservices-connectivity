@@ -99,7 +99,7 @@ namespace WPEFramework
             return result ? Core::ERROR_NONE : Core::ERROR_GENERAL;
         }
 
-        Core::hresult ReadResource(std::string uri /* @in*/)
+        Core::hresult BartonMatterImplementation::ReadResource(std::string uri /* @in*/)
         {
             bool result = true;
             g_autoptr(GError) err = NULL;
@@ -117,7 +117,7 @@ namespace WPEFramework
             return result ? Core::ERROR_NONE : Core::ERROR_GENERAL;
         }
 
-        Core::hresult WriteResource(std::string uri /* @in*/, std::string value /* @in*/)
+        Core::hresult BartonMatterImplementation::WriteResource(std::string uri /* @in*/, std::string value /* @in*/)
         {
             bool result = true;
             g_autoptr(GError) err = NULL;
