@@ -152,7 +152,6 @@ namespace WPEFramework
                 // Construct full URI: /48df4d95b86dd505/ep/1/r/isOn
                 fullUri = savedDeviceUri + "/ep/1/r/isOn";
             }
-            std::string fullUri;
             g_autoptr(GError) err = NULL;
             if(!b_core_client_write_resource(bartonClient, fullUri.c_str(), value.c_str()))
             {
