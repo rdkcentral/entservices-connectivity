@@ -99,6 +99,40 @@ namespace WPEFramework
             return result ? Core::ERROR_NONE : Core::ERROR_GENERAL;
         }
 
+        Core::hresult ReadResource(std::string uri /* @in*/)
+        {
+            bool result = true;
+            g_autoptr(GError) err = NULL;
+            g_autofree gchar *value = b_core_client_read_resource(bartonClient, uri.c_str(), &err);
+
+            if(err == NULL)
+            {
+                LOGWARN("Read resource successful: %s", value);
+            }
+            else
+            {
+                LOGERR("Read resource failed: %s", err->message);
+                result = false;
+            }
+            return result ? Core::ERROR_NONE : Core::ERROR_GENERAL;
+        }
+
+        Core::hresult WriteResource(std::string uri /* @in*/, std::string value /* @in*/)
+        {
+            bool result = true;
+            g_autoptr(GError) err = NULL;
+            if(!b_core_client_write_resource(bartonClient, uri.c_str(), value.c_str(), &err))
+            {
+                LOGERR("Write resource failed: %s", err->message);
+                result = false;
+            }
+            else
+            {
+                LOGWARN("Write resource successful");
+            }
+            return result ? Core::ERROR_NONE : Core::ERROR_GENERAL;
+        }
+
         bool BartonMatterImplementation::Commission(BCoreClient *client, gchar *setupPayload, guint16 timeoutSeconds)
         {
             bool rc = true;
