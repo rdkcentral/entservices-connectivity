@@ -62,7 +62,7 @@ namespace WPEFramework
             virtual Core::hresult SetWifiCredentials(const std::string ssid /* @in */, const std::string password /* @in */) override;
             virtual Core::hresult InitializeCommissioner() override;
             virtual Core::hresult CommissionDevice(const std::string passcode /* @in*/) override;
-            virtual Core::hresult ReadResource(std::string uri /* @in*/) override;
+            virtual Core::hresult ReadResource(std::string uri /* @in*/, bool &result) override;
             virtual Core::hresult WriteResource(std::string uri /* @in*/, std::string value /* @in*/) override;
 
             void InitializeClient(gchar *confDir);

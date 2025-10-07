@@ -99,15 +99,23 @@ namespace WPEFramework
             return result ? Core::ERROR_NONE : Core::ERROR_GENERAL;
         }
 
-        Core::hresult BartonMatterImplementation::ReadResource(std::string uri /* @in*/)
+        Core::hresult BartonMatterImplementation::ReadResource(std::string uri /* @in*/, bool &result)
         {
-            bool result = true;
             g_autoptr(GError) err = NULL;
             g_autofree gchar *value = b_core_client_read_resource(bartonClient, uri.c_str(), &err);
 
             if(err == NULL)
             {
                 LOGWARN("Read resource successful: %s", value);
+                if(g_strcmp0(value, "true") == 0) {
+                    result = true;
+                } else if(g_strcmp0(value, "false") == 0) {
+                    result = false;
+                }
+                else {
+                    LOGERR("Unexpected resource value: %s", value);
+                    result = false;
+                }
             }
             else
             {
