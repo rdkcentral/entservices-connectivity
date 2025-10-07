@@ -122,30 +122,6 @@ namespace WPEFramework
             return rc;
         }
 
-		void DeviceAddedHandler(BCoreClient *source, BCoreDeviceAddedEvent *event)
-		{
-			g_autofree gchar *deviceId = NULL;
-			g_autofree gchar *uri = NULL;
-			g_autofree gchar *deviceClass = NULL;
-			guint deviceClassVersion = 0;
-			g_object_get(    
-					G_OBJECT(event),
-					B_CORE_DEVICE_ADDED_EVENT_PROPERTY_NAMES[B_CORE_DEVICE_ADDED_EVENT_PROP_UUID],
-					&deviceId,
-					B_CORE_DEVICE_ADDED_EVENT_PROPERTY_NAMES[B_CORE_DEVICE_ADDED_EVENT_PROP_URI],
-					&uri,
-					B_CORE_DEVICE_ADDED_EVENT_PROPERTY_NAMES[B_CORE_DEVICE_ADDED_EVENT_PROP_DEVICE_CLASS],
-					&deviceClass,
-					B_CORE_DEVICE_ADDED_EVENT_PROPERTY_NAMES
-						[B_CORE_DEVICE_ADDED_EVENT_PROP_DEVICE_CLASS_VERSION],
-					&deviceClassVersion,
-					NULL);
-					LOGWARN("Device Added: ID=%s, URI=%s, Class=%s, Version=%u",
-							deviceId ? deviceId : "N/A",
-							uri ? uri : "N/A",
-							deviceClass ? deviceClass : "N/A",
-							deviceClassVersion);
-		}
 
         void BartonMatterImplementation::InitializeClient(gchar *confDir)
         {
@@ -166,8 +142,8 @@ namespace WPEFramework
                 b_core_property_provider_set_property_string(propProvider, "device.subsystem.disable", "thread,zigbee");
             }
 
-            // Connect device added signal handler
-            g_signal_connect(bartonClient, B_CORE_CLIENT_SIGNAL_NAME_DEVICE_ADDED, G_CALLBACK(DeviceAddedHandler), this);
+            // Connect endpoint added signal handler
+            g_signal_connect(bartonClient, B_CORE_CLIENT_SIGNAL_NAME_ENDPOINT_ADDED, G_CALLBACK(EndpointAddedHandler), this);
             SetDefaultParameters(params);
         }
 
@@ -278,6 +254,52 @@ namespace WPEFramework
             const std::string pathStr = "/opt/.brtn-ds";
             g_mkdir_with_parents(pathStr.c_str(), 0755);
             return g_strdup(pathStr.c_str()); // Caller must free with g_free()
+        }
+        void BartonMatterImplementation::EndpointAddedHandler(BCoreClient *source, BCoreEndpointAddedEvent *event, gpointer userData)
+        {
+            LOGINFO("Endpoint added event received");
+            
+            g_autoptr(BCoreEndpoint) endpoint = NULL;
+            g_object_get(
+                G_OBJECT(event),
+                B_CORE_ENDPOINT_ADDED_EVENT_PROPERTY_NAMES[B_CORE_ENDPOINT_ADDED_EVENT_PROP_ENDPOINT],
+                &endpoint,
+                NULL);
+
+            g_return_if_fail(endpoint != NULL);
+
+            g_autofree gchar *deviceUuid = NULL;
+            g_autofree gchar *id = NULL;
+            g_autofree gchar *uri = NULL;
+            g_autofree gchar *profile = NULL;
+            guint profileVersion = 0;
+            
+            g_object_get(G_OBJECT(endpoint),
+                         B_CORE_ENDPOINT_PROPERTY_NAMES[B_CORE_ENDPOINT_PROP_DEVICE_UUID],
+                         &deviceUuid,
+                         B_CORE_ENDPOINT_PROPERTY_NAMES[B_CORE_ENDPOINT_PROP_ID],
+                         &id,
+                         B_CORE_ENDPOINT_PROPERTY_NAMES[B_CORE_ENDPOINT_PROP_URI],
+                         &uri,
+                         B_CORE_ENDPOINT_PROPERTY_NAMES[B_CORE_ENDPOINT_PROP_PROFILE],
+                         &profile,
+                         B_CORE_ENDPOINT_PROPERTY_NAMES[B_CORE_ENDPOINT_PROP_PROFILE_VERSION],
+                         &profileVersion,
+                         NULL);
+            
+            LOGWARN("Endpoint added! deviceUuid=%s, id=%s, uri=%s, profile=%s, profileVersion=%d",
+                    deviceUuid ? deviceUuid : "NULL",
+                    id ? id : "NULL", 
+                    uri ? uri : "NULL",
+                    profile ? profile : "NULL",
+                    profileVersion);
+
+            // Get the plugin instance from userData if needed for further processing
+            BartonMatterImplementation* plugin = static_cast<BartonMatterImplementation*>(userData);
+            if (plugin) {
+                // You can add additional processing here if needed
+                LOGINFO("Processing endpoint in plugin context save the endpoint details");
+            }
         }
 
     } // namespace Plugin
