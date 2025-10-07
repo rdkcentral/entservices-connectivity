@@ -121,7 +121,7 @@ namespace WPEFramework
         {
             bool result = true;
             g_autoptr(GError) err = NULL;
-            if(!b_core_client_write_resource(bartonClient, uri.c_str(), value.c_str(), &err))
+            if(!b_core_client_write_resource(bartonClient, uri.c_str(), value.c_str()))
             {
                 LOGERR("Write resource failed: %s", err->message);
                 result = false;
