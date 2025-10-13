@@ -360,27 +360,29 @@ namespace WPEFramework
             }
         }
 
-        Core::hresult BartonMatterImplementation::ListDevices(std::vector<std::string> &deviceList)
+        Core::hresult BartonMatterImplementation::ListDevices(std::string& deviceList /* @out */)
         {
             LOGINFO("Listing connected devices...");
             
             if (!bartonClient) {
                 LOGERR("Barton client not initialized. Call InitializeCommissioner first.");
+                deviceList = "[]";
                 return Core::ERROR_UNAVAILABLE;
             }
             
-            deviceList.clear();
+            std::vector<std::string> deviceUuids; 
             
             // Get all connected devices using Barton's native API
-            g_autolist(BCoreDevice) devices = b_core_client_get_devices(bartonClient);
+            g_autolist(BCoreDevice) deviceObjects = b_core_client_get_devices(bartonClient);
             
-            if (!devices) {
+            if (!deviceObjects) {
                 LOGWARN("No devices found - device list is empty");
+                deviceList = "[]";
                 return Core::ERROR_UNAVAILABLE;
             }
             
             // Count devices and populate list
-            for (GList *devicesIter = devices; devicesIter != NULL; devicesIter = devicesIter->next) {
+            for (GList *devicesIter = deviceObjects; devicesIter != NULL; devicesIter = devicesIter->next) {
                 BCoreDevice *device = B_CORE_DEVICE(devicesIter->data);
                 
                 g_autofree gchar *deviceId = NULL;
@@ -390,18 +392,29 @@ namespace WPEFramework
                             NULL);
                 
                 if (deviceId != NULL) {
-                    deviceList.push_back(std::string(deviceId));
+                    deviceUuids.push_back(std::string(deviceId));
                     LOGINFO("Found device: %s", deviceId);
                 }
             }
             
             // Final check - if no valid device IDs were found
-            if (deviceList.empty()) {
+            if (deviceUuids.empty()) {
                 LOGWARN("No valid device IDs found in device list");
+                deviceList = "[]";
                 return Core::ERROR_UNAVAILABLE;
             }
             
-            LOGINFO("Total devices found: %zu", deviceList.size());
+            // Convert to JSON string format
+            deviceList = "[";
+            for (size_t i = 0; i < deviceUuids.size(); ++i) {
+                deviceList += "\"" + deviceUuids[i] + "\"";
+                if (i < deviceUuids.size() - 1) {
+                    deviceList += ",";
+                }
+            }
+            deviceList += "]";
+            
+            LOGINFO("Total devices found: %zu", deviceUuids.size());
             return Core::ERROR_NONE;
         }
 
