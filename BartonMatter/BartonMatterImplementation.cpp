@@ -128,14 +128,17 @@ namespace WPEFramework
                 } else {
                     LOGERR("Unexpected resource value: %s", value);
                     result = false;
+                    return Core::ERROR_INVALID_SIGNATURE;
                 }
+                // Always return SUCCESS if we successfully read the value
+                return Core::ERROR_NONE;
             }
             else
             {
                 LOGERR("Read resource failed for %s: %s", fullUri.c_str(), err ? err->message : "Unknown error");
                 result = false;
             }
-            return result ? Core::ERROR_NONE : Core::ERROR_GENERAL;
+            return Core::ERROR_GENERAL;
         }
 
         Core::hresult BartonMatterImplementation::WriteResource(std::string uri /* @in*/, std::string value /* @in*/)
