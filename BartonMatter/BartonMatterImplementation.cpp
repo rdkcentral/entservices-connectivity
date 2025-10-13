@@ -99,20 +99,14 @@ namespace WPEFramework
             return result ? Core::ERROR_NONE : Core::ERROR_GENERAL;
         }
 
-        Core::hresult BartonMatterImplementation::ReadResource(std::string resourcePath /* @in*/, bool &result)
+        Core::hresult BartonMatterImplementation::ReadResource(std::string deviceId /* @in*/, bool &result)
         {
             std::string fullUri;
             
             // Get the saved device URI and construct full path
             {
-                std::lock_guard<std::mutex> lock(deviceUriMtx);
-                if (savedDeviceUri.empty()) {
-                    LOGERR("No device URI saved. Commission a device first.");
-                    result = false;
-                    return Core::ERROR_GENERAL;
-                }
-                // Construct full URI: /48df4d95b86dd505/r/isOn
-                fullUri = savedDeviceUri + "/r/isOn";
+                // Construct full URI: /48df4d95b86dd505/ep/1/r/isOn
+                fullUri = "/" + deviceId + "/ep/1/r/isOn";
             }
             
             g_autoptr(GError) err = NULL;
@@ -141,19 +135,13 @@ namespace WPEFramework
             return Core::ERROR_GENERAL;
         }
 
-        Core::hresult BartonMatterImplementation::WriteResource(std::string uri /* @in*/, std::string value /* @in*/)
+        Core::hresult BartonMatterImplementation::WriteResource(std::string deviceId /* @in*/, std::string value /* @in*/)
         {
             std::string fullUri;
             bool result = true;
             {
-                std::lock_guard<std::mutex> lock(deviceUriMtx);
-                if (savedDeviceUri.empty()) {
-                    LOGERR("No device URI saved. Commission a device first.");
-                    result = false;
-                    return Core::ERROR_GENERAL;
-                }
                 // Construct full URI: /48df4d95b86dd505/ep/1/r/isOn
-                fullUri = savedDeviceUri + "/r/isOn";
+                fullUri = "/" + deviceId + "/ep/1/r/isOn";
             }
             g_autoptr(GError) err = NULL;
             if(!b_core_client_write_resource(bartonClient, fullUri.c_str(), value.c_str()))
@@ -370,6 +358,51 @@ namespace WPEFramework
                 plugin->savedDeviceUri = std::string(uri);
                 LOGINFO("Saved device URI: %s", plugin->savedDeviceUri.c_str());
             }
+        }
+
+        Core::hresult BartonMatterImplementation::ListDevices(std::vector<std::string> &deviceList)
+        {
+            LOGINFO("Listing connected devices...");
+            
+            if (!bartonClient) {
+                LOGERR("Barton client not initialized. Call InitializeCommissioner first.");
+                return Core::ERROR_UNAVAILABLE;
+            }
+            
+            deviceList.clear();
+            
+            // Get all connected devices using Barton's native API
+            g_autolist(BCoreDevice) devices = b_core_client_get_devices(bartonClient);
+            
+            if (!devices) {
+                LOGWARN("No devices found - device list is empty");
+                return Core::ERROR_UNAVAILABLE;
+            }
+            
+            // Count devices and populate list
+            for (GList *devicesIter = devices; devicesIter != NULL; devicesIter = devicesIter->next) {
+                BCoreDevice *device = B_CORE_DEVICE(devicesIter->data);
+                
+                g_autofree gchar *deviceId = NULL;
+                g_object_get(device, 
+                            B_CORE_DEVICE_PROPERTY_NAMES[B_CORE_DEVICE_PROP_UUID], 
+                            &deviceId, 
+                            NULL);
+                
+                if (deviceId != NULL) {
+                    deviceList.push_back(std::string(deviceId));
+                    LOGINFO("Found device: %s", deviceId);
+                }
+            }
+            
+            // Final check - if no valid device IDs were found
+            if (deviceList.empty()) {
+                LOGWARN("No valid device IDs found in device list");
+                return Core::ERROR_UNAVAILABLE;
+            }
+            
+            LOGINFO("Total devices found: %zu", deviceList.size());
+            return Core::ERROR_NONE;
         }
 
     } // namespace Plugin
