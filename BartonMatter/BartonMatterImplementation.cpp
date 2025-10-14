@@ -98,16 +98,12 @@ namespace WPEFramework
             
             return result ? Core::ERROR_NONE : Core::ERROR_GENERAL;
         }
-
-        Core::hresult BartonMatterImplementation::ReadResource(std::string deviceId /* @in*/, bool &result)
+        Core::hresult BartonMatterImplementation::ReadResource(std::string deviceId /* @in*/, std::string resourceType /* @in*/, std::string &result /* @out*/)
         {
             std::string fullUri;
             
-            // Get the saved device URI and construct full path
-            {
-                // Construct full URI: /48df4d95b86dd505/ep/1/r/isOn
-                fullUri = "/" + deviceId + "/ep/1/r/isOn";
-            }
+            // Construct URI by directly appending resourceType: /deviceId/ep/1/r/resourceType
+            fullUri = "/" + deviceId + "/ep/1/r/" + resourceType;
             
             g_autoptr(GError) err = NULL;
             g_autofree gchar *value = b_core_client_read_resource(bartonClient, fullUri.c_str(), &err);
@@ -115,34 +111,26 @@ namespace WPEFramework
             if(err == NULL && value != NULL)
             {
                 LOGWARN("Read resource successful: %s = %s", fullUri.c_str(), value);
-                if(g_strcmp0(value, "true") == 0) {
-                    result = true;
-                } else if(g_strcmp0(value, "false") == 0) {
-                    result = false;
-                } else {
-                    LOGERR("Unexpected resource value: %s", value);
-                    result = false;
-                    return Core::ERROR_INVALID_SIGNATURE;
-                }
-                // Always return SUCCESS if we successfully read the value
+                result = std::string(value);
                 return Core::ERROR_NONE;
             }
             else
             {
                 LOGERR("Read resource failed for %s: %s", fullUri.c_str(), err ? err->message : "Unknown error");
-                result = false;
+                result = "";
+                return Core::ERROR_GENERAL;
             }
-            return Core::ERROR_GENERAL;
         }
 
-        Core::hresult BartonMatterImplementation::WriteResource(std::string deviceId /* @in*/, std::string value /* @in*/)
+        Core::hresult BartonMatterImplementation::WriteResource(std::string deviceId /* @in*/, std::string resourceType /* @in*/, std::string value /* @in*/)
         {
             std::string fullUri;
             bool result = true;
-            {
-                // Construct full URI: /48df4d95b86dd505/ep/1/r/isOn
-                fullUri = "/" + deviceId + "/ep/1/r/isOn";
-            }
+            
+            // Construct URI by directly appending resourceType: /deviceId/ep/1/r/resourceType
+            fullUri = "/" + deviceId + "/ep/1/r/" + resourceType;
+            LOGWARN("Writing %s resource with value: %s", resourceType.c_str(), value.c_str());
+            
             g_autoptr(GError) err = NULL;
             if(!b_core_client_write_resource(bartonClient, fullUri.c_str(), value.c_str()))
             {
@@ -151,7 +139,7 @@ namespace WPEFramework
             }
             else
             {
-                LOGWARN("Write resource successful");
+                LOGWARN("Write resource successful for URI: %s", fullUri.c_str());
             }
             return result ? Core::ERROR_NONE : Core::ERROR_GENERAL;
         }
