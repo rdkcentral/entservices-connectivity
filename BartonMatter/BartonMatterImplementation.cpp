@@ -372,7 +372,7 @@ namespace WPEFramework
             
             std::vector<std::string> deviceUuids; 
             
-            // Get all connected devices using Barton's native API
+            // Get all connected devices using Barton's API
             g_autolist(BCoreDevice) deviceObjects = b_core_client_get_devices(bartonClient);
             
             if (!deviceObjects) {
@@ -397,14 +397,14 @@ namespace WPEFramework
                 }
             }
             
-            // Final check - if no valid device IDs were found
+            //if no valid device IDs were found
             if (deviceUuids.empty()) {
                 LOGWARN("No valid device IDs found in device list");
                 deviceList = "[]";
                 return Core::ERROR_UNAVAILABLE;
             }
             
-            // Convert to JSON string format
+            // Convert to JSON
             deviceList = "[";
             for (size_t i = 0; i < deviceUuids.size(); ++i) {
                 deviceList += "\"" + deviceUuids[i] + "\"";

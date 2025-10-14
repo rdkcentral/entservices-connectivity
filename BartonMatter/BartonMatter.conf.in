@@ -1,5 +1,4 @@
 autostart = "false"
-precondition = ["Graphics"]
 callsign = "org.rdk.barton"
 configuration = JSON()
 root = JSON()
