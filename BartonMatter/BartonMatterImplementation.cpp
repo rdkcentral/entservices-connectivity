@@ -98,12 +98,12 @@ namespace WPEFramework
             
             return result ? Core::ERROR_NONE : Core::ERROR_GENERAL;
         }
-        Core::hresult BartonMatterImplementation::ReadResource(std::string deviceId /* @in*/, std::string resourceType /* @in*/, std::string &result /* @out*/)
+        Core::hresult BartonMatterImplementation::ReadResource(std::string uri /* @in*/, std::string resourceType /* @in*/, std::string &result /* @out*/)
         {
             std::string fullUri;
             
-            // Construct URI by directly appending resourceType: /deviceId/ep/1/r/resourceType
-            fullUri = "/" + deviceId + "/ep/1/r/" + resourceType;
+            // Construct URI by directly appending resourceType: /uri/ep/1/r/resourceType
+            fullUri = "/" + uri + "/ep/1/r/" + resourceType;
             
             g_autoptr(GError) err = NULL;
             g_autofree gchar *value = b_core_client_read_resource(bartonClient, fullUri.c_str(), &err);
@@ -122,13 +122,13 @@ namespace WPEFramework
             }
         }
 
-        Core::hresult BartonMatterImplementation::WriteResource(std::string deviceId /* @in*/, std::string resourceType /* @in*/, std::string value /* @in*/)
+        Core::hresult BartonMatterImplementation::WriteResource(std::string uri /* @in*/, std::string resourceType /* @in*/, std::string value /* @in*/)
         {
             std::string fullUri;
             bool result = true;
             
-            // Construct URI by directly appending resourceType: /deviceId/ep/1/r/resourceType
-            fullUri = "/" + deviceId + "/ep/1/r/" + resourceType;
+            // Construct URI by directly appending resourceType: /uri/ep/1/r/resourceType
+            fullUri = "/" + uri + "/ep/1/r/" + resourceType;
             LOGWARN("Writing %s resource with value: %s", resourceType.c_str(), value.c_str());
             
             g_autoptr(GError) err = NULL;
