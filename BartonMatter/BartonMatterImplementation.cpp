@@ -58,6 +58,58 @@ namespace WPEFramework
             network_ssid = nullptr;
             network_psk = nullptr;
         }
+	void BartonMatterImplementation::DeviceAddedHandler(BCoreClient *source, BCoreDeviceAddedEvent *event, gpointer userData)
+        {
+            LOGINFO("Device added event received - commissioning complete!");
+
+            g_autoptr(BCoreDevice) device = NULL;
+            g_object_get(
+                G_OBJECT(event),
+                "device",  // BCoreDeviceAddedEvent property
+                &device,
+                NULL);
+
+            g_return_if_fail(device != NULL);
+
+            g_autofree gchar *deviceUuid = NULL;
+            g_autofree gchar *deviceClass = NULL;
+            g_object_get(G_OBJECT(device),
+                         B_CORE_DEVICE_PROPERTY_NAMES[B_CORE_DEVICE_PROP_UUID],
+                         &deviceUuid,
+                         B_CORE_DEVICE_PROPERTY_NAMES[B_CORE_DEVICE_PROP_DEVICE_CLASS],
+                         &deviceClass,
+                         NULL);
+
+            LOGWARN("Device added! UUID=%s, class=%s",
+                    deviceUuid ? deviceUuid : "NULL",
+                    deviceClass ? deviceClass : "NULL");
+
+            // Only configure ACL for Matter devices
+            if (deviceClass && strcmp(deviceClass, "matter") == 0) {
+                BartonMatterImplementation* plugin = static_cast<BartonMatterImplementation*>(userData);
+                if (plugin && deviceUuid) {
+                    LOGWARN("=== DeviceAdded: Commissioning complete for %s ===", deviceUuid);
+                    LOGWARN("Configuring ACL before client can initiate discovery...");
+
+                    // Configure ACL immediately after commissioning, before commissioned device
+                    // can start its endpoint discovery sequence. This timing is critical:
+                    // - DeviceAddedHandler fires synchronously in commissioning completion path
+                    // - We create ACL here (takes microseconds)
+                    // - Only then does control return and allow device to start discovery
+                    bool aclResult = plugin->ConfigureClientACL(
+                        std::string(deviceUuid),
+                        0,  // vendorId: 0 means allow any vendor
+                        0   // productId: 0 means allow any product
+                    );
+
+                    if (!aclResult) {
+                        LOGERR("Failed to configure ACL for device %s", deviceUuid);
+                    } else {
+                        LOGWARN("=== ACL configured successfully - device %s can now discover endpoints ===", deviceUuid);
+                    }
+                }
+            }
+        }
         Core::hresult BartonMatterImplementation::SetWifiCredentials(const std::string ssid /* @in */, const std::string password /* @in */)
         {
             LOGWARN("BartonMatter: set wifi cred invoked");

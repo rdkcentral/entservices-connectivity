@@ -27,10 +27,16 @@
 #include <barton-core-properties.h>
 #include <provider/barton-core-network-credentials-provider.h>
 #include <events/barton-core-endpoint-added-event.h>
-
+#include <events/barton-core-device-added-event.h>
 #include <mutex>
 #include <thread>
 #include <vector>
+
+#include <access/AccessControl.h>
+#include <access/Privilege.h>
+#include <access/RequestPath.h>
+#include <access/SubjectDescriptor.h>
+#include <app/clusters/descriptor/descriptor.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -69,6 +75,11 @@ namespace WPEFramework
             void InitializeClient(gchar *confDir);
             static void SetDefaultParameters(BCoreInitializeParamsContainer *params);
             bool Commission(BCoreClient *client, gchar *setupPayload, guint16 timeoutSeconds);
+	    static void DeviceAddedHandler(BCoreClient *source, BCoreDeviceAddedEvent *event, gpointer userData);
+	    bool ConfigureClientACL(const std::string& deviceUuid, uint16_t vendorId, uint16_t productId);
+	    bool AddACLEntryForClient(uint16_t vendorId, uint16_t productId, const std::string& deviceUuid);
+            bool GetNodeIdFromDeviceUuid(const std::string& deviceUuid, uint64_t& nodeId);
+
             
             static void EndpointAddedHandler(BCoreClient *source, BCoreEndpointAddedEvent *event, gpointer userData);
             BEGIN_INTERFACE_MAP(BartonMatterImplementation)
