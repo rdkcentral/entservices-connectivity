@@ -47,12 +47,16 @@ else()
     message(STATUS "Found Barton lib: ${BARTON_CORE_LIB}")
 endif()
 # --- Done ---
-
+target_compile_definitions(${MODULE_NAME} PRIVATE
+    CHIP_SYSTEM_CONFIG_USE_SOCKETS=1
+    CHIP_HAVE_CONFIG_H=1
+)
 target_include_directories(${MODULE_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../helpers
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${BARTON_INCLUDE_DIR}
     ${GLIB_INCLUDE_DIRS}
+    ${CMAKE_SYSROOT}/usr/include/matter
 )
 
 #target_include_directories(${MODULE_NAME} PRIVATE ../helpers $ENV{PKG_CONFIG_SYSROOT_DIR}/usr/include/jsruntime ${CMAKE_CURRENT_SOURCE_DIR} )

@@ -33,10 +33,8 @@
 #include <vector>
 
 #include <access/AccessControl.h>
-#include <access/Privilege.h>
-#include <access/RequestPath.h>
-#include <access/SubjectDescriptor.h>
-#include <app/clusters/descriptor/descriptor.h>
+#include <lib/core/CHIPError.h>
+#include <lib/support/CodeUtils.h>
 
 #ifdef __cplusplus
 extern "C" {
