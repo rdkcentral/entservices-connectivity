@@ -58,6 +58,51 @@ namespace WPEFramework
             network_ssid = nullptr;
             network_psk = nullptr;
         }
+	/**
+         * @brief Signal handler that fires when a device's configuration is completed
+         *
+         * This handler is called after Barton discovers a commissioned device's endpoints
+         * but before the device is added to the device service. This is the ideal time to
+         * create ACL entries for tv-casting-app devices, allowing them to access Barton's
+         * endpoints to create bindings and send commands.
+         *
+         * @param client The BCoreClient instance
+         * @param deviceUuid The UUID of the device that completed configuration
+         * @param success Whether configuration was successful
+         * @param userData Pointer to BartonMatterImplementation instance
+         */
+        void BartonMatterImplementation::DeviceConfigurationCompletedHandler(BCoreClient *client,
+                                                                             const gchar *deviceUuid,
+                                                                             gboolean success,
+                                                                             gpointer userData)
+        {
+            LOGINFO("Device configuration completed event received!");
+            LOGINFO("  Device UUID: %s", deviceUuid ? deviceUuid : "(null)");
+            LOGINFO("  Success: %s", success ? "true" : "false");
+
+            if (!userData || !deviceUuid || !success)
+            {
+                LOGERR("Invalid parameters or configuration failed in DeviceConfigurationCompletedHandler");
+                return;
+            }
+
+            auto *instance = static_cast<BartonMatterImplementation*>(userData);
+
+            // Configure ACL for the newly commissioned device
+            // Using vendorId=0, productId=0 to allow any commissioned device to access Barton's endpoints
+            // This is necessary for tv-casting-app to create bindings and send commands
+            LOGINFO("Creating ACL entry for commissioned device %s", deviceUuid);
+            bool aclSuccess = instance->ConfigureClientACL(deviceUuid, 0, 0);
+
+            if (aclSuccess)
+            {
+                LOGINFO("Successfully configured ACL for device %s", deviceUuid);
+            }
+            else
+            {
+                LOGERR("Failed to configure ACL for device %s", deviceUuid);
+            }
+        }
 	void BartonMatterImplementation::DeviceAddedHandler(BCoreClient *source, BCoreDeviceAddedEvent *event, gpointer userData)
         {
             LOGINFO("Device added event received - commissioning complete!");

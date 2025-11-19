@@ -77,6 +77,7 @@ namespace WPEFramework
 	    bool ConfigureClientACL(const std::string& deviceUuid, uint16_t vendorId, uint16_t productId);
 	    bool AddACLEntryForClient(uint16_t vendorId, uint16_t productId, const std::string& deviceUuid);
             bool GetNodeIdFromDeviceUuid(const std::string& deviceUuid, uint64_t& nodeId);
+	    static void DeviceConfigurationCompletedHandler(BCoreClient *client, const gchar *deviceUuid, gboolean success, gpointer userData);
 
             
             static void EndpointAddedHandler(BCoreClient *source, BCoreEndpointAddedEvent *event, gpointer userData);
