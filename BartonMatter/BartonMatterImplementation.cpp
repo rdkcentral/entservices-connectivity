@@ -43,14 +43,14 @@ namespace WPEFramework
         BartonMatterImplementation::~BartonMatterImplementation()
         {
             TRACE(Trace::Information, (_T("Destructing BartonMatterImplementation Service: %p"), this));
-            
+
             // Cleanup barton client if initialized
             if (bartonClient) {
                 b_core_client_stop(bartonClient);
                 g_object_unref(bartonClient);
                 bartonClient = nullptr;
             }
-            
+
             // Cleanup network credentials
             std::lock_guard<std::mutex> lock(networkCredsMtx);
             g_free(network_ssid);
@@ -158,50 +158,50 @@ namespace WPEFramework
         Core::hresult BartonMatterImplementation::SetWifiCredentials(const std::string ssid /* @in */, const std::string password /* @in */)
         {
             LOGWARN("BartonMatter: set wifi cred invoked");
-            
+
             // Validate input parameters
             if (ssid.empty()) {
                 LOGERR("Invalid SSID: cannot be empty");
                 return (Core::ERROR_INVALID_INPUT_LENGTH);
             }
-            
+
             if (password.empty()) {
                 LOGERR("Invalid password: cannot be empty");
                 return (Core::ERROR_INVALID_INPUT_LENGTH);
             }
-            
+
             // Use the integrated network credentials provider
             b_reference_network_credentials_provider_set_wifi_network_credentials(ssid.c_str(), password.c_str());
-            
+
             LOGWARN("BartonMatter wifi cred processed successfully ssid: %s | pass: %s", ssid.c_str(), password.c_str());
             return (Core::ERROR_NONE);
         }
         Core::hresult BartonMatterImplementation::CommissionDevice(const std::string passcode)
         {
             LOGWARN("Commission called with passcode: %s", passcode.c_str());
-            
+
             if (!bartonClient) {
                 LOGERR("Barton client not initialized");
                 return (Core::ERROR_GENERAL);
             }
-            
+
             if (passcode.empty()) {
                 LOGERR("Invalid passcode provided");
                 return (Core::ERROR_INVALID_INPUT_LENGTH);
             }
-            
+
             g_autofree gchar* setupPayload = g_strdup(passcode.c_str());
             bool result = Commission(bartonClient, setupPayload, 120);
-            
+
             return result ? Core::ERROR_NONE : Core::ERROR_GENERAL;
         }
         Core::hresult BartonMatterImplementation::ReadResource(std::string uri /* @in*/, std::string resourceType /* @in*/, std::string &result /* @out*/)
         {
             std::string fullUri;
-            
+
             // Construct URI by directly appending resourceType: /uri/ep/1/r/resourceType
             fullUri = "/" + uri + "/ep/1/r/" + resourceType;
-            
+
             g_autoptr(GError) err = NULL;
             g_autofree gchar *value = b_core_client_read_resource(bartonClient, fullUri.c_str(), &err);
 
@@ -223,11 +223,11 @@ namespace WPEFramework
         {
             std::string fullUri;
             bool result = true;
-            
+
             // Construct URI by directly appending resourceType: /uri/ep/1/r/resourceType
             fullUri = "/" + uri + "/ep/1/r/" + resourceType;
             LOGWARN("Writing %s resource with value: %s", resourceType.c_str(), value.c_str());
-            
+
             g_autoptr(GError) err = NULL;
             if(!b_core_client_write_resource(bartonClient, fullUri.c_str(), value.c_str()))
             {
@@ -283,6 +283,12 @@ namespace WPEFramework
             {
                 b_core_property_provider_set_property_string(propProvider, "device.subsystem.disable", "thread,zigbee");
             }
+
+            // Connect device configuration completed signal - fires after discovery, before device service registration
+            g_signal_connect(bartonClient, B_CORE_CLIENT_SIGNAL_NAME_DEVICE_CONFIGURATION_COMPLETED, G_CALLBACK(DeviceConfigurationCompletedHandler), this);
+
+            // Connect device added signal handler
+            g_signal_connect(bartonClient, B_CORE_CLIENT_SIGNAL_NAME_DEVICE_ADDED, G_CALLBACK(DeviceAddedHandler), this);
 
             // Connect endpoint added signal handler
             g_signal_connect(bartonClient, B_CORE_CLIENT_SIGNAL_NAME_ENDPOINT_ADDED, G_CALLBACK(EndpointAddedHandler), this);
@@ -364,30 +370,30 @@ namespace WPEFramework
                 std::lock_guard<std::mutex> lock(networkCredsMtx);
                 needsDefaults = (!network_ssid && !network_psk);
             }
-            
+
             if (needsDefaults) {
                 LOGWARN("Using default wifi credentials");
                 b_reference_network_credentials_provider_set_wifi_network_credentials("MySSID", "MyPassword");
             }
-            
+
             g_autofree gchar* confDir = GetConfigDirectory();
             InitializeClient(confDir);
-            
+
             if(!bartonClient)
             {
                 LOGERR("Barton client not initialized");
                 return (Core::ERROR_GENERAL);
             }
-            
+
             g_autoptr(GError) error = NULL;
             if (!b_core_client_start(bartonClient)) {
                 LOGERR("Failed to start Barton client");
                 return (Core::ERROR_GENERAL);
             }
-            
+
             b_core_client_set_system_property(bartonClient, "deviceDescriptorBypass", "true");
             LOGINFO("BartonMatter Commissioner initialized successfully");
-            
+
             return (Core::ERROR_NONE);
         }
 
@@ -400,7 +406,7 @@ namespace WPEFramework
         void BartonMatterImplementation::EndpointAddedHandler(BCoreClient *source, BCoreEndpointAddedEvent *event, gpointer userData)
         {
             LOGINFO("Endpoint added event received");
-            
+
             g_autoptr(BCoreEndpoint) endpoint = NULL;
             g_object_get(
                 G_OBJECT(event),
@@ -415,7 +421,7 @@ namespace WPEFramework
             g_autofree gchar *uri = NULL;
             g_autofree gchar *profile = NULL;
             guint profileVersion = 0;
-            
+
             g_object_get(G_OBJECT(endpoint),
                          B_CORE_ENDPOINT_PROPERTY_NAMES[B_CORE_ENDPOINT_PROP_DEVICE_UUID],
                          &deviceUuid,
@@ -428,10 +434,10 @@ namespace WPEFramework
                          B_CORE_ENDPOINT_PROPERTY_NAMES[B_CORE_ENDPOINT_PROP_PROFILE_VERSION],
                          &profileVersion,
                          NULL);
-            
+
             LOGWARN("Endpoint added! deviceUuid=%s, id=%s, uri=%s, profile=%s, profileVersion=%d",
                     deviceUuid ? deviceUuid : "NULL",
-                    id ? id : "NULL", 
+                    id ? id : "NULL",
                     uri ? uri : "NULL",
                     profile ? profile : "NULL",
                     profileVersion);
@@ -445,50 +451,214 @@ namespace WPEFramework
             }
         }
 
+        /**
+         * @brief Configure ACL entry for a commissioned device to allow it to access Barton's endpoints
+         *
+         * This method creates an ACL entry that grants the commissioned device (identified by deviceUuid)
+         * the ability to read Barton's endpoints, create bindings, and send commands. This is essential
+         * for tv-casting-app to function properly after commissioning.
+         *
+         * @param deviceUuid The Matter node ID of the commissioned device (in hex string format)
+         * @param vendorId Vendor ID to filter (0 = allow any vendor)
+         * @param productId Product ID to filter (0 = allow any product)
+         * @return true if ACL was created successfully, false otherwise
+         */
+        bool BartonMatterImplementation::ConfigureClientACL(const std::string& deviceUuid, uint16_t vendorId, uint16_t productId)
+        {
+            LOGINFO("ConfigureClientACL called for device %s (vendorId=0x%04x, productId=0x%04x)",
+                    deviceUuid.c_str(), vendorId, productId);
+
+            if (deviceUuid.empty())
+            {
+                LOGERR("ConfigureClientACL: Invalid empty deviceUuid");
+                return false;
+            }
+
+            // Create ACL entry using Matter SDK
+            bool result = AddACLEntryForClient(vendorId, productId, deviceUuid);
+
+            if (result)
+            {
+                LOGINFO("Successfully configured ACL for device %s", deviceUuid.c_str());
+            }
+            else
+            {
+                LOGERR("Failed to configure ACL for device %s", deviceUuid.c_str());
+            }
+
+            return result;
+        }
+
+        /**
+         * @brief Add an ACL entry using Matter SDK APIs
+         *
+         * Creates an Access Control List entry that allows a specific node (identified by deviceUuid)
+         * to access all of Barton's clusters with Operate privilege. This uses the Matter SDK's
+         * AccessControl APIs to directly manipulate the ACL table.
+         *
+         * @param vendorId Vendor ID filter (currently unused, 0 = any)
+         * @param productId Product ID filter (currently unused, 0 = any)
+         * @param deviceUuid The Matter node ID in hex string format (e.g., "90034FD9068DFF14")
+         * @return true if ACL entry was created successfully, false otherwise
+         */
+        bool BartonMatterImplementation::AddACLEntryForClient(uint16_t vendorId, uint16_t productId, const std::string& deviceUuid)
+        {
+            using namespace chip;
+            using namespace chip::Access;
+
+            LOGINFO("AddACLEntryForClient: Creating ACL for device %s", deviceUuid.c_str());
+
+            // Convert deviceUuid (hex string) to numeric node ID
+            uint64_t nodeId = 0;
+            if (!GetNodeIdFromDeviceUuid(deviceUuid, nodeId))
+            {
+                LOGERR("AddACLEntryForClient: Failed to convert deviceUuid to node ID");
+                return false;
+            }
+
+            LOGINFO("AddACLEntryForClient: Converted deviceUuid %s to nodeId 0x%016llx",
+                    deviceUuid.c_str(), (unsigned long long)nodeId);
+
+            // Get our fabric index (we should be on fabric 1 after initialization)
+            FabricIndex fabricIndex = 1;
+            LOGINFO("AddACLEntryForClient: Using fabric index %d", fabricIndex);
+
+            // Prepare the ACL entry
+            AccessControl::Entry entry;
+            CHIP_ERROR err = GetAccessControl().PrepareEntry(entry);
+            if (err != CHIP_NO_ERROR)
+            {
+                LOGERR("AddACLEntryForClient: PrepareEntry failed: 0x%08lx", (unsigned long)err.AsInteger());
+                return false;
+            }
+
+            // Set fabric index
+            err = entry.SetFabricIndex(fabricIndex);
+            if (err != CHIP_NO_ERROR)
+            {
+                LOGERR("AddACLEntryForClient: SetFabricIndex failed: 0x%08lx", (unsigned long)err.AsInteger());
+                return false;
+            }
+
+            // Set privilege to Operate (allows reading attributes and invoking commands)
+            err = entry.SetPrivilege(Privilege::kOperate);
+            if (err != CHIP_NO_ERROR)
+            {
+                LOGERR("AddACLEntryForClient: SetPrivilege failed: 0x%08lx", (unsigned long)err.AsInteger());
+                return false;
+            }
+
+            // Set auth mode to CASE (Certificate Authenticated Session Establishment)
+            err = entry.SetAuthMode(AuthMode::kCase);
+            if (err != CHIP_NO_ERROR)
+            {
+                LOGERR("AddACLEntryForClient: SetAuthMode failed: 0x%08lx", (unsigned long)err.AsInteger());
+                return false;
+            }
+
+            // Add the subject (the node that gets access)
+            err = entry.AddSubject(nullptr, nodeId);
+            if (err != CHIP_NO_ERROR)
+            {
+                LOGERR("AddACLEntryForClient: AddSubject failed: 0x%08lx", (unsigned long)err.AsInteger());
+                return false;
+            }
+
+            // Create the entry in the ACL table
+            // Note: The Matter SDK's CreateEntry signature is:
+            // CreateEntry(const SubjectDescriptor *subjectDescriptor, FabricIndex fabricIndex,
+            //             const Target *target, const Entry &entry)
+            err = GetAccessControl().CreateEntry(nullptr, fabricIndex, nullptr, entry);
+            if (err != CHIP_NO_ERROR)
+            {
+                LOGERR("AddACLEntryForClient: CreateEntry failed: 0x%08lx", (unsigned long)err.AsInteger());
+                return false;
+            }
+
+            LOGINFO("AddACLEntryForClient: Successfully created ACL entry for node 0x%016llx on fabric %d",
+                    (unsigned long long)nodeId, fabricIndex);
+            return true;
+        }
+
+        /**
+         * @brief Convert a Matter device UUID (hex string) to a numeric node ID
+         *
+         * Matter node IDs are 64-bit unsigned integers, but Barton stores them as hex strings.
+         * This function converts from the string representation to the numeric value needed
+         * by the Matter SDK APIs.
+         *
+         * @param deviceUuid The device UUID as a hex string (e.g., "90034FD9068DFF14")
+         * @param nodeId Output parameter that receives the numeric node ID
+         * @return true if conversion succeeded, false if the string was invalid
+         */
+        bool BartonMatterImplementation::GetNodeIdFromDeviceUuid(const std::string& deviceUuid, uint64_t& nodeId)
+        {
+            if (deviceUuid.empty())
+            {
+                LOGERR("GetNodeIdFromDeviceUuid: Empty deviceUuid");
+                return false;
+            }
+
+            // Convert hex string to uint64_t
+            // deviceUuid is already in hex format (e.g., "90034FD9068DFF14")
+            char* endPtr = nullptr;
+            nodeId = strtoull(deviceUuid.c_str(), &endPtr, 16);
+
+            if (endPtr == deviceUuid.c_str() || *endPtr != '\0')
+            {
+                LOGERR("GetNodeIdFromDeviceUuid: Failed to parse deviceUuid '%s' as hex", deviceUuid.c_str());
+                return false;
+            }
+
+            LOGINFO("GetNodeIdFromDeviceUuid: Converted '%s' to 0x%016llx (%llu)",
+                    deviceUuid.c_str(), (unsigned long long)nodeId, (unsigned long long)nodeId);
+            return true;
+        }
+
         Core::hresult BartonMatterImplementation::ListDevices(std::string& deviceList /* @out */)
         {
             LOGINFO("Listing connected devices...");
-            
+
             if (!bartonClient) {
                 LOGERR("Barton client not initialized. Call InitializeCommissioner first.");
                 deviceList = "[]";
                 return Core::ERROR_UNAVAILABLE;
             }
-            
-            std::vector<std::string> deviceUuids; 
-            
+
+            std::vector<std::string> deviceUuids;
+
             // Get all connected devices using Barton's API
             g_autolist(BCoreDevice) deviceObjects = b_core_client_get_devices(bartonClient);
-            
+
             if (!deviceObjects) {
                 LOGWARN("No devices found - device list is empty");
                 deviceList = "[]";
                 return Core::ERROR_UNAVAILABLE;
             }
-            
+
             // Count devices and populate list
             for (GList *devicesIter = deviceObjects; devicesIter != NULL; devicesIter = devicesIter->next) {
                 BCoreDevice *device = B_CORE_DEVICE(devicesIter->data);
-                
+
                 g_autofree gchar *deviceId = NULL;
-                g_object_get(device, 
-                            B_CORE_DEVICE_PROPERTY_NAMES[B_CORE_DEVICE_PROP_UUID], 
-                            &deviceId, 
+                g_object_get(device,
+                            B_CORE_DEVICE_PROPERTY_NAMES[B_CORE_DEVICE_PROP_UUID],
+                            &deviceId,
                             NULL);
-                
+
                 if (deviceId != NULL) {
                     deviceUuids.push_back(std::string(deviceId));
                     LOGINFO("Found device: %s", deviceId);
                 }
             }
-            
+
             //if no valid device IDs were found
             if (deviceUuids.empty()) {
                 LOGWARN("No valid device IDs found in device list");
                 deviceList = "[]";
                 return Core::ERROR_UNAVAILABLE;
             }
-            
+
             // Convert to JSON
             deviceList = "[";
             for (size_t i = 0; i < deviceUuids.size(); ++i) {
@@ -498,7 +668,7 @@ namespace WPEFramework
                 }
             }
             deviceList += "]";
-            
+
             LOGINFO("Total devices found: %zu", deviceUuids.size());
             return Core::ERROR_NONE;
         }
@@ -509,7 +679,7 @@ namespace WPEFramework
 // C to C++ Glue for GLib Network Credentials Provider
 //
 // - Barton Core library expects a GObject-based interface (pure C)
-// - Thunder plugin is written in C++ 
+// - Thunder plugin is written in C++
 // - This glue bridges the gap by implementing the required C interface
 //   while allowing the C++ plugin to store/manage credentials
 // - Data flows: Thunder API (C++) -> Global vars -> GLib interface (C) -> Barton Core
@@ -599,4 +769,3 @@ BReferenceNetworkCredentialsProvider *b_reference_network_credentials_provider_n
 }
 
 } // extern "C"
-
