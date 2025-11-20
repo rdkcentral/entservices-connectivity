@@ -119,8 +119,9 @@ namespace WPEFramework
                     deviceUuid ? deviceUuid : "NULL",
                     deviceClass ? deviceClass : "NULL");
 
-            // Only configure ACL for Matter devices
-            if (deviceClass && strcmp(deviceClass, "matter") == 0) {
+            // Configure ACL for all Matter-based devices (any deviceClass, as long as it's not null)
+            // Matter devices include: castingVideoClient, matterCastingVideoClient, etc.
+            if (deviceClass && deviceUuid) {
                 BartonMatterImplementation* plugin = static_cast<BartonMatterImplementation*>(userData);
                 if (plugin && deviceUuid) {
                     LOGWARN("=== DeviceAdded: Commissioning complete for %s ===", deviceUuid);
