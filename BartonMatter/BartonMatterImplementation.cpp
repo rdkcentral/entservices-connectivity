@@ -103,29 +103,19 @@ namespace WPEFramework
                 LOGERR("Failed to configure ACL for device %s", deviceUuid);
             }
         }
-	void BartonMatterImplementation::DeviceAddedHandler(BCoreClient *source, BCoreDeviceAddedEvent *event, gpointer userData)
+        void BartonMatterImplementation::DeviceAddedHandler(BCoreClient *source, BCoreDeviceAddedEvent *event, gpointer userData)
         {
             LOGINFO("Device added event received - commissioning complete!");
 
-            g_autoptr(BCoreDevice) device = NULL;
-            g_object_get(
-                G_OBJECT(event),
-                "device",  // BCoreDeviceAddedEvent property
-                &device,
-                NULL);
-
-            g_return_if_fail(device != NULL);
-
+            // Get properties directly from BCoreDeviceAddedEvent
             g_autofree gchar *deviceUuid = NULL;
             g_autofree gchar *deviceClass = NULL;
-            g_object_get(G_OBJECT(device),
-                         B_CORE_DEVICE_PROPERTY_NAMES[B_CORE_DEVICE_PROP_UUID],
+            g_object_get(G_OBJECT(event),
+                         B_CORE_DEVICE_ADDED_EVENT_PROPERTY_NAMES[B_CORE_DEVICE_ADDED_EVENT_PROP_UUID],
                          &deviceUuid,
-                         B_CORE_DEVICE_PROPERTY_NAMES[B_CORE_DEVICE_PROP_DEVICE_CLASS],
+                         B_CORE_DEVICE_ADDED_EVENT_PROPERTY_NAMES[B_CORE_DEVICE_ADDED_EVENT_PROP_DEVICE_CLASS],
                          &deviceClass,
-                         NULL);
-
-            LOGWARN("Device added! UUID=%s, class=%s",
+                         NULL);            LOGWARN("Device added! UUID=%s, class=%s",
                     deviceUuid ? deviceUuid : "NULL",
                     deviceClass ? deviceClass : "NULL");
 
@@ -284,10 +274,7 @@ namespace WPEFramework
                 b_core_property_provider_set_property_string(propProvider, "device.subsystem.disable", "thread,zigbee");
             }
 
-            // Connect device configuration completed signal - fires after discovery, before device service registration
-            g_signal_connect(bartonClient, B_CORE_CLIENT_SIGNAL_NAME_DEVICE_CONFIGURATION_COMPLETED, G_CALLBACK(DeviceConfigurationCompletedHandler), this);
-
-            // Connect device added signal handler
+            // Connect device added signal handler - this is where we create ACLs
             g_signal_connect(bartonClient, B_CORE_CLIENT_SIGNAL_NAME_DEVICE_ADDED, G_CALLBACK(DeviceAddedHandler), this);
 
             // Connect endpoint added signal handler
