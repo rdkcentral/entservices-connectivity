@@ -99,6 +99,11 @@ namespace WPEFramework
             static gchar* GetConfigDirectory();
             chip::Callback::Callback<void (*)(void*, chip::Messaging::ExchangeManager&, const chip::SessionHandle&)> mSuccessCallback;
             chip::Callback::Callback<void (*)(void*, const chip::ScopedNodeId&, CHIP_ERROR)> mFailureCallback;
+
+            // For scheduling session establishment
+            uint64_t mEstablishSessionNodeId = 0;
+            chip::FabricIndex mEstablishSessionFabricIndex = 0;
+            static void EstablishSessionWork(intptr_t context);
         };
     } // namespace Plugin
 } // namespace WPEFramework
