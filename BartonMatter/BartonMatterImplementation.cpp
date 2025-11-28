@@ -575,8 +575,9 @@ namespace WPEFramework
             this->mEstablishSessionFabricIndex = fabricIndex;
             chip::DeviceLayer::PlatformMgr().ScheduleWork(&BartonMatterImplementation::EstablishSessionWork, reinterpret_cast<intptr_t>(this));
             return true;
+
         // Static work function for scheduling session establishment on the Matter event loop
-        void BartonMatterImplementation::EstablishSessionWork(intptr_t context)
+        void WPEFramework::Plugin::BartonMatterImplementation::EstablishSessionWork(intptr_t context)
         {
             auto *self = reinterpret_cast<BartonMatterImplementation *>(context);
             chip::Server & server = chip::Server::GetInstance();
