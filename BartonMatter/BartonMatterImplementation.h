@@ -35,6 +35,9 @@
 #include <access/AccessControl.h>
 #include <lib/core/CHIPError.h>
 #include <lib/support/CodeUtils.h>
+#include <app/app-platform/ContentAppPlatform.h>
+#include <app/app-platform/ContentApp.h>
+#include <app/server/Server.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -73,13 +76,17 @@ namespace WPEFramework
             void InitializeClient(gchar *confDir);
             static void SetDefaultParameters(BCoreInitializeParamsContainer *params);
             bool Commission(BCoreClient *client, gchar *setupPayload, guint16 timeoutSeconds);
-	    static void DeviceAddedHandler(BCoreClient *source, BCoreDeviceAddedEvent *event, gpointer userData);
-	    bool ConfigureClientACL(const std::string& deviceUuid, uint16_t vendorId, uint16_t productId);
-	    bool AddACLEntryForClient(uint16_t vendorId, uint16_t productId, const std::string& deviceUuid);
+	        static void DeviceAddedHandler(BCoreClient *source, BCoreDeviceAddedEvent *event, gpointer userData);
+	        bool ConfigureClientACL(const std::string& deviceUuid, uint16_t vendorId, uint16_t productId);
+	        bool AddACLEntryForClient(uint16_t vendorId, uint16_t productId, const std::string& deviceUuid);
             bool GetNodeIdFromDeviceUuid(const std::string& deviceUuid, uint64_t& nodeId);
-	    static void DeviceConfigurationCompletedHandler(BCoreClient *client, const gchar *deviceUuid, gboolean success, gpointer userData);
+	        static void DeviceConfigurationCompletedHandler(BCoreClient *client, const gchar *deviceUuid, gboolean success, gpointer userData);
+            void OnSessionEstablished(const chip::SessionHandle & sessionHandle);
+            void OnSessionFailure(const chip::ScopedNodeId & peerId, CHIP_ERROR error);
+            static void OnSessionEstablishedStatic(void * context, chip::Messaging::ExchangeManager & exchangeMgr, const chip::SessionHandle & sessionHandle);
+            static void OnSessionFailureStatic(void * context, const chip::ScopedNodeId & peerId, CHIP_ERROR error);
 
-            
+
             static void EndpointAddedHandler(BCoreClient *source, BCoreEndpointAddedEvent *event, gpointer userData);
             BEGIN_INTERFACE_MAP(BartonMatterImplementation)
             INTERFACE_ENTRY(Exchange::IBartonMatter)
@@ -90,6 +97,8 @@ namespace WPEFramework
             std::string savedDeviceUri; // Store the device URI from endpoint
             std::mutex deviceUriMtx; // Protect access to savedDeviceUri
             static gchar* GetConfigDirectory();
+            chip::Callback::Callback<void (*)(void*, chip::Messaging::ExchangeManager&, const chip::SessionHandle&)> mSuccessCallback;
+            chip::Callback::Callback<void (*)(void*, const chip::ScopedNodeId&, CHIP_ERROR)> mFailureCallback;
         };
     } // namespace Plugin
 } // namespace WPEFramework

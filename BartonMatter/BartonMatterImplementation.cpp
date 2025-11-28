@@ -35,7 +35,9 @@ namespace WPEFramework
         SERVICE_REGISTRATION(BartonMatterImplementation, 1, 0);
 
         BartonMatterImplementation::BartonMatterImplementation()
-            : bartonClient(nullptr)
+            : bartonClient(nullptr),
+            mSuccessCallback(BartonMatterImplementation::OnSessionEstablishedStatic, this),
+            mFailureCallback(BartonMatterImplementation::OnSessionFailureStatic, this)
         {
             TRACE(Trace::Information, (_T("Constructing BartonMatterImplementation Service: %p"), this));
         }
@@ -92,6 +94,8 @@ namespace WPEFramework
             // Using vendorId=0, productId=0 to allow any commissioned device to access Barton's endpoints
             // This is necessary for tv-casting-app to create bindings and send commands
             LOGINFO("Creating ACL entry for commissioned device %s", deviceUuid);
+            auto ptr= chip::AppPlatform::ContentAppPlatform::GetInstance();
+            chip::Messaging::ExchangeManager * exchangeMgr = chip::app::InteractionModelEngine::GetInstance()->GetExchangeManager();
             bool aclSuccess = instance->ConfigureClientACL(deviceUuid, 0, 0);
 
             if (aclSuccess)
@@ -565,8 +569,40 @@ namespace WPEFramework
 
             LOGINFO("AddACLEntryForClient: Successfully created ACL entry for node 0x%016llx on fabric %d",
                     (unsigned long long)nodeId, fabricIndex);
+
+            chip::Server & server = chip::Server::GetInstance();
+            chip::ScopedNodeId peerNode(nodeId, fabricIndex);
+            server.GetCASESessionManager()->FindOrEstablishSession(peerNode, &mSuccessCallback,&mFailureCallback);
             return true;
         }
+        void BartonMatterImplementation::OnSessionEstablishedStatic(void * context, chip::Messaging::ExchangeManager & exchangeMgr, const chip::SessionHandle & sessionHandle)
+{
+    // Cast the context back to the class instance and call the actual member
+    reinterpret_cast<BartonMatterImplementation*>(context)->OnSessionEstablished(sessionHandle);
+}
+
+void BartonMatterImplementation::OnSessionFailureStatic(void * context, const chip::ScopedNodeId & peerId, CHIP_ERROR error)
+{
+    // Cast the context back to the class instance and call the actual member
+    reinterpret_cast<BartonMatterImplementation*>(context)->OnSessionFailure(peerId, error);
+}
+
+void BartonMatterImplementation::OnSessionEstablished(const chip::SessionHandle & sessionHandle)
+{
+        chip::Messaging::ExchangeManager * exchangeMgr = &chip::Server::Server::GetInstance().GetExchangeManager();
+        ChipLogProgress(AppServer, "Tanuj Session established with Node: 0x" ChipLogFormatX64 " on Fabric %u",
+                    ChipLogValueX64(sessionHandle->GetPeer().GetNodeId()),
+                    sessionHandle->GetFabricIndex());
+
+}
+void BartonMatterImplementation::OnSessionFailure(const chip::ScopedNodeId & peerId, CHIP_ERROR error)
+{
+    ChipLogError(AppServer, "Tanuj CASESession establishment failed for Node 0x" ChipLogFormatX64
+                           " on Fabric %u. Error: %s",
+                 ChipLogValueX64(peerId.GetNodeId()),
+                 peerId.GetFabricIndex(),
+                 chip::ErrorStr(error));
+}
 
         /**
          * @brief Convert a Matter device UUID (hex string) to a numeric node ID
