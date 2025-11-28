@@ -570,9 +570,14 @@ namespace WPEFramework
             LOGINFO("AddACLEntryForClient: Successfully created ACL entry for node 0x%016llx on fabric %d",
                     (unsigned long long)nodeId, fabricIndex);
 
-            chip::Server & server = chip::Server::GetInstance();
-            chip::ScopedNodeId peerNode(nodeId, fabricIndex);
-            server.GetCASESessionManager()->FindOrEstablishSession(peerNode, &mSuccessCallback,&mFailureCallback);
+            // Schedule session establishment on the Matter event loop to ensure thread safety
+            chip::DeviceLayer::PlatformMgr().ScheduleWork(
+                [nodeId, fabricIndex, this](intptr_t) {
+                    chip::Server & server = chip::Server::GetInstance();
+                    chip::ScopedNodeId peerNode(nodeId, fabricIndex);
+                    server.GetCASESessionManager()->FindOrEstablishSession(peerNode, &mSuccessCallback, &mFailureCallback);
+                }
+            );
             return true;
         }
         void BartonMatterImplementation::OnSessionEstablishedStatic(void * context, chip::Messaging::ExchangeManager & exchangeMgr, const chip::SessionHandle & sessionHandle)
