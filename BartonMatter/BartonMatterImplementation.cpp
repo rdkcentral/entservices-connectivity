@@ -698,15 +698,8 @@ void BartonMatterImplementation::OnSessionEstablished(const chip::SessionHandle 
 
         ChipLogProgress(AppServer, "Writing bindings to client for %zu endpoints", endpoints.size());
 
-        CHIP_ERROR err = WriteClientBindings(*exchangeMgr, sessionHandle, localNodeId, endpoints);
-        if (err == CHIP_NO_ERROR)
-        {
-            ChipLogProgress(AppServer, "Successfully initiated binding write to client");
-        }
-        else
-        {
-            ChipLogError(AppServer, "Failed to write bindings to client: %s", chip::ErrorStr(err));
-        }
+        // WriteClientBindings uses callbacks for success/failure notification
+        WriteClientBindings(*exchangeMgr, sessionHandle, localNodeId, endpoints);
 }
 void BartonMatterImplementation::OnSessionFailure(const chip::ScopedNodeId & peerId, CHIP_ERROR error)
 {
