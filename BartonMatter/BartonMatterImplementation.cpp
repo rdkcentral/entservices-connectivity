@@ -585,6 +585,58 @@ namespace WPEFramework
             chip::ScopedNodeId peerNode(self->mEstablishSessionNodeId, self->mEstablishSessionFabricIndex);
             server.GetCASESessionManager()->FindOrEstablishSession(peerNode, &self->mSuccessCallback, &self->mFailureCallback);
         }
+
+        // Simplified ManageClientAccess implementation
+        // Writes bindings to the client device to inform it of accessible endpoints
+        CHIP_ERROR BartonMatterImplementation::WriteClientBindings(
+            chip::Messaging::ExchangeManager & exchangeMgr,
+            const chip::SessionHandle & sessionHandle,
+            chip::NodeId localNodeId,
+            const std::vector<chip::EndpointId> & endpoints)
+        {
+            using namespace chip;
+            using namespace chip::app;
+            using namespace chip::app::Clusters;
+
+            // Build binding list for all accessible endpoints
+            std::vector<Binding::Structs::TargetStruct::Type> bindings;
+
+            for (chip::EndpointId endpoint : endpoints)
+            {
+                bindings.push_back(Binding::Structs::TargetStruct::Type{
+                    .node        = MakeOptional(localNodeId),
+                    .group       = NullOptional,
+                    .endpoint    = MakeOptional(endpoint),
+                    .cluster     = NullOptional,
+                    .fabricIndex = chip::kUndefinedFabricIndex,
+                });
+            }
+
+            ChipLogProgress(AppServer, "Writing %zu bindings to client", bindings.size());
+
+            // Write bindings to client's Binding cluster on endpoint 1
+            Binding::Attributes::Binding::TypeInfo::Type bindingList(bindings.data(), bindings.size());
+
+            // Success callback
+            auto onSuccess = [](void * context, const DataModel::NullObjectType &) {
+                ChipLogProgress(AppServer, "Successfully wrote bindings to client");
+            };
+
+            // Failure callback
+            auto onFailure = [](void * context, CHIP_ERROR error) {
+                ChipLogError(AppServer, "Failed to write bindings to client: %s", ErrorStr(error));
+            };
+
+            // Use Controller WriteAttribute to write bindings
+            // Target endpoint 1 on the client device (standard for casting clients)
+            constexpr chip::EndpointId kClientBindingEndpoint = 1;
+
+            chip::Controller::ClusterBase cluster(exchangeMgr, const_cast<chip::SessionHandle &>(sessionHandle),
+                                                  kClientBindingEndpoint);
+
+            return cluster.WriteAttribute<Binding::Attributes::Binding::TypeInfo>(
+                bindingList, nullptr, onSuccess, onFailure);
+        }
         void BartonMatterImplementation::OnSessionEstablishedStatic(void * context, chip::Messaging::ExchangeManager & exchangeMgr, const chip::SessionHandle & sessionHandle)
 {
     // Cast the context back to the class instance and call the actual member
@@ -600,9 +652,6 @@ void BartonMatterImplementation::OnSessionFailureStatic(void * context, const ch
 void BartonMatterImplementation::OnSessionEstablished(const chip::SessionHandle & sessionHandle)
 {
         using namespace chip;
-        using namespace chip::AppPlatform;
-        using namespace chip::app;
-        using namespace chip::app::Clusters;
 
         chip::Messaging::ExchangeManager * exchangeMgr = &chip::Server::Server::GetInstance().GetExchangeManager();
         ChipLogProgress(AppServer, "Session established with Node: 0x" ChipLogFormatX64 " on Fabric %u",
@@ -638,78 +687,28 @@ void BartonMatterImplementation::OnSessionEstablished(const chip::SessionHandle 
         ChipLogProgress(AppServer, "Target vendor ID: 0x%04X, product ID: 0x%04X",
                        targetVendorId, targetProductId);
 
-        // Step 2: Read existing bindings from the commissioned device
-        // Cluster ID: 0x001E (Binding)
-        // Attribute: Binding list (0x0000)
-        //
-        // Important: We need to:
-        // 1. Read the current binding list from the commissioned device
-        // 2. Filter out any bindings that reference our local node ID (to avoid duplicates)
-        // 3. Pass the filtered list to ManageClientAccess
-        //
-        // The tv-casting-app pattern shows this is essential - ManageClientAccess will
-        // add new bindings, but we must preserve existing bindings for other nodes.
+        // The ACL entry has already been created in AddACLEntryForClient()
+        // Now write bindings to the client device to inform it of accessible endpoints
 
-        // TODO: Implement async read of Binding cluster attribute:
-        // - Use Controller::ReadAttribute() to read binding list from endpoint 1
-        // - Filter bindings where binding.node != localNodeId
-        // - Pass filtered bindings to ManageClientAccess
-        //
-        // For now, start with an empty binding list since:
-        // 1. This is the first connection after commissioning
-        // 2. No other nodes should have bindings yet
-        // 3. ManageClientAccess will create the initial bindings
+        ChipLogProgress(AppServer, "Session established successfully");
+        ChipLogProgress(AppServer, "ACL entry already configured for client node 0x" ChipLogFormatX64,
+                       ChipLogValueX64(targetNodeId));
 
-        std::vector<Binding::Structs::TargetStruct::Type> existingBindings;
+        // Get list of Barton endpoints to create bindings for
+        // For now, we'll just bind to endpoint 1 (typical content app endpoint)
+        // TODO: Query Barton for actual endpoint list
+        std::vector<chip::EndpointId> endpoints = { 1 };
 
-        ChipLogProgress(AppServer, "Starting with empty binding list (first connection after commissioning)");
-        ChipLogProgress(AppServer, "ManageClientAccess will create new bindings for this device");
+        ChipLogProgress(AppServer, "Writing bindings to client for %zu endpoints", endpoints.size());
 
-        // Step 3: Invoke ManageClientAccess with filtered bindings
-        ContentAppPlatform & platform = ContentAppPlatform::GetInstance();
-
-        ChipLogProgress(AppServer, "Invoking ManageClientAccess for commissioned device");
-        ChipLogProgress(AppServer, "  Local Node: 0x" ChipLogFormatX64, ChipLogValueX64(localNodeId));
-        ChipLogProgress(AppServer, "  Target Node: 0x" ChipLogFormatX64, ChipLogValueX64(targetNodeId));
-        ChipLogProgress(AppServer, "  Target Vendor: 0x%04X", targetVendorId);
-        ChipLogProgress(AppServer, "  Target Product: 0x%04X", targetProductId);
-        ChipLogProgress(AppServer, "  Existing Bindings: %zu", existingBindings.size());
-
-        // Define success/failure callbacks for ManageClientAccess
-        // These must be simple function pointers, not lambdas with captures
-        static auto onSuccessCallback = +[](void * context) {
-            ChipLogProgress(AppServer, "ManageClientAccess write succeeded - bindings created on client");
-        };
-
-        static auto onFailureCallback = +[](void * context, CHIP_ERROR error) {
-            ChipLogError(AppServer, "ManageClientAccess write failed: %s", chip::ErrorStr(error));
-        };
-
-        // ManageClientAccess requires a non-const SessionHandle reference
-        // We need to cast away const since the API signature requires it
-        chip::SessionHandle & mutableSessionHandle = const_cast<chip::SessionHandle &>(sessionHandle);
-
-        CHIP_ERROR err = platform.ManageClientAccess(
-            *exchangeMgr,
-            mutableSessionHandle,
-            targetVendorId,      // Vendor ID of the casting client (from Basic Information cluster)
-            targetProductId,     // Product ID of the casting client (from Basic Information cluster)
-            localNodeId,         // Our local content app node ID
-            chip::CharSpan(),    // rotatingId (empty span for post-commissioning)
-            0,                   // passcode (0 = not needed for already commissioned device)
-            existingBindings,    // Filtered binding list (excluding our node's bindings)
-            onSuccessCallback,   // Success callback
-            onFailureCallback    // Failure callback
-        );
-
+        CHIP_ERROR err = WriteClientBindings(*exchangeMgr, sessionHandle, localNodeId, endpoints);
         if (err == CHIP_NO_ERROR)
         {
-            ChipLogProgress(AppServer, "ManageClientAccess invoked successfully");
-            ChipLogProgress(AppServer, "API will handle ACL updates and binding writes to client");
+            ChipLogProgress(AppServer, "Successfully initiated binding write to client");
         }
         else
         {
-            ChipLogError(AppServer, "ManageClientAccess failed with error: %s", chip::ErrorStr(err));
+            ChipLogError(AppServer, "Failed to write bindings to client: %s", chip::ErrorStr(err));
         }
 }
 void BartonMatterImplementation::OnSessionFailure(const chip::ScopedNodeId & peerId, CHIP_ERROR error)
@@ -789,7 +788,7 @@ void BartonMatterImplementation::OnSessionFailure(const chip::ScopedNodeId & pee
             // 3. Cache the results
 
             vendorId = 0xFFF1;  // CSA test vendor ID
-            productId = 0x8000; // Generic video player product ID
+            productId = 0x8001; // Generic video player product ID
 
             LOGWARN("Using default vendor/product IDs: 0x%04X/0x%04X for device %s",
                    vendorId, productId, deviceUuid.c_str());

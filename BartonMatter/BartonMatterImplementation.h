@@ -35,9 +35,9 @@
 #include <access/AccessControl.h>
 #include <lib/core/CHIPError.h>
 #include <lib/support/CodeUtils.h>
-#include <app/app-platform/ContentAppPlatform.h>
-#include <app/app-platform/ContentApp.h>
 #include <app/server/Server.h>
+#include <controller/CHIPCluster.h>
+#include <app/clusters/bindings/bindings.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -112,6 +112,12 @@ namespace WPEFramework
 
             // Helper method to retrieve vendor/product IDs from device
             bool GetDeviceVendorProductIds(const std::string& deviceUuid, uint16_t& vendorId, uint16_t& productId);
+
+            // Simplified ManageClientAccess - writes bindings to client device
+            CHIP_ERROR WriteClientBindings(chip::Messaging::ExchangeManager & exchangeMgr,
+                                          const chip::SessionHandle & sessionHandle,
+                                          chip::NodeId localNodeId,
+                                          const std::vector<chip::EndpointId> & endpoints);
         };
     } // namespace Plugin
 } // namespace WPEFramework
