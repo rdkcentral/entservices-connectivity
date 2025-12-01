@@ -584,9 +584,8 @@ namespace WPEFramework
             server.GetCASESessionManager()->FindOrEstablishSession(peerNode, &self->mSuccessCallback, &self->mFailureCallback);
         }
 
-        // Simplified ManageClientAccess implementation
-        // Writes bindings to the client device to inform it of accessible endpoints
-        CHIP_ERROR BartonMatterImplementation::WriteClientBindings(
+        // Write bindings to client device - simplified version matching ContentAppPlatform pattern
+        void BartonMatterImplementation::WriteClientBindings(
             chip::Messaging::ExchangeManager & exchangeMgr,
             const chip::SessionHandle & sessionHandle,
             chip::NodeId localNodeId,
@@ -612,35 +611,29 @@ namespace WPEFramework
 
             ChipLogProgress(AppServer, "Writing %zu bindings to client", bindings.size());
 
-            // Write bindings to client's Binding cluster on endpoint 1
             Binding::Attributes::Binding::TypeInfo::Type bindingList(bindings.data(), bindings.size());
 
-            // Success callback - must be static function pointer
-            static auto onSuccess = +[](void * context) {
+            // Success callback
+            auto successCb = +[](void * context) {
                 ChipLogProgress(AppServer, "Successfully wrote bindings to client");
             };
 
-            // Failure callback - must be static function pointer
-            static auto onFailure = +[](void * context, CHIP_ERROR error) {
+            // Failure callback
+            auto failureCb = +[](void * context, CHIP_ERROR error) {
                 ChipLogError(AppServer, "Failed to write bindings to client: %s", ErrorStr(error));
             };
 
-            // Done callback - optional, can be nullptr
-            static auto onDone = +[](void * context) {
-                ChipLogProgress(AppServer, "Binding write operation completed");
-            };
-
-            // Use Controller WriteAttribute to write bindings
             // Target endpoint 1 on the client device (standard for casting clients)
             constexpr chip::EndpointId kClientBindingEndpoint = 1;
 
             chip::Controller::ClusterBase cluster(exchangeMgr, const_cast<chip::SessionHandle &>(sessionHandle),
                                                   kClientBindingEndpoint);
 
-            // WriteAttribute signature: (requestData, context, successCb, failureCb, timedWriteTimeout, doneCb, imTimeout)
-            return cluster.WriteAttribute<Binding::Attributes::Binding::TypeInfo>(
-                bindingList, nullptr, onSuccess, onFailure, 0, onDone, NullOptional);
+            // Match the exact signature used in ContentAppPlatform::ManageClientAccess
+            cluster.WriteAttribute<Binding::Attributes::Binding::TypeInfo>(bindingList, nullptr, successCb, failureCb);
         }
+
+
         void BartonMatterImplementation::OnSessionEstablishedStatic(void * context, chip::Messaging::ExchangeManager & exchangeMgr, const chip::SessionHandle & sessionHandle)
 {
     // Cast the context back to the class instance and call the actual member
@@ -699,7 +692,7 @@ void BartonMatterImplementation::OnSessionEstablished(const chip::SessionHandle 
                        ChipLogValueX64(targetNodeId));
 
         // Get list of Barton endpoints to create bindings for
-        // For now, we'll just bind to endpoint 1 (typical content app endpoint)
+        // For now, bind to endpoint 1 (typical content app endpoint)
         // TODO: Query Barton for actual endpoint list
         std::vector<chip::EndpointId> endpoints = { 1 };
 

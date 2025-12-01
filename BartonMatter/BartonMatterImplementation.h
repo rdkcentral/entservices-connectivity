@@ -113,11 +113,11 @@ namespace WPEFramework
             // Helper method to retrieve vendor/product IDs from device
             bool GetDeviceVendorProductIds(const std::string& deviceUuid, uint16_t& vendorId, uint16_t& productId);
 
-            // Simplified ManageClientAccess - writes bindings to client device
-            CHIP_ERROR WriteClientBindings(chip::Messaging::ExchangeManager & exchangeMgr,
-                                          const chip::SessionHandle & sessionHandle,
-                                          chip::NodeId localNodeId,
-                                          const std::vector<chip::EndpointId> & endpoints);
+            // Write bindings to client device (simplified ManageClientAccess)
+            void WriteClientBindings(chip::Messaging::ExchangeManager & exchangeMgr,
+                                    const chip::SessionHandle & sessionHandle,
+                                    chip::NodeId localNodeId,
+                                    const std::vector<chip::EndpointId> & endpoints);
         };
     } // namespace Plugin
 } // namespace WPEFramework
