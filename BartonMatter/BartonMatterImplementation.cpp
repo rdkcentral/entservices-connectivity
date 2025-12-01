@@ -18,6 +18,7 @@
  **/
 
 #include "BartonMatterImplementation.h"
+#include "BartonClusterDelegates.h"
 
 using namespace std;
 
@@ -45,6 +46,9 @@ namespace WPEFramework
         BartonMatterImplementation::~BartonMatterImplementation()
         {
             TRACE(Trace::Information, (_T("Destructing BartonMatterImplementation Service: %p"), this));
+
+            // Shutdown cluster delegates
+            BartonClusterDelegateManager::GetInstance().Shutdown();
 
             // Cleanup barton client if initialized
             if (bartonClient) {
@@ -382,6 +386,10 @@ namespace WPEFramework
             }
 
             b_core_client_set_system_property(bartonClient, "deviceDescriptorBypass", "true");
+
+            // Initialize cluster delegates for handling incoming commands
+            BartonClusterDelegateManager::GetInstance().Initialize();
+
             LOGINFO("BartonMatter Commissioner initialized successfully");
 
             return (Core::ERROR_NONE);
