@@ -675,17 +675,19 @@ void BartonMatterImplementation::OnSessionEstablished(const chip::SessionHandle 
         ChipLogProgress(AppServer, "  Target Product: 0x%04X", targetProductId);
         ChipLogProgress(AppServer, "  Existing Bindings: %zu", existingBindings.size());
 
-        // ManageClientAccess requires a non-const SessionHandle reference
-        chip::SessionHandle mutableSessionHandle = sessionHandle;
-
         // Define success/failure callbacks for ManageClientAccess
-        auto onSuccess = [](void * context, const chip::app::DataModel::NullObjectType &) {
+        // These must be simple function pointers, not lambdas with captures
+        static auto onSuccessCallback = +[](void * context) {
             ChipLogProgress(AppServer, "ManageClientAccess write succeeded - bindings created on client");
         };
 
-        auto onFailure = [](void * context, CHIP_ERROR error) {
+        static auto onFailureCallback = +[](void * context, CHIP_ERROR error) {
             ChipLogError(AppServer, "ManageClientAccess write failed: %s", chip::ErrorStr(error));
         };
+
+        // ManageClientAccess requires a non-const SessionHandle reference
+        // We need to cast away const since the API signature requires it
+        chip::SessionHandle & mutableSessionHandle = const_cast<chip::SessionHandle &>(sessionHandle);
 
         CHIP_ERROR err = platform.ManageClientAccess(
             *exchangeMgr,
@@ -696,8 +698,8 @@ void BartonMatterImplementation::OnSessionEstablished(const chip::SessionHandle 
             chip::CharSpan(),    // rotatingId (empty span for post-commissioning)
             0,                   // passcode (0 = not needed for already commissioned device)
             existingBindings,    // Filtered binding list (excluding our node's bindings)
-            onSuccess,           // Success callback
-            onFailure            // Failure callback
+            onSuccessCallback,   // Success callback
+            onFailureCallback    // Failure callback
         );
 
         if (err == CHIP_NO_ERROR)
