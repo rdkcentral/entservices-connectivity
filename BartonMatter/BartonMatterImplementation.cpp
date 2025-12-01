@@ -554,6 +554,65 @@ namespace WPEFramework
                 return false;
             }
 
+            /**
+             * Following ManageClientAccess pattern, create a single ACL entry containing:
+             * a) Video Player endpoint (endpoint 1) - all clusters
+             * b) Speaker endpoint (endpoint 2) - all clusters
+             * c) Content App endpoint (endpoint 3) - all clusters
+             * d) Single subject which is the casting app
+             *
+             * Barton has these endpoints per barton.zap:
+             * - Endpoint 0: Root device
+             * - Endpoint 1: Video player (MA-videoplayer)
+             * - Endpoint 2: Speaker (MA-speaker)
+             * - Endpoint 3: Content application (MA-contentapplication)
+             */
+
+            ChipLogProgress(AppServer, "Create video player endpoint ACL target");
+            // Add target for endpoint 1 (Video Player)
+            {
+                AccessControl::Entry::Target target = {
+                    .flags = AccessControl::Entry::Target::kEndpoint,
+                    .endpoint = 1  // Video player endpoint
+                };
+                err = entry.AddTarget(nullptr, target);
+                if (err != CHIP_NO_ERROR)
+                {
+                    LOGERR("AddACLEntryForClient: AddTarget for video player endpoint failed: 0x%08lx", (unsigned long)err.AsInteger());
+                    return false;
+                }
+            }
+
+            ChipLogProgress(AppServer, "Create speaker endpoint ACL target");
+            // Add target for endpoint 2 (Speaker)
+            {
+                AccessControl::Entry::Target target = {
+                    .flags = AccessControl::Entry::Target::kEndpoint,
+                    .endpoint = 2  // Speaker endpoint
+                };
+                err = entry.AddTarget(nullptr, target);
+                if (err != CHIP_NO_ERROR)
+                {
+                    LOGERR("AddACLEntryForClient: AddTarget for speaker endpoint failed: 0x%08lx", (unsigned long)err.AsInteger());
+                    return false;
+                }
+            }
+
+            ChipLogProgress(AppServer, "Create content app endpoint ACL target");
+            // Add target for endpoint 3 (Content App)
+            {
+                AccessControl::Entry::Target target = {
+                    .flags = AccessControl::Entry::Target::kEndpoint,
+                    .endpoint = 3  // Content app endpoint
+                };
+                err = entry.AddTarget(nullptr, target);
+                if (err != CHIP_NO_ERROR)
+                {
+                    LOGERR("AddACLEntryForClient: AddTarget for content app endpoint failed: 0x%08lx", (unsigned long)err.AsInteger());
+                    return false;
+                }
+            }
+
             // Create the entry in the ACL table
             // Note: The Matter SDK's CreateEntry signature is:
             // CreateEntry(const SubjectDescriptor *subjectDescriptor, FabricIndex fabricIndex,
@@ -565,7 +624,7 @@ namespace WPEFramework
                 return false;
             }
 
-            LOGINFO("AddACLEntryForClient: Successfully created ACL entry for node 0x%016llx on fabric %d",
+            LOGINFO("AddACLEntryForClient: Successfully created ACL entry with 3 endpoints for node 0x%016llx on fabric %d",
                     (unsigned long long)nodeId, fabricIndex);
 
             // Store nodeId, fabricIndex, and deviceUuid in member variables for use in static work function
@@ -715,12 +774,18 @@ void BartonMatterImplementation::OnSessionEstablished(const chip::SessionHandle 
         ChipLogProgress(AppServer, "ACL entry already configured for client node 0x" ChipLogFormatX64,
                        ChipLogValueX64(targetNodeId));
 
-        // Get list of Barton endpoints to create bindings for
-        // For now, bind to endpoint 1 (typical content app endpoint)
-        // TODO: Query Barton for actual endpoint list
-        std::vector<chip::EndpointId> endpoints = { 1 };
+        /**
+         * Get list of Barton endpoints to create bindings for
+         * Barton has these endpoints per barton.zap:
+         * - Endpoint 1: Video player (MA-videoplayer)
+         * - Endpoint 2: Speaker (MA-speaker)
+         * - Endpoint 3: Content application (MA-contentapplication)
+         *
+         * Following ManageClientAccess pattern: create bindings for all accessible endpoints
+         */
+        std::vector<chip::EndpointId> endpoints = { 1, 2, 3 };
 
-        ChipLogProgress(AppServer, "Writing bindings to client for %zu endpoints", endpoints.size());
+        ChipLogProgress(AppServer, "Writing bindings to client for %zu Barton endpoints", endpoints.size());
 
         // WriteClientBindings uses callbacks for success/failure notification
         WriteClientBindings(*exchangeMgr, sessionHandle, localNodeId, endpoints);
