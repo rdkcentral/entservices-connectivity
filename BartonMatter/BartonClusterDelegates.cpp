@@ -80,28 +80,41 @@ namespace WPEFramework
                 case KeypadInput::CECKeyCodeEnum::kFavoriteMenu:
                     keyName = "Favorites";
                     break;
-                case KeypadInput::CECKeyCodeEnum::kNumber0:
-                case KeypadInput::CECKeyCodeEnum::kNumber1:
-                case KeypadInput::CECKeyCodeEnum::kNumber2:
-                case KeypadInput::CECKeyCodeEnum::kNumber3:
-                case KeypadInput::CECKeyCodeEnum::kNumber4:
-                case KeypadInput::CECKeyCodeEnum::kNumber5:
-                case KeypadInput::CECKeyCodeEnum::kNumber6:
-                case KeypadInput::CECKeyCodeEnum::kNumber7:
-                case KeypadInput::CECKeyCodeEnum::kNumber8:
-                case KeypadInput::CECKeyCodeEnum::kNumber9:
-                    {
-                        static char numStr[16];
-                        snprintf(numStr, sizeof(numStr), "Number %d",
-                                static_cast<uint8_t>(keyCode) - static_cast<uint8_t>(KeypadInput::CECKeyCodeEnum::kNumber0));
-                        keyName = numStr;
-                    }
+                case KeypadInput::CECKeyCodeEnum::kNumber0OrNumber10:
+                    keyName = "Number 0/10";
+                    break;
+                case KeypadInput::CECKeyCodeEnum::kNumbers1:
+                    keyName = "Number 1";
+                    break;
+                case KeypadInput::CECKeyCodeEnum::kNumbers2:
+                    keyName = "Number 2";
+                    break;
+                case KeypadInput::CECKeyCodeEnum::kNumbers3:
+                    keyName = "Number 3";
+                    break;
+                case KeypadInput::CECKeyCodeEnum::kNumbers4:
+                    keyName = "Number 4";
+                    break;
+                case KeypadInput::CECKeyCodeEnum::kNumbers5:
+                    keyName = "Number 5";
+                    break;
+                case KeypadInput::CECKeyCodeEnum::kNumbers6:
+                    keyName = "Number 6";
+                    break;
+                case KeypadInput::CECKeyCodeEnum::kNumbers7:
+                    keyName = "Number 7";
+                    break;
+                case KeypadInput::CECKeyCodeEnum::kNumbers8:
+                    keyName = "Number 8";
+                    break;
+                case KeypadInput::CECKeyCodeEnum::kNumbers9:
+                    keyName = "Number 9";
                     break;
                 default:
                     break;
             }
 
-            ChipLogProgress(AppServer, "✅ KeypadInput: Received '%s' key press (code=%d)",
+            ChipLogProgress(AppServer, " KeypadInput: Received '%s' key press (code=%d)",
                           keyName, static_cast<uint8_t>(keyCode));
 
             // TODO: Forward to system input handler
