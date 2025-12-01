@@ -104,6 +104,14 @@ namespace WPEFramework
             uint64_t mEstablishSessionNodeId = 0;
             chip::FabricIndex mEstablishSessionFabricIndex = 0;
             static void EstablishSessionWork(intptr_t context);
+
+            // Store client device information for ManageClientAccess
+            std::string mClientDeviceUuid;
+            uint16_t mClientVendorId = 0;
+            uint16_t mClientProductId = 0;
+
+            // Helper method to retrieve vendor/product IDs from device
+            bool GetDeviceVendorProductIds(const std::string& deviceUuid, uint16_t& vendorId, uint16_t& productId);
         };
     } // namespace Plugin
 } // namespace WPEFramework

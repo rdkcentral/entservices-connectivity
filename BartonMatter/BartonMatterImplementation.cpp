@@ -570,9 +570,10 @@ namespace WPEFramework
             LOGINFO("AddACLEntryForClient: Successfully created ACL entry for node 0x%016llx on fabric %d",
                     (unsigned long long)nodeId, fabricIndex);
 
-            // Store nodeId and fabricIndex in member variables for use in static work function
+            // Store nodeId, fabricIndex, and deviceUuid in member variables for use in static work function
             this->mEstablishSessionNodeId = nodeId;
             this->mEstablishSessionFabricIndex = fabricIndex;
+            this->mClientDeviceUuid = deviceUuid;
             chip::DeviceLayer::PlatformMgr().ScheduleWork(&BartonMatterImplementation::EstablishSessionWork, reinterpret_cast<intptr_t>(this));
             return true;
             }
@@ -598,20 +599,194 @@ void BartonMatterImplementation::OnSessionFailureStatic(void * context, const ch
 
 void BartonMatterImplementation::OnSessionEstablished(const chip::SessionHandle & sessionHandle)
 {
+        using namespace chip;
+        using namespace chip::AppPlatform;
+        using namespace chip::app;
+        using namespace chip::app::Clusters;
+
         chip::Messaging::ExchangeManager * exchangeMgr = &chip::Server::Server::GetInstance().GetExchangeManager();
-        ChipLogProgress(AppServer, "Tanuj Session established with Node: 0x" ChipLogFormatX64 " on Fabric %u",
+        ChipLogProgress(AppServer, "Session established with Node: 0x" ChipLogFormatX64 " on Fabric %u",
                     ChipLogValueX64(sessionHandle->GetPeer().GetNodeId()),
                     sessionHandle->GetFabricIndex());
 
+        // Get fabric info to retrieve local node ID
+        chip::FabricIndex fabricIndex = sessionHandle->GetFabricIndex();
+        chip::FabricInfo * fabricInfo = chip::Server::GetInstance().GetFabricTable().FindFabricWithIndex(fabricIndex);
+        if (fabricInfo == nullptr)
+        {
+            ChipLogError(AppServer, "Failed to find fabric info for fabric index %u", fabricIndex);
+            return;
+        }
+
+        chip::NodeId localNodeId = fabricInfo->GetNodeId();
+        chip::NodeId targetNodeId = sessionHandle->GetPeer().GetNodeId();
+
+        ChipLogProgress(AppServer, "Local Node ID: 0x" ChipLogFormatX64, ChipLogValueX64(localNodeId));
+        ChipLogProgress(AppServer, "Target Node ID: 0x" ChipLogFormatX64, ChipLogValueX64(targetNodeId));
+
+        // Step 1: Read vendor and product IDs from the commissioned device
+        // Try to retrieve from stored device information or use defaults
+        uint16_t targetVendorId = 0xFFF1;  // Default vendor ID
+        uint16_t targetProductId = 0x8000; // Default product ID
+
+        if (!GetDeviceVendorProductIds(mClientDeviceUuid, targetVendorId, targetProductId))
+        {
+            ChipLogError(AppServer, "Failed to retrieve vendor/product IDs for device %s, using defaults",
+                        mClientDeviceUuid.c_str());
+        }
+
+        ChipLogProgress(AppServer, "Target vendor ID: 0x%04X, product ID: 0x%04X",
+                       targetVendorId, targetProductId);
+
+        // Step 2: Read existing bindings from the commissioned device
+        // Cluster ID: 0x001E (Binding)
+        // Attribute: Binding list (0x0000)
+        //
+        // Important: We need to:
+        // 1. Read the current binding list from the commissioned device
+        // 2. Filter out any bindings that reference our local node ID (to avoid duplicates)
+        // 3. Pass the filtered list to ManageClientAccess
+        //
+        // The tv-casting-app pattern shows this is essential - ManageClientAccess will
+        // add new bindings, but we must preserve existing bindings for other nodes.
+
+        // TODO: Implement async read of Binding cluster attribute:
+        // - Use Controller::ReadAttribute() to read binding list from endpoint 1
+        // - Filter bindings where binding.node != localNodeId
+        // - Pass filtered bindings to ManageClientAccess
+        //
+        // For now, start with an empty binding list since:
+        // 1. This is the first connection after commissioning
+        // 2. No other nodes should have bindings yet
+        // 3. ManageClientAccess will create the initial bindings
+
+        std::vector<Binding::Structs::TargetStruct::Type> existingBindings;
+
+        ChipLogProgress(AppServer, "Starting with empty binding list (first connection after commissioning)");
+        ChipLogProgress(AppServer, "ManageClientAccess will create new bindings for this device");
+
+        // Step 3: Invoke ManageClientAccess with filtered bindings
+        ContentAppPlatform * platform = ContentAppPlatform::GetInstance();
+        if (platform != nullptr)
+        {
+            ChipLogProgress(AppServer, "Invoking ManageClientAccess for commissioned device");
+            ChipLogProgress(AppServer, "  Local Node: 0x" ChipLogFormatX64, ChipLogValueX64(localNodeId));
+            ChipLogProgress(AppServer, "  Target Node: 0x" ChipLogFormatX64, ChipLogValueX64(targetNodeId));
+            ChipLogProgress(AppServer, "  Target Vendor: 0x%04X", targetVendorId);
+            ChipLogProgress(AppServer, "  Target Product: 0x%04X", targetProductId);
+            ChipLogProgress(AppServer, "  Existing Bindings: %zu", existingBindings.size());
+
+            CHIP_ERROR err = platform->ManageClientAccess(
+                *exchangeMgr,
+                sessionHandle,
+                targetVendorId,      // Vendor ID of the casting client (from Basic Information cluster)
+                targetProductId,     // Product ID of the casting client (from Basic Information cluster)
+                localNodeId,         // Our local content app node ID
+                nullptr,             // rotatingId (optional, can be null for post-commissioning)
+                0,                   // passcode (0 = not needed for already commissioned device)
+                existingBindings     // Filtered binding list (excluding our node's bindings)
+            );
+
+            if (err == CHIP_NO_ERROR)
+            {
+                ChipLogProgress(AppServer, "ManageClientAccess invoked successfully");
+                ChipLogProgress(AppServer, "API will handle ACL updates and binding writes to client");
+            }
+            else
+            {
+                ChipLogError(AppServer, "ManageClientAccess failed with error: %s", chip::ErrorStr(err));
+            }
+        }
+        else
+        {
+            ChipLogError(AppServer, "ContentAppPlatform instance is null, cannot invoke ManageClientAccess");
+        }
 }
 void BartonMatterImplementation::OnSessionFailure(const chip::ScopedNodeId & peerId, CHIP_ERROR error)
 {
-    ChipLogError(AppServer, "Tanuj CASESession establishment failed for Node 0x" ChipLogFormatX64
+    ChipLogError(AppServer, "CASESession establishment failed for Node 0x" ChipLogFormatX64
                            " on Fabric %u. Error: %s",
                  ChipLogValueX64(peerId.GetNodeId()),
                  peerId.GetFabricIndex(),
                  chip::ErrorStr(error));
 }
+
+        /**
+         * @brief Retrieve vendor and product IDs for a commissioned device
+         *
+         * This method attempts to retrieve the vendor and product IDs from the device.
+         * Currently uses default values, but should be extended to:
+         * 1. Query Barton device metadata if available
+         * 2. Read from Matter Basic Information cluster (async operation)
+         * 3. Cache results for subsequent calls
+         *
+         * @param deviceUuid The device UUID (Matter node ID in hex)
+         * @param vendorId Output parameter for vendor ID
+         * @param productId Output parameter for product ID
+         * @return true if IDs were retrieved successfully, false if using defaults
+         */
+        bool BartonMatterImplementation::GetDeviceVendorProductIds(const std::string& deviceUuid,
+                                                                    uint16_t& vendorId,
+                                                                    uint16_t& productId)
+        {
+            if (deviceUuid.empty())
+            {
+                LOGERR("GetDeviceVendorProductIds: Empty deviceUuid");
+                return false;
+            }
+
+            // Check if we have cached values
+            if (mClientVendorId != 0 && mClientProductId != 0 && mClientDeviceUuid == deviceUuid)
+            {
+                vendorId = mClientVendorId;
+                productId = mClientProductId;
+                LOGINFO("Using cached vendor/product IDs: 0x%04X/0x%04X for device %s",
+                       vendorId, productId, deviceUuid.c_str());
+                return true;
+            }
+
+            // Try to get device from Barton and read metadata
+            if (bartonClient)
+            {
+                g_autolist(BCoreDevice) deviceObjects = b_core_client_get_devices(bartonClient);
+
+                for (GList *iter = deviceObjects; iter != NULL; iter = iter->next)
+                {
+                    BCoreDevice *device = B_CORE_DEVICE(iter->data);
+                    g_autofree gchar *uuid = NULL;
+
+                    g_object_get(device, B_CORE_DEVICE_PROPERTY_NAMES[B_CORE_DEVICE_PROP_UUID], &uuid, NULL);
+
+                    if (uuid && deviceUuid == std::string(uuid))
+                    {
+                        // Found the device - try to get metadata
+                        // Barton might store Matter-specific metadata like "matter.vendorId" and "matter.productId"
+                        // TODO: Query device metadata for vendor/product IDs if available
+
+                        LOGINFO("Found device %s in Barton, but metadata query not yet implemented", uuid);
+                        break;
+                    }
+                }
+            }
+
+            // For now, use reasonable default values for Matter casting clients
+            // In a complete implementation, you would:
+            // 1. Use chip::Controller::ReadAttribute to read Basic Information cluster
+            //    - Cluster ID: 0x0028
+            //    - Attribute VendorID: 0x0002
+            //    - Attribute ProductID: 0x0004
+            // 2. Handle the async response in a callback
+            // 3. Cache the results
+
+            vendorId = 0xFFF1;  // CSA test vendor ID
+            productId = 0x8000; // Generic video player product ID
+
+            LOGWARN("Using default vendor/product IDs: 0x%04X/0x%04X for device %s",
+                   vendorId, productId, deviceUuid.c_str());
+            LOGWARN("TODO: Implement Basic Information cluster read for actual values");
+
+            return false; // Returning false indicates we're using defaults
+        }
 
         /**
          * @brief Convert a Matter device UUID (hex string) to a numeric node ID
