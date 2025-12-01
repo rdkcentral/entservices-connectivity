@@ -629,11 +629,11 @@ namespace WPEFramework
             // Set up attribute path for Binding cluster's Binding attribute
             chip::app::AttributePathParams attributePathParams;
             attributePathParams.mEndpointId = 1; // Client device endpoint
-            attributePathParams.mClusterId = Binding::Id;
-            attributePathParams.mAttributeId = Attributes::Binding::Id;
+            attributePathParams.mClusterId = chip::app::Clusters::Binding::Id;
+            attributePathParams.mAttributeId = chip::app::Clusters::Binding::Attributes::Binding::Id;
 
             // Encode the binding list attribute
-            Attributes::Binding::TypeInfo::Type bindingListAttr(bindings.data(), bindings.size());
+            chip::app::Clusters::Binding::Attributes::Binding::TypeInfo::Type bindingListAttr(bindings.data(), bindings.size());
             CHIP_ERROR err = writeClient->EncodeAttribute(attributePathParams, bindingListAttr);
 
             if (err != CHIP_NO_ERROR)
