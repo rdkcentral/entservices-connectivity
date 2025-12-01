@@ -36,8 +36,8 @@
 #include <lib/core/CHIPError.h>
 #include <lib/support/CodeUtils.h>
 #include <app/server/Server.h>
-#include <controller/CHIPCluster.h>
-#include <app/clusters/bindings/bindings.h>
+#include <app/WriteClient.h>
+#include <app-common/zap-generated/cluster-objects.h>
 
 #ifdef __cplusplus
 extern "C" {

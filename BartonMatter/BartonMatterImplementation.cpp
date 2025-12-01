@@ -584,7 +584,7 @@ namespace WPEFramework
             server.GetCASESessionManager()->FindOrEstablishSession(peerNode, &self->mSuccessCallback, &self->mFailureCallback);
         }
 
-        // Write bindings to client device - simplified version matching ContentAppPlatform pattern
+        // Write bindings to client device using WriteClient
         void BartonMatterImplementation::WriteClientBindings(
             chip::Messaging::ExchangeManager & exchangeMgr,
             const chip::SessionHandle & sessionHandle,
@@ -592,16 +592,69 @@ namespace WPEFramework
             const std::vector<chip::EndpointId> & endpoints)
         {
             using namespace chip;
+            using namespace chip::app;
+            using namespace chip::app::Clusters::Binding;
 
             ChipLogProgress(AppServer, "WriteClientBindings called for %zu endpoints", endpoints.size());
             ChipLogProgress(AppServer, "Local Node ID: 0x" ChipLogFormatX64, ChipLogValueX64(localNodeId));
             ChipLogProgress(AppServer, "Target Node ID: 0x" ChipLogFormatX64,
                           ChipLogValueX64(sessionHandle->GetPeer().GetNodeId()));
 
-            // TODO: Implement binding write using Matter SDK APIs
-            // This requires Controller::ClusterBase and Binding cluster support
-            // For now, ACL is sufficient for client to discover endpoints
-            ChipLogProgress(AppServer, "Binding write not yet implemented - client will use ACL permissions");
+            // Build binding list for all accessible endpoints
+            std::vector<Structs::TargetStruct::Type> bindings;
+
+            for (chip::EndpointId endpoint : endpoints)
+            {
+                bindings.push_back(Structs::TargetStruct::Type{
+                    .node        = MakeOptional(localNodeId),
+                    .group       = NullOptional,
+                    .endpoint    = MakeOptional(endpoint),
+                    .cluster     = NullOptional,
+                    .fabricIndex = chip::kUndefinedFabricIndex,
+                });
+            }
+
+            ChipLogProgress(AppServer, "Writing %zu bindings to client", bindings.size());
+
+            // Create WriteClient for attribute write
+            auto writeClient = new chip::app::WriteClient(
+                &exchangeMgr, nullptr, chip::Optional<uint16_t>::Missing());
+
+            if (writeClient == nullptr)
+            {
+                ChipLogError(AppServer, "Failed to allocate WriteClient");
+                return;
+            }
+
+            // Set up attribute path for Binding cluster's Binding attribute
+            chip::app::AttributePathParams attributePathParams;
+            attributePathParams.mEndpointId = 1; // Client device endpoint
+            attributePathParams.mClusterId = Binding::Id;
+            attributePathParams.mAttributeId = Attributes::Binding::Id;
+
+            // Encode the binding list attribute
+            Attributes::Binding::TypeInfo::Type bindingListAttr(bindings.data(), bindings.size());
+            CHIP_ERROR err = writeClient->EncodeAttribute(attributePathParams, bindingListAttr);
+
+            if (err != CHIP_NO_ERROR)
+            {
+                ChipLogError(AppServer, "Failed to encode Binding attribute: %s", ErrorStr(err));
+                delete writeClient;
+                return;
+            }
+
+            // Send the write request
+            err = writeClient->SendWriteRequest(sessionHandle);
+
+            if (err != CHIP_NO_ERROR)
+            {
+                ChipLogError(AppServer, "Failed to send write request: %s", ErrorStr(err));
+                delete writeClient;
+                return;
+            }
+
+            ChipLogProgress(AppServer, "Successfully sent binding write request to client");
+            // Note: writeClient will be deleted in the callback
         }
 
 
