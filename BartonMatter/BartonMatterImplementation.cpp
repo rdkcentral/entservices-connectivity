@@ -530,8 +530,8 @@ namespace WPEFramework
                 return false;
             }
 
-            // Set privilege to Operate (allows reading attributes and invoking commands)
-            err = entry.SetPrivilege(Privilege::kOperate);
+            // Set privilege to Administer (full access for testing)
+            err = entry.SetPrivilege(Privilege::kAdminister);
             if (err != CHIP_NO_ERROR)
             {
                 LOGERR("AddACLEntryForClient: SetPrivilege failed: 0x%08lx", (unsigned long)err.AsInteger());
