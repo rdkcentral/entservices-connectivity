@@ -35,7 +35,9 @@ namespace WPEFramework
             ChipLogProgress(AppServer, "BartonKeypadInputDelegate created");
         }
 
-        void BartonKeypadInputDelegate::HandleSendKey(KeypadInput::CECKeyCodeEnum keyCode)
+        void BartonKeypadInputDelegate::HandleSendKey(
+            chip::app::CommandResponseHelper<KeypadInput::Commands::SendKeyResponse::Type> & helper,
+            const KeypadInput::CECKeyCodeEnum & keyCode)
         {
             ChipLogProgress(AppServer, "BartonKeypadInputDelegate::HandleSendKey called with keyCode=%d",
                           static_cast<uint8_t>(keyCode));
@@ -99,7 +101,7 @@ namespace WPEFramework
                     break;
             }
 
-            ChipLogProgress(AppServer, "KeypadInput: Received '%s' key press (code=%d)",
+            ChipLogProgress(AppServer, "✅ KeypadInput: Received '%s' key press (code=%d)",
                           keyName, static_cast<uint8_t>(keyCode));
 
             // TODO: Forward to system input handler
@@ -108,11 +110,17 @@ namespace WPEFramework
             // - systemInputManager->SendKey(keyCode)
             // - or write to /dev/uinput
             // - or send IARM event
+
+            // Send success response
+            KeypadInput::Commands::SendKeyResponse::Type response;
+            response.status = KeypadInput::StatusEnum::kSuccess;
+            helper.Success(response);
         }
 
-        chip::Span<const KeypadInput::CECKeyCodeEnum> BartonKeypadInputDelegate::GetSupportedKeyCodes()
+        uint32_t BartonKeypadInputDelegate::GetFeatureMap(chip::EndpointId endpoint)
         {
-            return chip::Span<const KeypadInput::CECKeyCodeEnum>(sSupportedKeyCodes);
+            // Enable all key features: NavigationKeyCodes, LocationKeys, NumberKeys
+            return 0x07; // Bits 0,1,2 set
         }
 
         // ============================================================================

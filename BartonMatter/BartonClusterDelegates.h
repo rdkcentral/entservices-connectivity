@@ -41,17 +41,19 @@ namespace WPEFramework
             /**
              * @brief Handle incoming SendKey command
              *
+             * @param helper CommandResponseHelper for sending response
              * @param keyCode The CECKeyCode value from the Matter specification
-             * @return Status code indicating success or failure
              */
-            void HandleSendKey(chip::app::Clusters::KeypadInput::CECKeyCodeEnum keyCode) override;
+            void HandleSendKey(chip::app::CommandResponseHelper<chip::app::Clusters::KeypadInput::Commands::SendKeyResponse::Type> & helper,
+                             const chip::app::Clusters::KeypadInput::CECKeyCodeEnum & keyCode) override;
 
             /**
-             * @brief Get supported key codes
+             * @brief Get feature map for the endpoint
              *
-             * @return List of supported CECKeyCode values
+             * @param endpoint The endpoint ID
+             * @return Feature map bits
              */
-            chip::Span<const chip::app::Clusters::KeypadInput::CECKeyCodeEnum> GetSupportedKeyCodes() override;
+            uint32_t GetFeatureMap(chip::EndpointId endpoint) override;
 
         private:
             static constexpr chip::app::Clusters::KeypadInput::CECKeyCodeEnum sSupportedKeyCodes[] = {
@@ -66,16 +68,13 @@ namespace WPEFramework
                 chip::app::Clusters::KeypadInput::CECKeyCodeEnum::kSetupMenu,
                 chip::app::Clusters::KeypadInput::CECKeyCodeEnum::kContentsMenu,
                 chip::app::Clusters::KeypadInput::CECKeyCodeEnum::kFavoriteMenu,
-                chip::app::Clusters::KeypadInput::CECKeyCodeEnum::kNumber0,
-                chip::app::Clusters::KeypadInput::CECKeyCodeEnum::kNumber1,
-                chip::app::Clusters::KeypadInput::CECKeyCodeEnum::kNumber2,
-                chip::app::Clusters::KeypadInput::CECKeyCodeEnum::kNumber3,
-                chip::app::Clusters::KeypadInput::CECKeyCodeEnum::kNumber4,
-                chip::app::Clusters::KeypadInput::CECKeyCodeEnum::kNumber5,
-                chip::app::Clusters::KeypadInput::CECKeyCodeEnum::kNumber6,
-                chip::app::Clusters::KeypadInput::CECKeyCodeEnum::kNumber7,
-                chip::app::Clusters::KeypadInput::CECKeyCodeEnum::kNumber8,
-                chip::app::Clusters::KeypadInput::CECKeyCodeEnum::kNumber9,
+                chip::app::Clusters::KeypadInput::CECKeyCodeEnum::kNumbers3,
+                chip::app::Clusters::KeypadInput::CECKeyCodeEnum::kNumbers4,
+                chip::app::Clusters::KeypadInput::CECKeyCodeEnum::kNumbers5,
+                chip::app::Clusters::KeypadInput::CECKeyCodeEnum::kNumbers6,
+                chip::app::Clusters::KeypadInput::CECKeyCodeEnum::kNumbers7,
+                chip::app::Clusters::KeypadInput::CECKeyCodeEnum::kNumbers8,
+                chip::app::Clusters::KeypadInput::CECKeyCodeEnum::kNumbers9,
             };
         };
 
