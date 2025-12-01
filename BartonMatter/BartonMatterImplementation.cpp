@@ -611,7 +611,7 @@ void BartonMatterImplementation::OnSessionEstablished(const chip::SessionHandle 
 
         // Get fabric info to retrieve local node ID
         chip::FabricIndex fabricIndex = sessionHandle->GetFabricIndex();
-        chip::FabricInfo * fabricInfo = chip::Server::GetInstance().GetFabricTable().FindFabricWithIndex(fabricIndex);
+        const chip::FabricInfo * fabricInfo = chip::Server::GetInstance().GetFabricTable().FindFabricWithIndex(fabricIndex);
         if (fabricInfo == nullptr)
         {
             ChipLogError(AppServer, "Failed to find fabric info for fabric index %u", fabricIndex);
@@ -666,40 +666,48 @@ void BartonMatterImplementation::OnSessionEstablished(const chip::SessionHandle 
         ChipLogProgress(AppServer, "ManageClientAccess will create new bindings for this device");
 
         // Step 3: Invoke ManageClientAccess with filtered bindings
-        ContentAppPlatform * platform = ContentAppPlatform::GetInstance();
-        if (platform != nullptr)
+        ContentAppPlatform & platform = ContentAppPlatform::GetInstance();
+
+        ChipLogProgress(AppServer, "Invoking ManageClientAccess for commissioned device");
+        ChipLogProgress(AppServer, "  Local Node: 0x" ChipLogFormatX64, ChipLogValueX64(localNodeId));
+        ChipLogProgress(AppServer, "  Target Node: 0x" ChipLogFormatX64, ChipLogValueX64(targetNodeId));
+        ChipLogProgress(AppServer, "  Target Vendor: 0x%04X", targetVendorId);
+        ChipLogProgress(AppServer, "  Target Product: 0x%04X", targetProductId);
+        ChipLogProgress(AppServer, "  Existing Bindings: %zu", existingBindings.size());
+
+        // ManageClientAccess requires a non-const SessionHandle reference
+        chip::SessionHandle mutableSessionHandle = sessionHandle;
+
+        // Define success/failure callbacks for ManageClientAccess
+        auto onSuccess = [](void * context, const chip::app::DataModel::NullObjectType &) {
+            ChipLogProgress(AppServer, "ManageClientAccess write succeeded - bindings created on client");
+        };
+
+        auto onFailure = [](void * context, CHIP_ERROR error) {
+            ChipLogError(AppServer, "ManageClientAccess write failed: %s", chip::ErrorStr(error));
+        };
+
+        CHIP_ERROR err = platform.ManageClientAccess(
+            *exchangeMgr,
+            mutableSessionHandle,
+            targetVendorId,      // Vendor ID of the casting client (from Basic Information cluster)
+            targetProductId,     // Product ID of the casting client (from Basic Information cluster)
+            localNodeId,         // Our local content app node ID
+            chip::CharSpan(),    // rotatingId (empty span for post-commissioning)
+            0,                   // passcode (0 = not needed for already commissioned device)
+            existingBindings,    // Filtered binding list (excluding our node's bindings)
+            onSuccess,           // Success callback
+            onFailure            // Failure callback
+        );
+
+        if (err == CHIP_NO_ERROR)
         {
-            ChipLogProgress(AppServer, "Invoking ManageClientAccess for commissioned device");
-            ChipLogProgress(AppServer, "  Local Node: 0x" ChipLogFormatX64, ChipLogValueX64(localNodeId));
-            ChipLogProgress(AppServer, "  Target Node: 0x" ChipLogFormatX64, ChipLogValueX64(targetNodeId));
-            ChipLogProgress(AppServer, "  Target Vendor: 0x%04X", targetVendorId);
-            ChipLogProgress(AppServer, "  Target Product: 0x%04X", targetProductId);
-            ChipLogProgress(AppServer, "  Existing Bindings: %zu", existingBindings.size());
-
-            CHIP_ERROR err = platform->ManageClientAccess(
-                *exchangeMgr,
-                sessionHandle,
-                targetVendorId,      // Vendor ID of the casting client (from Basic Information cluster)
-                targetProductId,     // Product ID of the casting client (from Basic Information cluster)
-                localNodeId,         // Our local content app node ID
-                nullptr,             // rotatingId (optional, can be null for post-commissioning)
-                0,                   // passcode (0 = not needed for already commissioned device)
-                existingBindings     // Filtered binding list (excluding our node's bindings)
-            );
-
-            if (err == CHIP_NO_ERROR)
-            {
-                ChipLogProgress(AppServer, "ManageClientAccess invoked successfully");
-                ChipLogProgress(AppServer, "API will handle ACL updates and binding writes to client");
-            }
-            else
-            {
-                ChipLogError(AppServer, "ManageClientAccess failed with error: %s", chip::ErrorStr(err));
-            }
+            ChipLogProgress(AppServer, "ManageClientAccess invoked successfully");
+            ChipLogProgress(AppServer, "API will handle ACL updates and binding writes to client");
         }
         else
         {
-            ChipLogError(AppServer, "ContentAppPlatform instance is null, cannot invoke ManageClientAccess");
+            ChipLogError(AppServer, "ManageClientAccess failed with error: %s", chip::ErrorStr(err));
         }
 }
 void BartonMatterImplementation::OnSessionFailure(const chip::ScopedNodeId & peerId, CHIP_ERROR error)
