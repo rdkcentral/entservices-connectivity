@@ -17,7 +17,7 @@
  * limitations under the License.
  **/
 
-#include "BartonClusterDelegates.h"
+#include "MatterClusterDelegates.h"
 #include <lib/support/logging/CHIPLogging.h>
 
 using namespace chip;
@@ -28,18 +28,18 @@ namespace WPEFramework
     namespace Plugin
     {
         // Define supported key codes
-        constexpr KeypadInput::CECKeyCodeEnum BartonKeypadInputDelegate::sSupportedKeyCodes[];
+        constexpr KeypadInput::CECKeyCodeEnum MatterKeypadInputDelegate::sSupportedKeyCodes[];
 
-        BartonKeypadInputDelegate::BartonKeypadInputDelegate()
+        MatterKeypadInputDelegate::MatterKeypadInputDelegate()
         {
-            ChipLogProgress(AppServer, "BartonKeypadInputDelegate created");
+            ChipLogProgress(AppServer, "MatterKeypadInputDelegate created");
         }
 
-        void BartonKeypadInputDelegate::HandleSendKey(
+        void MatterKeypadInputDelegate::HandleSendKey(
             chip::app::CommandResponseHelper<KeypadInput::Commands::SendKeyResponse::Type> & helper,
             const KeypadInput::CECKeyCodeEnum & keyCode)
         {
-            ChipLogProgress(AppServer, "BartonKeypadInputDelegate::HandleSendKey called with keyCode=%d",
+            ChipLogProgress(AppServer, "MatterKeypadInputDelegate::HandleSendKey called with keyCode=%d",
                           static_cast<uint8_t>(keyCode));
 
             // TODO: Route to actual system key handler
@@ -130,34 +130,34 @@ namespace WPEFramework
             helper.Success(response);
         }
 
-        uint32_t BartonKeypadInputDelegate::GetFeatureMap(chip::EndpointId endpoint)
+        uint32_t MatterKeypadInputDelegate::GetFeatureMap(chip::EndpointId endpoint)
         {
             // Enable all key features: NavigationKeyCodes, LocationKeys, NumberKeys
             return 0x07; // Bits 0,1,2 set
         }
 
         // ============================================================================
-        // BartonClusterDelegateManager Implementation
+        // MatterClusterDelegateManager Implementation
         // ============================================================================
 
-        BartonClusterDelegateManager& BartonClusterDelegateManager::GetInstance()
+        MatterClusterDelegateManager& MatterClusterDelegateManager::GetInstance()
         {
-            static BartonClusterDelegateManager instance;
+            static MatterClusterDelegateManager instance;
             return instance;
         }
 
-        void BartonClusterDelegateManager::Initialize()
+        void MatterClusterDelegateManager::Initialize()
         {
             if (mInitialized)
             {
-                ChipLogProgress(AppServer, "BartonClusterDelegateManager already initialized");
+                ChipLogProgress(AppServer, "MatterClusterDelegateManager already initialized");
                 return;
             }
 
-            ChipLogProgress(AppServer, "Initializing Barton cluster delegates...");
+            ChipLogProgress(AppServer, "Initializing Matter cluster delegates...");
 
             // Create and register KeypadInput delegate for endpoints 1 and 3
-            mKeypadInputDelegate = std::make_unique<BartonKeypadInputDelegate>();
+            mKeypadInputDelegate = std::make_unique<MatterKeypadInputDelegate>();
 
             // Register for endpoint 1 (Video Player)
             KeypadInput::SetDefaultDelegate(1, mKeypadInputDelegate.get());
@@ -167,17 +167,17 @@ namespace WPEFramework
             KeypadInput::SetDefaultDelegate(3, mKeypadInputDelegate.get());
             ChipLogProgress(AppServer, "Registered KeypadInput delegate for endpoint 3 (Content App)");
             mInitialized = true;
-            ChipLogProgress(AppServer, "All Barton cluster delegates initialized successfully");
+            ChipLogProgress(AppServer, "All Matter cluster delegates initialized successfully");
         }
 
-        void BartonClusterDelegateManager::Shutdown()
+        void MatterClusterDelegateManager::Shutdown()
         {
             if (!mInitialized)
             {
                 return;
             }
 
-            ChipLogProgress(AppServer, "Shutting down Barton cluster delegates...");
+            ChipLogProgress(AppServer, "Shutting down Matter cluster delegates...");
 
             // Unregister delegates
             KeypadInput::SetDefaultDelegate(1, nullptr);
@@ -187,7 +187,7 @@ namespace WPEFramework
             mKeypadInputDelegate.reset();
 
             mInitialized = false;
-            ChipLogProgress(AppServer, "Barton cluster delegates shutdown complete");
+            ChipLogProgress(AppServer, "Matter cluster delegates shutdown complete");
         }
 
     } // namespace Plugin

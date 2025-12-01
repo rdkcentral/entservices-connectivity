@@ -32,11 +32,11 @@ namespace WPEFramework
          * SendKey commands from casting clients. Routes key presses to the appropriate
          * system handlers.
          */
-        class BartonKeypadInputDelegate : public chip::app::Clusters::KeypadInput::Delegate
+        class MatterKeypadInputDelegate : public chip::app::Clusters::KeypadInput::Delegate
         {
         public:
-            BartonKeypadInputDelegate();
-            virtual ~BartonKeypadInputDelegate() = default;
+            MatterKeypadInputDelegate();
+            virtual ~MatterKeypadInputDelegate() = default;
 
             /**
              * @brief Handle incoming SendKey command
@@ -79,15 +79,15 @@ namespace WPEFramework
         };
 
         /**
-         * @brief Cluster delegate manager for Barton endpoints
+         * @brief Cluster delegate manager for Matter endpoints
          *
          * Manages registration and lifecycle of cluster delegates for all
-         * Barton endpoints (video player, speaker, content app).
+         * Matter endpoints (video player, speaker, content app).
          */
-        class BartonClusterDelegateManager
+        class MatterClusterDelegateManager
         {
         public:
-            static BartonClusterDelegateManager& GetInstance();
+            static MatterClusterDelegateManager& GetInstance();
 
             /**
              * @brief Initialize and register all cluster delegates
@@ -103,15 +103,15 @@ namespace WPEFramework
             void Shutdown();
 
         private:
-            BartonClusterDelegateManager() = default;
-            ~BartonClusterDelegateManager() = default;
-            BartonClusterDelegateManager(const BartonClusterDelegateManager&) = delete;
-            BartonClusterDelegateManager& operator=(const BartonClusterDelegateManager&) = delete;
+            MatterClusterDelegateManager() = default;
+            ~MatterClusterDelegateManager() = default;
+            MatterClusterDelegateManager(const MatterClusterDelegateManager&) = delete;
+            MatterClusterDelegateManager& operator=(const MatterClusterDelegateManager&) = delete;
 
             bool mInitialized = false;
 
             // Delegate instances
-            std::unique_ptr<BartonKeypadInputDelegate> mKeypadInputDelegate;
+            std::unique_ptr<MatterKeypadInputDelegate> mKeypadInputDelegate;
         };
 
     } // namespace Plugin

@@ -10,7 +10,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-variable -Wno-error=unused-v
 add_library(${MODULE_NAME} SHARED
 	BartonMatterPlugin.cpp
 	BartonMatterImplementation.cpp
-	BartonClusterDelegates.cpp
+	MatterClusterDelegates.cpp
         Module.cpp
 )
 
