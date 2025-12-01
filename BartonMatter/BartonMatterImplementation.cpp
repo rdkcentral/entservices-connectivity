@@ -94,8 +94,6 @@ namespace WPEFramework
             // Using vendorId=0, productId=0 to allow any commissioned device to access Barton's endpoints
             // This is necessary for tv-casting-app to create bindings and send commands
             LOGINFO("Creating ACL entry for commissioned device %s", deviceUuid);
-            auto ptr= chip::AppPlatform::ContentAppPlatform::GetInstance();
-            chip::Messaging::ExchangeManager * exchangeMgr = chip::app::InteractionModelEngine::GetInstance()->GetExchangeManager();
             bool aclSuccess = instance->ConfigureClientACL(deviceUuid, 0, 0);
 
             if (aclSuccess)
@@ -617,14 +615,19 @@ namespace WPEFramework
             // Write bindings to client's Binding cluster on endpoint 1
             Binding::Attributes::Binding::TypeInfo::Type bindingList(bindings.data(), bindings.size());
 
-            // Success callback
-            auto onSuccess = [](void * context, const DataModel::NullObjectType &) {
+            // Success callback - must be static function pointer
+            static auto onSuccess = +[](void * context) {
                 ChipLogProgress(AppServer, "Successfully wrote bindings to client");
             };
 
-            // Failure callback
-            auto onFailure = [](void * context, CHIP_ERROR error) {
+            // Failure callback - must be static function pointer
+            static auto onFailure = +[](void * context, CHIP_ERROR error) {
                 ChipLogError(AppServer, "Failed to write bindings to client: %s", ErrorStr(error));
+            };
+
+            // Done callback - optional, can be nullptr
+            static auto onDone = +[](void * context) {
+                ChipLogProgress(AppServer, "Binding write operation completed");
             };
 
             // Use Controller WriteAttribute to write bindings
@@ -634,8 +637,9 @@ namespace WPEFramework
             chip::Controller::ClusterBase cluster(exchangeMgr, const_cast<chip::SessionHandle &>(sessionHandle),
                                                   kClientBindingEndpoint);
 
+            // WriteAttribute signature: (requestData, context, successCb, failureCb, timedWriteTimeout, doneCb, imTimeout)
             return cluster.WriteAttribute<Binding::Attributes::Binding::TypeInfo>(
-                bindingList, nullptr, onSuccess, onFailure);
+                bindingList, nullptr, onSuccess, onFailure, 0, onDone, NullOptional);
         }
         void BartonMatterImplementation::OnSessionEstablishedStatic(void * context, chip::Messaging::ExchangeManager & exchangeMgr, const chip::SessionHandle & sessionHandle)
 {
