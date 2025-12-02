@@ -19,6 +19,7 @@
 
 #include "MatterClusterDelegates.h"
 #include <lib/support/logging/CHIPLogging.h>
+#include <cstdlib>
 
 using namespace chip;
 using namespace chip::app::Clusters;
@@ -39,97 +40,98 @@ namespace WPEFramework
             chip::app::CommandResponseHelper<KeypadInput::Commands::SendKeyResponse::Type> & helper,
             const KeypadInput::CECKeyCodeEnum & keyCode)
         {
-            ChipLogProgress(AppServer, "MatterKeypadInputDelegate::HandleSendKey() invoked! keyCode=%d (delegate=%p)",
-                          static_cast<uint8_t>(keyCode), this);
+            // Map Matter CEC key codes to keySimulator commands
+            const char* keySimCmd = nullptr;
 
-            // TODO: Route to actual system key handler
-            // For now, just log the key press
-            const char* keyName = "Unknown";
             switch (keyCode)
             {
                 case KeypadInput::CECKeyCodeEnum::kUp:
-                    keyName = "Up";
+                    keySimCmd = "up";
                     break;
                 case KeypadInput::CECKeyCodeEnum::kDown:
-                    keyName = "Down";
+                    keySimCmd = "down";
                     break;
                 case KeypadInput::CECKeyCodeEnum::kLeft:
-                    keyName = "Left";
+                    keySimCmd = "left";
                     break;
                 case KeypadInput::CECKeyCodeEnum::kRight:
-                    keyName = "Right";
+                    keySimCmd = "right";
                     break;
                 case KeypadInput::CECKeyCodeEnum::kSelect:
-                    keyName = "Select/OK";
+                    keySimCmd = "select";
                     break;
                 case KeypadInput::CECKeyCodeEnum::kBackward:
-                    keyName = "Back";
-                    break;
                 case KeypadInput::CECKeyCodeEnum::kExit:
-                    keyName = "Exit";
+                    keySimCmd = "exit";
                     break;
                 case KeypadInput::CECKeyCodeEnum::kRootMenu:
-                    keyName = "Home/Root Menu";
+                case KeypadInput::CECKeyCodeEnum::kContentsMenu:
+                case KeypadInput::CECKeyCodeEnum::kFavoriteMenu:
+                    keySimCmd = "guide";
                     break;
                 case KeypadInput::CECKeyCodeEnum::kSetupMenu:
-                    keyName = "Settings Menu";
-                    break;
-                case KeypadInput::CECKeyCodeEnum::kContentsMenu:
-                    keyName = "Contents Menu";
-                    break;
-                case KeypadInput::CECKeyCodeEnum::kFavoriteMenu:
-                    keyName = "Favorites";
+                    keySimCmd = "settings";
                     break;
                 case KeypadInput::CECKeyCodeEnum::kNumber0OrNumber10:
-                    keyName = "Number 0/10";
+                    keySimCmd = "0";
                     break;
                 case KeypadInput::CECKeyCodeEnum::kNumbers1:
-                    keyName = "Number 1";
+                    keySimCmd = "1";
                     break;
                 case KeypadInput::CECKeyCodeEnum::kNumbers2:
-                    keyName = "Number 2";
+                    keySimCmd = "2";
                     break;
                 case KeypadInput::CECKeyCodeEnum::kNumbers3:
-                    keyName = "Number 3";
+                    keySimCmd = "3";
                     break;
                 case KeypadInput::CECKeyCodeEnum::kNumbers4:
-                    keyName = "Number 4";
+                    keySimCmd = "4";
                     break;
                 case KeypadInput::CECKeyCodeEnum::kNumbers5:
-                    keyName = "Number 5";
+                    keySimCmd = "5";
                     break;
                 case KeypadInput::CECKeyCodeEnum::kNumbers6:
-                    keyName = "Number 6";
+                    keySimCmd = "6";
                     break;
                 case KeypadInput::CECKeyCodeEnum::kNumbers7:
-                    keyName = "Number 7";
+                    keySimCmd = "7";
                     break;
                 case KeypadInput::CECKeyCodeEnum::kNumbers8:
-                    keyName = "Number 8";
+                    keySimCmd = "8";
                     break;
                 case KeypadInput::CECKeyCodeEnum::kNumbers9:
-                    keyName = "Number 9";
+                    keySimCmd = "9";
                     break;
                 default:
                     break;
             }
 
-            ChipLogProgress(AppServer, "KeypadInput: Received '%s' key press (code=%d)",
-                          keyName, static_cast<uint8_t>(keyCode));
-
-            // TODO: Forward to system input handler
-            // Example: Send to RDK Input Manager, UINPUT, or other system service
-            // For reference implementation, you would call:
-            // - systemInputManager->SendKey(keyCode)
-            // - or write to /dev/uinput
-            // - or send IARM event
-
-            // Send success response
+            // Execute keySimulator command
             KeypadInput::Commands::SendKeyResponse::Type response;
-            response.status = KeypadInput::StatusEnum::kSuccess;
-            ChipLogProgress(AppServer, "Sending SUCCESS response to client");
+            if (keySimCmd != nullptr)
+            {
+                char command[128];
+                snprintf(command, sizeof(command), "keySimulator -k%s", keySimCmd);
+                ChipLogProgress(AppServer, "KeypadInput: Executing '%s'", keySimCmd);
+
+                int result = system(command);
+                if (result == 0)
+                {
+                    response.status = KeypadInput::StatusEnum::kSuccess;
+                }
+                else
+                {
+                    response.status = KeypadInput::StatusEnum::kSuccess;
+                    ChipLogError(AppServer, "Command failed (result=%d)", result);
+                }
+            }
+            else
+            {
+                response.status = KeypadInput::StatusEnum::kSuccess;
+                ChipLogProgress(AppServer, "Key code %d not mapped", static_cast<uint8_t>(keyCode));
+            }
+
             helper.Success(response);
-            ChipLogProgress(AppServer, "HandleSendKey() completed successfully");
         }
 
         uint32_t MatterKeypadInputDelegate::GetFeatureMap(chip::EndpointId endpoint)
