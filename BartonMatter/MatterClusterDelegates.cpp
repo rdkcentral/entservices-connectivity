@@ -156,16 +156,14 @@ namespace WPEFramework
 
             ChipLogProgress(AppServer, "Initializing Matter cluster delegates...");
 
-            // Create and register KeypadInput delegate for endpoints 1 and 3
+            // Create and register KeypadInput delegate
             mKeypadInputDelegate = std::make_unique<MatterKeypadInputDelegate>();
 
             // Register for endpoint 1 (Video Player)
+            // Note: Endpoint 3 (ContentApp) requires special ContentApp platform integration
             KeypadInput::SetDefaultDelegate(1, mKeypadInputDelegate.get());
-            ChipLogProgress(AppServer, "Registered KeypadInput delegate for endpoint 1 (Video Player)");
+            ChipLogProgress(AppServer, "✅ Registered KeypadInput delegate for endpoint 1 (Video Player)");
 
-            // Register for endpoint 3 (Content App)
-            KeypadInput::SetDefaultDelegate(3, mKeypadInputDelegate.get());
-            ChipLogProgress(AppServer, "Registered KeypadInput delegate for endpoint 3 (Content App)");
             mInitialized = true;
             ChipLogProgress(AppServer, "All Matter cluster delegates initialized successfully");
         }
@@ -181,7 +179,6 @@ namespace WPEFramework
 
             // Unregister delegates
             KeypadInput::SetDefaultDelegate(1, nullptr);
-            KeypadInput::SetDefaultDelegate(3, nullptr);
 
             // Cleanup
             mKeypadInputDelegate.reset();

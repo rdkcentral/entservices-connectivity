@@ -388,7 +388,11 @@ namespace WPEFramework
             b_core_client_set_system_property(bartonClient, "deviceDescriptorBypass", "true");
 
             // Initialize cluster delegates for handling incoming commands
-            MatterClusterDelegateManager::GetInstance().Initialize();
+            // Must run on Matter event loop to ensure proper timing
+            chip::DeviceLayer::PlatformMgr().ScheduleWork([](intptr_t) {
+                ChipLogProgress(AppServer, "🔧 Scheduling cluster delegate initialization...");
+                MatterClusterDelegateManager::GetInstance().Initialize();
+            });
 
             LOGINFO("BartonMatter Commissioner initialized successfully");
 
