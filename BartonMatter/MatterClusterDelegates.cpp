@@ -163,13 +163,20 @@ namespace WPEFramework
             mKeypadInputDelegate = std::make_unique<MatterKeypadInputDelegate>();
             ChipLogProgress(AppServer, "Created shared KeypadInput delegate instance at %p", mKeypadInputDelegate.get());
 
-            // Register for known endpoints immediately (since ZAP callbacks may have already fired)
-            // Also register for potential dynamic endpoints (1-20)
-            // The ZAP callback will handle any late-initialized endpoints
-            ChipLogProgress(AppServer, "Registering KeypadInput delegate for endpoints 1-20...");
-            for (chip::EndpointId ep = 1; ep <= 20; ep++)
+            // Query all enabled endpoints and register delegates for those with KeypadInput cluster
+            // This handles endpoints that were initialized before this plugin loaded
+            ChipLogProgress(AppServer, "Querying enabled endpoints for KeypadInput cluster...");
+            uint16_t endpointCount = emberAfEndpointCount();
+            ChipLogProgress(AppServer, "Found %u total endpoints", endpointCount);
+
+            for (uint16_t i = 0; i < endpointCount; i++)
             {
-                RegisterKeypadInputDelegate(ep);
+                chip::EndpointId ep = emberAfEndpointFromIndex(i);
+                if (emberAfContainsServer(ep, KeypadInput::Id))
+                {
+                    ChipLogProgress(AppServer, "Endpoint %u has KeypadInput cluster (0x%04X)", ep, KeypadInput::Id);
+                    RegisterKeypadInputDelegate(ep);
+                }
             }
 
             mInitialized = true;
