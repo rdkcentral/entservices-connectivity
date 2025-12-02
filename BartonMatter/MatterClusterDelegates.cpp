@@ -106,32 +106,23 @@ namespace WPEFramework
                     break;
             }
 
-            // Execute keySimulator command
+            // Send success response immediately
             KeypadInput::Commands::SendKeyResponse::Type response;
+            response.status = KeypadInput::StatusEnum::kSuccess;
+            helper.Success(response);
+
+            // Execute keySimulator command after sending response (non-blocking)
             if (keySimCmd != nullptr)
             {
-                char command[128];
-                snprintf(command, sizeof(command), "keySimulator -k%s", keySimCmd);
-                ChipLogProgress(AppServer, "KeypadInput: Executing '%s'", keySimCmd);
-
-                int result = system(command);
-                if (result == 0)
-                {
-                    response.status = KeypadInput::StatusEnum::kSuccess;
-                }
-                else
-                {
-                    response.status = KeypadInput::StatusEnum::kSuccess;
-                    ChipLogError(AppServer, "Command failed (result=%d)", result);
-                }
+                char command[256];
+                snprintf(command, sizeof(command), "keySimulator -k%s >/dev/null 2>&1 &", keySimCmd);
+                ChipLogProgress(AppServer, "Executing: %s", command);
+                system(command);
             }
             else
             {
-                response.status = KeypadInput::StatusEnum::kSuccess;
                 ChipLogProgress(AppServer, "Key code %d not mapped", static_cast<uint8_t>(keyCode));
             }
-
-            helper.Success(response);
         }
 
         uint32_t MatterKeypadInputDelegate::GetFeatureMap(chip::EndpointId endpoint)
