@@ -19,7 +19,6 @@
 
 #include "MatterClusterDelegates.h"
 #include <lib/support/logging/CHIPLogging.h>
-#include <algorithm>
 
 using namespace chip;
 using namespace chip::app::Clusters;
@@ -153,105 +152,42 @@ namespace WPEFramework
         {
             if (mInitialized)
             {
-                ChipLogProgress(AppServer, " MatterClusterDelegateManager already initialized");
                 return;
             }
 
-            ChipLogProgress(AppServer, " Initializing Matter cluster delegates...");
-
-            // Create one shared KeypadInput delegate (memory efficient)
+            // Create KeypadInput delegate
             mKeypadInputDelegate = std::make_unique<MatterKeypadInputDelegate>();
-            ChipLogProgress(AppServer, "Created shared KeypadInput delegate instance at %p", mKeypadInputDelegate.get());
 
-            // Query all enabled endpoints and register delegates for those with KeypadInput cluster
-            // This handles endpoints that were initialized before this plugin loaded
-            ChipLogProgress(AppServer, "Querying enabled endpoints for KeypadInput cluster...");
-            uint16_t endpointCount = emberAfEndpointCount();
-            ChipLogProgress(AppServer, "Found %u total endpoints", endpointCount);
-
-            for (uint16_t i = 0; i < endpointCount; i++)
-            {
-                chip::EndpointId ep = emberAfEndpointFromIndex(i);
-                if (emberAfContainsServer(ep, KeypadInput::Id))
-                {
-                    ChipLogProgress(AppServer, "Endpoint %u has KeypadInput cluster (0x%04X)", ep, KeypadInput::Id);
-                    RegisterKeypadInputDelegate(ep);
-                }
-            }
+            // Register delegate for KeypadInput cluster on endpoint 3 (static configuration from ZAP)
+            KeypadInput::SetDefaultDelegate(3, mKeypadInputDelegate.get());
+            mRegisteredEndpoints.push_back(3);
 
             mInitialized = true;
-            ChipLogProgress(AppServer, " Matter cluster delegates initialized - registered for %zu endpoints",
-                          mRegisteredEndpoints.size());
+            ChipLogProgress(AppServer, "KeypadInput delegate registered for endpoint 3");
         }
 
-        void MatterClusterDelegateManager::RegisterKeypadInputDelegate(chip::EndpointId endpoint)
-        {
-            if (!mKeypadInputDelegate)
-            {
-                ChipLogError(AppServer, "Cannot register KeypadInput delegate - not initialized");
-                return;
-            }
 
-            // Check if already registered (idempotent - safe to call multiple times)
-            if (std::find(mRegisteredEndpoints.begin(), mRegisteredEndpoints.end(), endpoint) != mRegisteredEndpoints.end())
-            {
-                ChipLogProgress(AppServer, "Endpoint %u already has KeypadInput delegate registered (skipping)", endpoint);
-                return; // Already registered
-            }
-
-            ChipLogProgress(AppServer, "Calling KeypadInput::SetDefaultDelegate(%u, %p)...",
-                          endpoint, mKeypadInputDelegate.get());
-            KeypadInput::SetDefaultDelegate(endpoint, mKeypadInputDelegate.get());
-            mRegisteredEndpoints.push_back(endpoint);
-            ChipLogProgress(AppServer, "Successfully registered KeypadInput delegate for endpoint %u", endpoint);
-        }
 
         void MatterClusterDelegateManager::Shutdown()
         {
             if (!mInitialized)
             {
-                ChipLogProgress(AppServer, "Shutdown called but not initialized");
                 return;
             }
 
-            ChipLogProgress(AppServer, "Shutting down Matter cluster delegates...");
-
-            // Unregister delegate from all endpoints
-            ChipLogProgress(AppServer, "Unregistering KeypadInput delegates from %zu endpoints...",
-                          mRegisteredEndpoints.size());
+            // Unregister delegates
             for (chip::EndpointId ep : mRegisteredEndpoints)
             {
                 KeypadInput::SetDefaultDelegate(ep, nullptr);
-                ChipLogProgress(AppServer, " Unregistered endpoint %u", ep);
             }
             mRegisteredEndpoints.clear();
 
-            // Cleanup delegate instance
-            ChipLogProgress(AppServer, " Destroying delegate instance...");
+            // Cleanup
             mKeypadInputDelegate.reset();
-
             mInitialized = false;
-            ChipLogProgress(AppServer, " Matter cluster delegates shutdown complete");
         }
 
     } // namespace Plugin
 } // namespace WPEFramework
 
-// ============================================================================
-// ZAP Cluster Init Callbacks
-// ============================================================================
 
-/**
- * @brief ZAP callback invoked when KeypadInput cluster is initialized on an endpoint
- *
- * This is called automatically by the Matter SDK when a KeypadInput cluster
- * is initialized (either static from ZAP file or dynamic at runtime).
- *
- * @param endpoint The endpoint ID where KeypadInput cluster was initialized
- */
-void emberAfKeypadInputClusterInitCallback(chip::EndpointId endpoint)
-{
-    ChipLogProgress(Zcl, " ZAP Callback: KeypadInput cluster initialized on endpoint %u", endpoint);
-    WPEFramework::Plugin::MatterClusterDelegateManager::GetInstance().RegisterKeypadInputDelegate(endpoint);
-    ChipLogProgress(Zcl, " ZAP Callback: Delegate registration completed for endpoint %u", endpoint);
-}

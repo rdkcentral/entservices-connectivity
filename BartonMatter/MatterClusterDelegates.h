@@ -82,34 +82,13 @@ namespace WPEFramework
 
         /**
          * @brief Cluster delegate manager for Matter endpoints
-         *
-         * Manages registration and lifecycle of cluster delegates for all
-         * Matter endpoints (video player, speaker, content app).
          */
         class MatterClusterDelegateManager
         {
         public:
             static MatterClusterDelegateManager& GetInstance();
 
-            /**
-             * @brief Initialize and register all cluster delegates
-             *
-             * Must be called after Matter stack initialization but before
-             * accepting incoming connections.
-             */
             void Initialize();
-
-            /**
-             * @brief Register KeypadInput delegate for a specific endpoint
-             * Called from emberAfKeypadInputClusterInitCallback
-             *
-             * @param endpoint The endpoint ID where KeypadInput cluster is initialized
-             */
-            void RegisterKeypadInputDelegate(chip::EndpointId endpoint);
-
-            /**
-             * @brief Cleanup and unregister all cluster delegates
-             */
             void Shutdown();
 
         private:
@@ -119,11 +98,7 @@ namespace WPEFramework
             MatterClusterDelegateManager& operator=(const MatterClusterDelegateManager&) = delete;
 
             bool mInitialized = false;
-
-            // Shared delegate instance for all endpoints (memory efficient)
             std::unique_ptr<MatterKeypadInputDelegate> mKeypadInputDelegate;
-
-            // Track registered endpoints for cleanup
             std::vector<chip::EndpointId> mRegisteredEndpoints;
         };
 
