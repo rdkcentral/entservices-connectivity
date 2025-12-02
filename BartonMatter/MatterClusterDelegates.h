@@ -20,6 +20,8 @@
 #pragma once
 
 #include <app/clusters/keypad-input-server/keypad-input-server.h>
+#include <memory>
+#include <vector>
 
 namespace WPEFramework
 {
@@ -98,6 +100,14 @@ namespace WPEFramework
             void Initialize();
 
             /**
+             * @brief Register KeypadInput delegate for a specific endpoint
+             * Called from emberAfKeypadInputClusterInitCallback
+             *
+             * @param endpoint The endpoint ID where KeypadInput cluster is initialized
+             */
+            void RegisterKeypadInputDelegate(chip::EndpointId endpoint);
+
+            /**
              * @brief Cleanup and unregister all cluster delegates
              */
             void Shutdown();
@@ -110,8 +120,11 @@ namespace WPEFramework
 
             bool mInitialized = false;
 
-            // Delegate instances
+            // Shared delegate instance for all endpoints (memory efficient)
             std::unique_ptr<MatterKeypadInputDelegate> mKeypadInputDelegate;
+
+            // Track registered endpoints for cleanup
+            std::vector<chip::EndpointId> mRegisteredEndpoints;
         };
 
     } // namespace Plugin
