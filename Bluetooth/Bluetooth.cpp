@@ -412,7 +412,7 @@ namespace WPEFramework
                     deviceDetails["deviceType"] = string(BTRMGR_GetDeviceTypeAsString(discoveredDevices->m_deviceProperty[i].m_deviceType));
                     deviceDetails["connected"] = discoveredDevices->m_deviceProperty[i].m_isConnected?true:false;
                     deviceDetails["paired"] = discoveredDevices->m_deviceProperty[i].m_isPairedDevice?true:false;
-		    deviceDetails["rawDeviceType"] = std::to_string(discoveredDevices->m_deviceProperty[i].m_ui32DevClassBtSpec);
+                    deviceDetails["rawDeviceType"] = std::to_string(discoveredDevices->m_deviceProperty[i].m_ui32DevClassBtSpec);
                     deviceDetails["rawBleDeviceType"] = std::to_string(discoveredDevices->m_deviceProperty[i].m_ui16DevAppearanceBleSpec);
                     deviceArray.Add(deviceDetails);
                 }
