@@ -19,7 +19,12 @@
 
 #include "MatterClusterDelegates.h"
 #include <lib/support/logging/CHIPLogging.h>
-#include <cstdlib>
+#include <linux/uinput.h>
+#include <linux/input.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <cstring>
+#include <sys/time.h>
 
 using namespace chip;
 using namespace chip::app::Clusters;
@@ -34,6 +39,159 @@ namespace WPEFramework
         MatterKeypadInputDelegate::MatterKeypadInputDelegate()
         {
             ChipLogProgress(AppServer, "MatterKeypadInputDelegate created");
+            if (!InitializeUinput())
+            {
+                ChipLogError(AppServer, "Failed to initialize uinput device");
+            }
+        }
+
+        MatterKeypadInputDelegate::~MatterKeypadInputDelegate()
+        {
+            CleanupUinput();
+        }
+
+        bool MatterKeypadInputDelegate::InitializeUinput()
+        {
+            mUinputFd = open("/dev/uinput", O_WRONLY | O_NONBLOCK);
+            if (mUinputFd < 0)
+            {
+                ChipLogError(AppServer, "Failed to open /dev/uinput: %s", strerror(errno));
+                return false;
+            }
+
+            // Enable key events
+            ioctl(mUinputFd, UI_SET_EVBIT, EV_KEY);
+            ioctl(mUinputFd, UI_SET_EVBIT, EV_SYN);
+
+            // Enable all key codes we might use
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_UP);
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_DOWN);
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_LEFT);
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_RIGHT);
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_ENTER);
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_ESC);
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_HOME);
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_SETUP);
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_0);
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_1);
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_2);
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_3);
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_4);
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_5);
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_6);
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_7);
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_8);
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_9);
+
+            // Setup device
+            struct uinput_setup usetup;
+            memset(&usetup, 0, sizeof(usetup));
+            usetup.id.bustype = BUS_USB;
+            usetup.id.vendor = 0xbeef;
+            usetup.id.product = 0xfedc;
+            usetup.id.version = 1;
+            strncpy(usetup.name, "matter-key-injector", UINPUT_MAX_NAME_SIZE);
+
+            if (ioctl(mUinputFd, UI_DEV_SETUP, &usetup) < 0)
+            {
+                ChipLogError(AppServer, "Failed to setup uinput device: %s", strerror(errno));
+                close(mUinputFd);
+                mUinputFd = -1;
+                return false;
+            }
+
+            if (ioctl(mUinputFd, UI_DEV_CREATE) < 0)
+            {
+                ChipLogError(AppServer, "Failed to create uinput device: %s", strerror(errno));
+                close(mUinputFd);
+                mUinputFd = -1;
+                return false;
+            }
+
+            // Small delay for device to be ready
+            usleep(50000);
+
+            ChipLogProgress(AppServer, "Uinput device initialized successfully");
+            return true;
+        }
+
+        void MatterKeypadInputDelegate::CleanupUinput()
+        {
+            if (mUinputFd >= 0)
+            {
+                ioctl(mUinputFd, UI_DEV_DESTROY);
+                close(mUinputFd);
+                mUinputFd = -1;
+                ChipLogProgress(AppServer, "Uinput device cleaned up");
+            }
+        }
+
+        void MatterKeypadInputDelegate::SendKeyEvent(int linuxKeyCode)
+        {
+            if (mUinputFd < 0)
+            {
+                ChipLogError(AppServer, "Uinput not initialized");
+                return;
+            }
+
+            struct input_event ev;
+            memset(&ev, 0, sizeof(ev));
+            gettimeofday(&ev.time, NULL);
+
+            // Key press
+            ev.type = EV_KEY;
+            ev.code = linuxKeyCode;
+            ev.value = 1;
+            write(mUinputFd, &ev, sizeof(ev));
+
+            // Sync
+            ev.type = EV_SYN;
+            ev.code = SYN_REPORT;
+            ev.value = 0;
+            write(mUinputFd, &ev, sizeof(ev));
+
+            // Small delay between press and release
+            usleep(100);
+
+            // Key release
+            ev.type = EV_KEY;
+            ev.code = linuxKeyCode;
+            ev.value = 0;
+            gettimeofday(&ev.time, NULL);
+            write(mUinputFd, &ev, sizeof(ev));
+
+            // Sync
+            ev.type = EV_SYN;
+            ev.code = SYN_REPORT;
+            ev.value = 0;
+            write(mUinputFd, &ev, sizeof(ev));
+
+            ChipLogProgress(AppServer, "Sent key event: code=%d", linuxKeyCode);
+        }
+
+        int MatterKeypadInputDelegate::GetLinuxKeyCode(const char* keyName)
+        {
+            // Map RDK key names to Linux input key codes
+            // Based on keySimulator's mapping table
+            if (strcmp(keyName, "up") == 0) return KEY_UP;
+            if (strcmp(keyName, "down") == 0) return KEY_DOWN;
+            if (strcmp(keyName, "left") == 0) return KEY_LEFT;
+            if (strcmp(keyName, "right") == 0) return KEY_RIGHT;
+            if (strcmp(keyName, "select") == 0) return KEY_ENTER;
+            if (strcmp(keyName, "exit") == 0) return KEY_ESC;
+            if (strcmp(keyName, "guide") == 0) return KEY_HOME;
+            if (strcmp(keyName, "settings") == 0) return KEY_SETUP;
+            if (strcmp(keyName, "0") == 0) return KEY_0;
+            if (strcmp(keyName, "1") == 0) return KEY_1;
+            if (strcmp(keyName, "2") == 0) return KEY_2;
+            if (strcmp(keyName, "3") == 0) return KEY_3;
+            if (strcmp(keyName, "4") == 0) return KEY_4;
+            if (strcmp(keyName, "5") == 0) return KEY_5;
+            if (strcmp(keyName, "6") == 0) return KEY_6;
+            if (strcmp(keyName, "7") == 0) return KEY_7;
+            if (strcmp(keyName, "8") == 0) return KEY_8;
+            if (strcmp(keyName, "9") == 0) return KEY_9;
+            return -1;
         }
 
         void MatterKeypadInputDelegate::HandleSendKey(
@@ -111,13 +269,19 @@ namespace WPEFramework
             response.status = KeypadInput::StatusEnum::kSuccess;
             helper.Success(response);
 
-            // Execute keySimulator command after sending response (non-blocking)
+            // Inject key directly via uinput (fast path - no process spawning)
             if (keySimCmd != nullptr)
             {
-                char command[256];
-                snprintf(command, sizeof(command), "keySimulator -k%s >/dev/null 2>&1 &", keySimCmd);
-                ChipLogProgress(AppServer, "Executing: %s", command);
-                system(command);
+                int linuxKeyCode = GetLinuxKeyCode(keySimCmd);
+                if (linuxKeyCode >= 0)
+                {
+                    SendKeyEvent(linuxKeyCode);
+                    ChipLogProgress(AppServer, "Injected key: %s (linux code: %d)", keySimCmd, linuxKeyCode);
+                }
+                else
+                {
+                    ChipLogError(AppServer, "Failed to map key: %s", keySimCmd);
+                }
             }
             else
             {

@@ -39,7 +39,7 @@ namespace WPEFramework
         {
         public:
             MatterKeypadInputDelegate();
-            virtual ~MatterKeypadInputDelegate() = default;
+            virtual ~MatterKeypadInputDelegate();
 
             /**
              * @brief Handle incoming SendKey command
@@ -59,6 +59,18 @@ namespace WPEFramework
             uint32_t GetFeatureMap(chip::EndpointId endpoint) override;
 
         private:
+            // Initialize/cleanup uinput device
+            bool InitializeUinput();
+            void CleanupUinput();
+
+            // Send key event directly to uinput
+            void SendKeyEvent(int linuxKeyCode);
+
+            // Map RDK key codes to Linux input key codes
+            int GetLinuxKeyCode(const char* keyName);
+
+            int mUinputFd = -1;  // File descriptor for /dev/uinput
+
             static constexpr chip::app::Clusters::KeypadInput::CECKeyCodeEnum sSupportedKeyCodes[] = {
                 chip::app::Clusters::KeypadInput::CECKeyCodeEnum::kUp,
                 chip::app::Clusters::KeypadInput::CECKeyCodeEnum::kDown,
