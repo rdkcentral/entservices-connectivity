@@ -142,7 +142,7 @@ namespace WPEFramework
 
         void MatterApplicationLauncherDelegate::HandleLaunchApp(
             chip::app::CommandResponseHelper<ApplicationLauncher::Commands::LauncherResponse::Type> & helper,
-            const chip::app::DataModel::Nullable<chip::ByteSpan> & data,
+            const chip::ByteSpan & data,
             const ApplicationLauncher::Structs::ApplicationStruct::DecodableType & application)
         {
             ChipLogProgress(AppServer, "HandleLaunchApp: catalogVendorId=%d, applicationId=%.*s",
@@ -155,7 +155,7 @@ namespace WPEFramework
             // TODO: Integrate with Thunder application management
             // For now, return success
             response.status = ApplicationLauncher::StatusEnum::kSuccess;
-            response.data.SetNull();
+            // response.data is Optional, leave it unset (no data to return)
 
             helper.Success(response);
 
@@ -177,7 +177,6 @@ namespace WPEFramework
 
             // TODO: Integrate with Thunder application management
             response.status = ApplicationLauncher::StatusEnum::kSuccess;
-            response.data.SetNull();
 
             helper.Success(response);
 
@@ -185,7 +184,25 @@ namespace WPEFramework
             ChipLogProgress(AppServer, "Application stop would be executed here");
         }
 
-        CHIP_ERROR MatterApplicationLauncherDelegate::HandleGetCatalogList(chip::app::AttributeValueEncoder & encoder)
+        void MatterApplicationLauncherDelegate::HandleHideApp(
+            chip::app::CommandResponseHelper<ApplicationLauncher::Commands::LauncherResponse::Type> & helper,
+            const ApplicationLauncher::Structs::ApplicationStruct::DecodableType & application)
+        {
+            ChipLogProgress(AppServer, "HandleHideApp: catalogVendorId=%d, applicationId=%.*s",
+                          application.catalogVendorID,
+                          static_cast<int>(application.applicationID.size()),
+                          application.applicationID.data());
+
+            ApplicationLauncher::Commands::LauncherResponse::Type response;
+
+            // TODO: Integrate with Thunder application management
+            response.status = ApplicationLauncher::StatusEnum::kSuccess;
+
+            helper.Success(response);
+
+            // TODO: Hide/minimize the application via Thunder plugin
+            ChipLogProgress(AppServer, "Application hide would be executed here");
+        }        CHIP_ERROR MatterApplicationLauncherDelegate::HandleGetCatalogList(chip::app::AttributeValueEncoder & encoder)
         {
             // Return list of supported catalog vendor IDs
             // 0 = Content platform (CSA specification)

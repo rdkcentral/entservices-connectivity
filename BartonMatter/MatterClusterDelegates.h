@@ -85,7 +85,7 @@ namespace WPEFramework
          * @brief ApplicationLauncher delegate for handling app launch commands
          *
          * Implements the Matter ApplicationLauncher cluster delegate interface to handle
-         * LaunchApp and StopApp commands from casting clients. Routes commands to the
+         * LaunchApp, StopApp, and HideApp commands from casting clients. Routes commands to the
          * appropriate application management system.
          */
         class MatterApplicationLauncherDelegate : public chip::app::Clusters::ApplicationLauncher::Delegate
@@ -98,11 +98,11 @@ namespace WPEFramework
              * @brief Handle incoming LaunchApp command
              *
              * @param helper CommandResponseHelper for sending response
-             * @param data Optional application-specific data
+             * @param data Application-specific data (not Nullable, just ByteSpan)
              * @param application The application to launch
              */
             void HandleLaunchApp(chip::app::CommandResponseHelper<chip::app::Clusters::ApplicationLauncher::Commands::LauncherResponse::Type> & helper,
-                               const chip::app::DataModel::Nullable<chip::ByteSpan> & data,
+                               const chip::ByteSpan & data,
                                const chip::app::Clusters::ApplicationLauncher::Structs::ApplicationStruct::DecodableType & application) override;
 
             /**
@@ -112,6 +112,15 @@ namespace WPEFramework
              * @param application The application to stop
              */
             void HandleStopApp(chip::app::CommandResponseHelper<chip::app::Clusters::ApplicationLauncher::Commands::LauncherResponse::Type> & helper,
+                             const chip::app::Clusters::ApplicationLauncher::Structs::ApplicationStruct::DecodableType & application) override;
+
+            /**
+             * @brief Handle incoming HideApp command
+             *
+             * @param helper CommandResponseHelper for sending response
+             * @param application The application to hide
+             */
+            void HandleHideApp(chip::app::CommandResponseHelper<chip::app::Clusters::ApplicationLauncher::Commands::LauncherResponse::Type> & helper,
                              const chip::app::Clusters::ApplicationLauncher::Structs::ApplicationStruct::DecodableType & application) override;
 
             /**
