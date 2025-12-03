@@ -196,15 +196,6 @@ namespace WPEFramework
             });
         }
 
-        CHIP_ERROR MatterApplicationLauncherDelegate::HandleGetCurrentApp(chip::app::AttributeValueEncoder & encoder)
-        {
-            // TODO: Query Thunder for currently running application
-            // For now, return null (no app running)
-            chip::app::DataModel::Nullable<ApplicationLauncher::Structs::ApplicationEPStruct::Type> currentApp;
-            currentApp.SetNull();
-            return encoder.Encode(currentApp);
-        }
-
         // ============================================================================
         // MatterClusterDelegateManager Implementation
         // ============================================================================
