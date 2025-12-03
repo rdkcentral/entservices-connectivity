@@ -98,29 +98,6 @@ namespace WPEFramework
              * @brief Handle incoming LaunchApp command
              *
              * @param helper CommandResponseHelper for sending response
-            bool mInitialized = false;
-            std::unique_ptr<MatterKeypadInputDelegate> mKeypadInputDelegate;
-            std::unique_ptr<MatterApplicationLauncherDelegate> mApplicationLauncherDelegate;
-            std::vector<chip::EndpointId> mRegisteredEndpoints;
-        };
-
-        /**
-         * @brief ApplicationLauncher delegate for handling app launch commands
-         *
-         * Implements the Matter ApplicationLauncher cluster delegate interface to handle
-         * LaunchApp and StopApp commands from casting clients. Routes commands to the
-         * appropriate application management system.
-         */
-        class MatterApplicationLauncherDelegate : public chip::app::Clusters::ApplicationLauncher::Delegate
-        {
-        public:
-            MatterApplicationLauncherDelegate();
-            virtual ~MatterApplicationLauncherDelegate() = default;
-
-            /**
-             * @brief Handle incoming LaunchApp command
-             *
-             * @param helper CommandResponseHelper for sending response
              * @param data Optional application-specific data
              * @param application The application to launch
              */
@@ -164,6 +141,7 @@ namespace WPEFramework
 
             bool mInitialized = false;
             std::unique_ptr<MatterKeypadInputDelegate> mKeypadInputDelegate;
+            std::unique_ptr<MatterApplicationLauncherDelegate> mApplicationLauncherDelegate;
             std::vector<chip::EndpointId> mRegisteredEndpoints;
         };
 
