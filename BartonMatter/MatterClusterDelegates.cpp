@@ -132,6 +132,80 @@ namespace WPEFramework
         }
 
         // ============================================================================
+        // MatterApplicationLauncherDelegate Implementation
+        // ============================================================================
+
+        MatterApplicationLauncherDelegate::MatterApplicationLauncherDelegate()
+        {
+            ChipLogProgress(AppServer, "MatterApplicationLauncherDelegate created");
+        }
+
+        void MatterApplicationLauncherDelegate::HandleLaunchApp(
+            chip::app::CommandResponseHelper<ApplicationLauncher::Commands::LauncherResponse::Type> & helper,
+            const chip::app::DataModel::Nullable<chip::ByteSpan> & data,
+            const ApplicationLauncher::Structs::ApplicationStruct::DecodableType & application)
+        {
+            ChipLogProgress(AppServer, "HandleLaunchApp: catalogVendorId=%d, applicationId=%.*s",
+                          application.catalogVendorID,
+                          static_cast<int>(application.applicationID.size()),
+                          application.applicationID.data());
+
+            ApplicationLauncher::Commands::LauncherResponse::Type response;
+
+            // TODO: Integrate with Thunder application management
+            // For now, return success
+            response.status = ApplicationLauncher::StatusEnum::kSuccess;
+            response.data.SetNull();
+
+            helper.Success(response);
+
+            // TODO: Launch the application via Thunder plugin
+            // Example: use rdkshell or residentapp to launch the specified application
+            ChipLogProgress(AppServer, "Application launch would be executed here");
+        }
+
+        void MatterApplicationLauncherDelegate::HandleStopApp(
+            chip::app::CommandResponseHelper<ApplicationLauncher::Commands::LauncherResponse::Type> & helper,
+            const ApplicationLauncher::Structs::ApplicationStruct::DecodableType & application)
+        {
+            ChipLogProgress(AppServer, "HandleStopApp: catalogVendorId=%d, applicationId=%.*s",
+                          application.catalogVendorID,
+                          static_cast<int>(application.applicationID.size()),
+                          application.applicationID.data());
+
+            ApplicationLauncher::Commands::LauncherResponse::Type response;
+
+            // TODO: Integrate with Thunder application management
+            response.status = ApplicationLauncher::StatusEnum::kSuccess;
+            response.data.SetNull();
+
+            helper.Success(response);
+
+            // TODO: Stop the application via Thunder plugin
+            ChipLogProgress(AppServer, "Application stop would be executed here");
+        }
+
+        CHIP_ERROR MatterApplicationLauncherDelegate::HandleGetCatalogList(chip::app::AttributeValueEncoder & encoder)
+        {
+            // Return list of supported catalog vendor IDs
+            // 0 = Content platform (CSA specification)
+            return encoder.EncodeList([](const auto & listEncoder) -> CHIP_ERROR {
+                // Add catalog vendor ID 0 (CSA specification)
+                ReturnErrorOnFailure(listEncoder.Encode(static_cast<uint16_t>(0)));
+                return CHIP_NO_ERROR;
+            });
+        }
+
+        CHIP_ERROR MatterApplicationLauncherDelegate::HandleGetCurrentApp(chip::app::AttributeValueEncoder & encoder)
+        {
+            // TODO: Query Thunder for currently running application
+            // For now, return null (no app running)
+            chip::app::DataModel::Nullable<ApplicationLauncher::Structs::ApplicationEPStruct::Type> currentApp;
+            currentApp.SetNull();
+            return encoder.Encode(currentApp);
+        }
+
+        // ============================================================================
         // MatterClusterDelegateManager Implementation
         // ============================================================================
 
@@ -155,8 +229,14 @@ namespace WPEFramework
             KeypadInput::SetDefaultDelegate(3, mKeypadInputDelegate.get());
             mRegisteredEndpoints.push_back(3);
 
+            // Create ApplicationLauncher delegate
+            mApplicationLauncherDelegate = std::make_unique<MatterApplicationLauncherDelegate>();
+
+            // Register delegate for ApplicationLauncher cluster on endpoint 3
+            ApplicationLauncher::SetDefaultDelegate(3, mApplicationLauncherDelegate.get());
+
             mInitialized = true;
-            ChipLogProgress(AppServer, "KeypadInput delegate registered for endpoint 3");
+            ChipLogProgress(AppServer, "KeypadInput and ApplicationLauncher delegates registered for endpoint 3");
         }
 
 
@@ -172,11 +252,13 @@ namespace WPEFramework
             for (chip::EndpointId ep : mRegisteredEndpoints)
             {
                 KeypadInput::SetDefaultDelegate(ep, nullptr);
+                ApplicationLauncher::SetDefaultDelegate(ep, nullptr);
             }
             mRegisteredEndpoints.clear();
 
             // Cleanup
             mKeypadInputDelegate.reset();
+            mApplicationLauncherDelegate.reset();
             mInitialized = false;
         }
 
