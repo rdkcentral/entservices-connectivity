@@ -71,27 +71,6 @@ namespace WPEFramework
             int GetLinuxKeyCode(const char* keyName);
 
             int mUinputFd = -1;  // File descriptor for /dev/uinput
-
-            static constexpr chip::app::Clusters::KeypadInput::CECKeyCodeEnum sSupportedKeyCodes[] = {
-                chip::app::Clusters::KeypadInput::CECKeyCodeEnum::kUp,
-                chip::app::Clusters::KeypadInput::CECKeyCodeEnum::kDown,
-                chip::app::Clusters::KeypadInput::CECKeyCodeEnum::kLeft,
-                chip::app::Clusters::KeypadInput::CECKeyCodeEnum::kRight,
-                chip::app::Clusters::KeypadInput::CECKeyCodeEnum::kSelect,
-                chip::app::Clusters::KeypadInput::CECKeyCodeEnum::kBackward,
-                chip::app::Clusters::KeypadInput::CECKeyCodeEnum::kExit,
-                chip::app::Clusters::KeypadInput::CECKeyCodeEnum::kRootMenu,
-                chip::app::Clusters::KeypadInput::CECKeyCodeEnum::kSetupMenu,
-                chip::app::Clusters::KeypadInput::CECKeyCodeEnum::kContentsMenu,
-                chip::app::Clusters::KeypadInput::CECKeyCodeEnum::kFavoriteMenu,
-                chip::app::Clusters::KeypadInput::CECKeyCodeEnum::kNumbers3,
-                chip::app::Clusters::KeypadInput::CECKeyCodeEnum::kNumbers4,
-                chip::app::Clusters::KeypadInput::CECKeyCodeEnum::kNumbers5,
-                chip::app::Clusters::KeypadInput::CECKeyCodeEnum::kNumbers6,
-                chip::app::Clusters::KeypadInput::CECKeyCodeEnum::kNumbers7,
-                chip::app::Clusters::KeypadInput::CECKeyCodeEnum::kNumbers8,
-                chip::app::Clusters::KeypadInput::CECKeyCodeEnum::kNumbers9,
-            };
         };
 
         /**

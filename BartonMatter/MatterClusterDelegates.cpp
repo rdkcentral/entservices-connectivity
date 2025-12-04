@@ -33,9 +33,6 @@ namespace WPEFramework
 {
     namespace Plugin
     {
-        // Define supported key codes
-        constexpr KeypadInput::CECKeyCodeEnum MatterKeypadInputDelegate::sSupportedKeyCodes[];
-
         MatterKeypadInputDelegate::MatterKeypadInputDelegate()
         {
             ChipLogProgress(AppServer, "MatterKeypadInputDelegate created");
