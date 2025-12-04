@@ -390,7 +390,7 @@ namespace WPEFramework
             // Initialize cluster delegates for handling incoming commands
             // Must run on Matter event loop to ensure proper timing
             chip::DeviceLayer::PlatformMgr().ScheduleWork([](intptr_t) {
-                ChipLogProgress(AppServer, "🔧 Scheduling cluster delegate initialization...");
+                ChipLogProgress(AppServer, "Scheduling cluster delegate initialization...");
                 MatterClusterDelegateManager::GetInstance().Initialize();
             });
 

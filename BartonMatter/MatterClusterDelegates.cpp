@@ -108,7 +108,7 @@ namespace WPEFramework
                 return false;
             }
 
-            // Small delay for device to be ready
+            // will device be created immediately or this delay is necessary?
             usleep(50000);
 
             ChipLogProgress(AppServer, "Uinput device initialized successfully");
@@ -133,6 +133,16 @@ namespace WPEFramework
                 ChipLogError(AppServer, "Uinput not initialized");
                 return;
             }
+	    /*
+	     * the internal kernel input_struct will look something likee this
+	     * struct input_event {
+	     * 	struct timeval time;
+	     *	short type;
+	     *	short code;
+	     *	int code;
+	     * } 
+	     *
+	     * */
 
             struct input_event ev;
             memset(&ev, 0, sizeof(ev));
@@ -144,13 +154,13 @@ namespace WPEFramework
             ev.value = 1;
             write(mUinputFd, &ev, sizeof(ev));
 
-            // Sync
+            // Sync is necessary, else kernel keeps on waiting
             ev.type = EV_SYN;
             ev.code = SYN_REPORT;
             ev.value = 0;
             write(mUinputFd, &ev, sizeof(ev));
 
-            // Small delay between press and release
+            // 0.1ms delay to mimic the key press and release behaviour
             usleep(100);
 
             // Key release
@@ -171,8 +181,8 @@ namespace WPEFramework
 
         int MatterKeypadInputDelegate::GetLinuxKeyCode(const char* keyName)
         {
-            // Map RDK key names to Linux input key codes
-            // Based on keySimulator's mapping table
+            // Map device key names to Linux input key codes
+            // inspired from keySimulator's mapping table
             if (strcmp(keyName, "up") == 0) return KEY_UP;
             if (strcmp(keyName, "down") == 0) return KEY_DOWN;
             if (strcmp(keyName, "left") == 0) return KEY_LEFT;
@@ -264,12 +274,11 @@ namespace WPEFramework
                     break;
             }
 
-            // Send success response immediately
+            // its better to send the response as soon as we reeceive the key
             KeypadInput::Commands::SendKeyResponse::Type response;
             response.status = KeypadInput::StatusEnum::kSuccess;
             helper.Success(response);
 
-            // Inject key directly via uinput (fast path - no process spawning)
             if (keySimCmd != nullptr)
             {
                 int linuxKeyCode = GetLinuxKeyCode(keySimCmd);
@@ -295,9 +304,7 @@ namespace WPEFramework
             return 0x07; // Bits 0,1,2 set
         }
 
-        // ============================================================================
         // MatterApplicationLauncherDelegate Implementation
-        // ============================================================================
 
         MatterApplicationLauncherDelegate::MatterApplicationLauncherDelegate()
         {
@@ -377,9 +384,7 @@ namespace WPEFramework
             });
         }
 
-        // ============================================================================
         // MatterClusterDelegateManager Implementation
-        // ============================================================================
 
         MatterClusterDelegateManager& MatterClusterDelegateManager::GetInstance()
         {
