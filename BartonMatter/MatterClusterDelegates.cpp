@@ -64,14 +64,22 @@ namespace WPEFramework
             ioctl(mUinputFd, UI_SET_EVBIT, EV_SYN);
 
             // Enable all key codes we might use
+            // Navigation keys
             ioctl(mUinputFd, UI_SET_KEYBIT, KEY_UP);
             ioctl(mUinputFd, UI_SET_KEYBIT, KEY_DOWN);
             ioctl(mUinputFd, UI_SET_KEYBIT, KEY_LEFT);
             ioctl(mUinputFd, UI_SET_KEYBIT, KEY_RIGHT);
             ioctl(mUinputFd, UI_SET_KEYBIT, KEY_ENTER);
             ioctl(mUinputFd, UI_SET_KEYBIT, KEY_ESC);
-            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_HOME);
-            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_SETUP);
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_BACK);
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_HOMEPAGE);
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_MENU);
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_INFO);
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_HELP);
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_PAGEUP);
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_PAGEDOWN);
+
+            // Number keys
             ioctl(mUinputFd, UI_SET_KEYBIT, KEY_0);
             ioctl(mUinputFd, UI_SET_KEYBIT, KEY_1);
             ioctl(mUinputFd, UI_SET_KEYBIT, KEY_2);
@@ -82,6 +90,31 @@ namespace WPEFramework
             ioctl(mUinputFd, UI_SET_KEYBIT, KEY_7);
             ioctl(mUinputFd, UI_SET_KEYBIT, KEY_8);
             ioctl(mUinputFd, UI_SET_KEYBIT, KEY_9);
+
+            // Channel/Volume keys (need CTRL modifier for channel)
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_LEFTCTRL);
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_KPPLUS);      // Volume up
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_KPMINUS);     // Volume down
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_KPASTERISK);  // Mute
+
+            // Media control keys
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_PLAYPAUSE);
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_PLAY);
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_PAUSE);
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_STOP);
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_RECORD);
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_REWIND);
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_FASTFORWARD);
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_NEXTSONG);
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_PREVIOUSSONG);
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_EJECTCD);
+
+            // Power
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_POWER);
+
+            // Additional function keys
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_EPG);         // Electronic Program Guide
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_FAVORITES);
 
             // Setup device
             struct uinput_setup usetup;
@@ -140,7 +173,7 @@ namespace WPEFramework
 	     *	short type;
 	     *	short code;
 	     *	int code;
-	     * } 
+	     * }
 	     *
 	     * */
 
@@ -179,18 +212,94 @@ namespace WPEFramework
             ChipLogProgress(AppServer, "Sent key event: code=%d", linuxKeyCode);
         }
 
+        void MatterKeypadInputDelegate::SendKeyWithModifier(int modifierKeyCode, int mainKeyCode)
+        {
+            if (mUinputFd < 0)
+            {
+                ChipLogError(AppServer, "Uinput not initialized");
+                return;
+            }
+
+            struct input_event ev;
+            memset(&ev, 0, sizeof(ev));
+
+            // Press modifier (e.g., CTRL)
+            gettimeofday(&ev.time, NULL);
+            ev.type = EV_KEY;
+            ev.code = modifierKeyCode;
+            ev.value = 1;
+            write(mUinputFd, &ev, sizeof(ev));
+
+            ev.type = EV_SYN;
+            ev.code = SYN_REPORT;
+            ev.value = 0;
+            write(mUinputFd, &ev, sizeof(ev));
+
+            usleep(100);
+
+            // Press main key
+            gettimeofday(&ev.time, NULL);
+            ev.type = EV_KEY;
+            ev.code = mainKeyCode;
+            ev.value = 1;
+            write(mUinputFd, &ev, sizeof(ev));
+
+            ev.type = EV_SYN;
+            ev.code = SYN_REPORT;
+            ev.value = 0;
+            write(mUinputFd, &ev, sizeof(ev));
+
+            usleep(100);
+
+            // Release main key
+            gettimeofday(&ev.time, NULL);
+            ev.type = EV_KEY;
+            ev.code = mainKeyCode;
+            ev.value = 0;
+            write(mUinputFd, &ev, sizeof(ev));
+
+            ev.type = EV_SYN;
+            ev.code = SYN_REPORT;
+            ev.value = 0;
+            write(mUinputFd, &ev, sizeof(ev));
+
+            usleep(100);
+
+            // Release modifier
+            gettimeofday(&ev.time, NULL);
+            ev.type = EV_KEY;
+            ev.code = modifierKeyCode;
+            ev.value = 0;
+            write(mUinputFd, &ev, sizeof(ev));
+
+            ev.type = EV_SYN;
+            ev.code = SYN_REPORT;
+            ev.value = 0;
+            write(mUinputFd, &ev, sizeof(ev));
+
+            ChipLogProgress(AppServer, "Sent key with modifier: modifier=%d, key=%d", modifierKeyCode, mainKeyCode);
+        }
+
         int MatterKeypadInputDelegate::GetLinuxKeyCode(const char* keyName)
         {
             // Map device key names to Linux input key codes
             // inspired from keySimulator's mapping table
+            // Navigation
             if (strcmp(keyName, "up") == 0) return KEY_UP;
             if (strcmp(keyName, "down") == 0) return KEY_DOWN;
             if (strcmp(keyName, "left") == 0) return KEY_LEFT;
             if (strcmp(keyName, "right") == 0) return KEY_RIGHT;
             if (strcmp(keyName, "select") == 0) return KEY_ENTER;
+            if (strcmp(keyName, "back") == 0) return KEY_BACK;
             if (strcmp(keyName, "exit") == 0) return KEY_ESC;
-            if (strcmp(keyName, "guide") == 0) return KEY_HOME;
-            if (strcmp(keyName, "settings") == 0) return KEY_SETUP;
+            if (strcmp(keyName, "home") == 0) return KEY_HOMEPAGE;
+            if (strcmp(keyName, "menu") == 0) return KEY_MENU;
+            if (strcmp(keyName, "info") == 0) return KEY_INFO;
+            if (strcmp(keyName, "help") == 0) return KEY_HELP;
+            if (strcmp(keyName, "pageup") == 0) return KEY_PAGEUP;
+            if (strcmp(keyName, "pagedown") == 0) return KEY_PAGEDOWN;
+
+            // Numbers
             if (strcmp(keyName, "0") == 0) return KEY_0;
             if (strcmp(keyName, "1") == 0) return KEY_1;
             if (strcmp(keyName, "2") == 0) return KEY_2;
@@ -201,6 +310,31 @@ namespace WPEFramework
             if (strcmp(keyName, "7") == 0) return KEY_7;
             if (strcmp(keyName, "8") == 0) return KEY_8;
             if (strcmp(keyName, "9") == 0) return KEY_9;
+
+            // Volume (keypad keys)
+            if (strcmp(keyName, "volup") == 0) return KEY_KPPLUS;
+            if (strcmp(keyName, "voldown") == 0) return KEY_KPMINUS;
+            if (strcmp(keyName, "mute") == 0) return KEY_KPASTERISK;
+
+            // Media controls
+            if (strcmp(keyName, "playpause") == 0) return KEY_PLAYPAUSE;
+            if (strcmp(keyName, "play") == 0) return KEY_PLAY;
+            if (strcmp(keyName, "pause") == 0) return KEY_PAUSE;
+            if (strcmp(keyName, "stop") == 0) return KEY_STOP;
+            if (strcmp(keyName, "record") == 0) return KEY_RECORD;
+            if (strcmp(keyName, "rewind") == 0) return KEY_REWIND;
+            if (strcmp(keyName, "fastforward") == 0) return KEY_FASTFORWARD;
+            if (strcmp(keyName, "forward") == 0) return KEY_NEXTSONG;
+            if (strcmp(keyName, "backward") == 0) return KEY_PREVIOUSSONG;
+            if (strcmp(keyName, "eject") == 0) return KEY_EJECTCD;
+
+            // Power
+            if (strcmp(keyName, "power") == 0) return KEY_POWER;
+
+            // Special functions
+            if (strcmp(keyName, "epg") == 0) return KEY_EPG;
+            if (strcmp(keyName, "favorites") == 0) return KEY_FAVORITES;
+
             return -1;
         }
 
@@ -208,11 +342,14 @@ namespace WPEFramework
             chip::app::CommandResponseHelper<KeypadInput::Commands::SendKeyResponse::Type> & helper,
             const KeypadInput::CECKeyCodeEnum & keyCode)
         {
-            // Map Matter CEC key codes to keySimulator commands
             const char* keySimCmd = nullptr;
+            bool useModifier = false;
+            int modifierCode = -1;
+            int mainKeyCode = -1;
 
             switch (keyCode)
             {
+                // Basic navigation
                 case KeypadInput::CECKeyCodeEnum::kUp:
                     keySimCmd = "up";
                     break;
@@ -228,18 +365,48 @@ namespace WPEFramework
                 case KeypadInput::CECKeyCodeEnum::kSelect:
                     keySimCmd = "select";
                     break;
+
+                // Exit/Back
                 case KeypadInput::CECKeyCodeEnum::kBackward:
+                    keySimCmd = "back";
+                    break;
                 case KeypadInput::CECKeyCodeEnum::kExit:
                     keySimCmd = "exit";
                     break;
+
+                // Menu navigation
                 case KeypadInput::CECKeyCodeEnum::kRootMenu:
-                case KeypadInput::CECKeyCodeEnum::kContentsMenu:
-                case KeypadInput::CECKeyCodeEnum::kFavoriteMenu:
-                    keySimCmd = "guide";
+                    keySimCmd = "home";
                     break;
                 case KeypadInput::CECKeyCodeEnum::kSetupMenu:
-                    keySimCmd = "settings";
+                    keySimCmd = "menu";
                     break;
+                case KeypadInput::CECKeyCodeEnum::kContentsMenu:
+                case KeypadInput::CECKeyCodeEnum::kFavoriteMenu:
+                    keySimCmd = "menu";
+                    break;
+                case KeypadInput::CECKeyCodeEnum::kMediaTopMenu:
+                case KeypadInput::CECKeyCodeEnum::kMediaContextSensitiveMenu:
+                    keySimCmd = "menu";
+                    break;
+
+                // Display and help
+                case KeypadInput::CECKeyCodeEnum::kDisplayInformation:
+                    keySimCmd = "info";
+                    break;
+                case KeypadInput::CECKeyCodeEnum::kHelp:
+                    keySimCmd = "help";
+                    break;
+
+                // Page navigation
+                case KeypadInput::CECKeyCodeEnum::kPageUp:
+                    keySimCmd = "pageup";
+                    break;
+                case KeypadInput::CECKeyCodeEnum::kPageDown:
+                    keySimCmd = "pagedown";
+                    break;
+
+                // Number keys
                 case KeypadInput::CECKeyCodeEnum::kNumber0OrNumber10:
                     keySimCmd = "0";
                     break;
@@ -270,7 +437,76 @@ namespace WPEFramework
                 case KeypadInput::CECKeyCodeEnum::kNumbers9:
                     keySimCmd = "9";
                     break;
+
+                // Channel control (CTRL + UP/DOWN)
+                case KeypadInput::CECKeyCodeEnum::kChannelUp:
+                    useModifier = true;
+                    modifierCode = KEY_LEFTCTRL;
+                    mainKeyCode = KEY_UP;
+                    break;
+                case KeypadInput::CECKeyCodeEnum::kChannelDown:
+                    useModifier = true;
+                    modifierCode = KEY_LEFTCTRL;
+                    mainKeyCode = KEY_DOWN;
+                    break;
+
+                // Volume control
+                case KeypadInput::CECKeyCodeEnum::kVolumeUp:
+                    keySimCmd = "volup";
+                    break;
+                case KeypadInput::CECKeyCodeEnum::kVolumeDown:
+                    keySimCmd = "voldown";
+                    break;
+                case KeypadInput::CECKeyCodeEnum::kMute:
+                case KeypadInput::CECKeyCodeEnum::kMuteFunction:
+                    keySimCmd = "mute";
+                    break;
+
+                // Media playback controls
+                case KeypadInput::CECKeyCodeEnum::kPlay:
+                case KeypadInput::CECKeyCodeEnum::kPlayFunction:
+                    keySimCmd = "play";
+                    break;
+                case KeypadInput::CECKeyCodeEnum::kPause:
+                case KeypadInput::CECKeyCodeEnum::kPausePlayFunction:
+                    keySimCmd = "pause";
+                    break;
+                case KeypadInput::CECKeyCodeEnum::kStop:
+                case KeypadInput::CECKeyCodeEnum::kStopFunction:
+                    keySimCmd = "stop";
+                    break;
+                case KeypadInput::CECKeyCodeEnum::kRecord:
+                case KeypadInput::CECKeyCodeEnum::kRecordFunction:
+                    keySimCmd = "record";
+                    break;
+                case KeypadInput::CECKeyCodeEnum::kRewind:
+                    keySimCmd = "rewind";
+                    break;
+                case KeypadInput::CECKeyCodeEnum::kFastForward:
+                    keySimCmd = "fastforward";
+                    break;
+                case KeypadInput::CECKeyCodeEnum::kForward:
+                    keySimCmd = "forward";
+                    break;
+                case KeypadInput::CECKeyCodeEnum::kEject:
+                    keySimCmd = "eject";
+                    break;
+
+                // Power
+                case KeypadInput::CECKeyCodeEnum::kPower:
+                case KeypadInput::CECKeyCodeEnum::kPowerToggleFunction:
+                case KeypadInput::CECKeyCodeEnum::kPowerOnFunction:
+                case KeypadInput::CECKeyCodeEnum::kPowerOffFunction:
+                    keySimCmd = "power";
+                    break;
+
+                // EPG
+                case KeypadInput::CECKeyCodeEnum::kElectronicProgramGuide:
+                    keySimCmd = "epg";
+                    break;
+
                 default:
+                    ChipLogProgress(AppServer, "Key code 0x%02x not mapped", static_cast<uint8_t>(keyCode));
                     break;
             }
 
@@ -279,22 +515,25 @@ namespace WPEFramework
             response.status = KeypadInput::StatusEnum::kSuccess;
             helper.Success(response);
 
-            if (keySimCmd != nullptr)
+            // Inject key via uinput
+            if (useModifier && modifierCode >= 0 && mainKeyCode >= 0)
+            {
+                // Channel keys use CTRL+UP/DOWN
+                SendKeyWithModifier(modifierCode, mainKeyCode);
+                ChipLogProgress(AppServer, "Injected key with modifier: mod=%d, key=%d", modifierCode, mainKeyCode);
+            }
+            else if (keySimCmd != nullptr)
             {
                 int linuxKeyCode = GetLinuxKeyCode(keySimCmd);
                 if (linuxKeyCode >= 0)
                 {
                     SendKeyEvent(linuxKeyCode);
-                    ChipLogProgress(AppServer, "Injected key: %s (linux code: %d)", keySimCmd, linuxKeyCode);
+                    ChipLogProgress(AppServer, "Injected key: %s (code=%d)", keySimCmd, linuxKeyCode);
                 }
                 else
                 {
                     ChipLogError(AppServer, "Failed to map key: %s", keySimCmd);
                 }
-            }
-            else
-            {
-                ChipLogProgress(AppServer, "Key code %d not mapped", static_cast<uint8_t>(keyCode));
             }
         }
 

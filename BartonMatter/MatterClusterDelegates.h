@@ -65,6 +65,7 @@ namespace WPEFramework
 
             // Send key event directly to uinput
             void SendKeyEvent(int linuxKeyCode);
+            void SendKeyWithModifier(int modifierKeyCode, int mainKeyCode);
 
             // Map RDK key codes to Linux input key codes
             int GetLinuxKeyCode(const char* keyName);
