@@ -66,7 +66,7 @@ namespace WPEFramework
             ioctl(mUinputFd, UI_SET_KEYBIT, KEY_DOWN);
             ioctl(mUinputFd, UI_SET_KEYBIT, KEY_LEFT);
             ioctl(mUinputFd, UI_SET_KEYBIT, KEY_RIGHT);
-            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_ENTER);
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_OK);     // Select/Enter
             ioctl(mUinputFd, UI_SET_KEYBIT, KEY_ESC);
             ioctl(mUinputFd, UI_SET_KEYBIT, KEY_HOME);    // Menu/Guide
             ioctl(mUinputFd, UI_SET_KEYBIT, KEY_F2);      // Help
@@ -282,7 +282,7 @@ namespace WPEFramework
             if (strcmp(keyName, "down") == 0) return KEY_DOWN;
             if (strcmp(keyName, "left") == 0) return KEY_LEFT;
             if (strcmp(keyName, "right") == 0) return KEY_RIGHT;
-            if (strcmp(keyName, "select") == 0) return KEY_ENTER;
+            if (strcmp(keyName, "select") == 0) return KEY_OK;  // KED_SELECT/ENTER -> KEY_OK
             if (strcmp(keyName, "back") == 0) return KEY_ESC;  // KED_BACK -> KEY_ESC
             if (strcmp(keyName, "exit") == 0) return KEY_ESC;
             if (strcmp(keyName, "home") == 0) return KEY_HOME;  // KED_MENU/GUIDE -> KEY_HOME
@@ -429,6 +429,9 @@ namespace WPEFramework
                     break;
                 case KeypadInput::CECKeyCodeEnum::kNumbers9:
                     keySimCmd = "9";
+                    break;
+                case KeypadInput::CECKeyCodeEnum::kEnter:
+                    keySimCmd = "select";
                     break;
 
                 // Channel control (CTRL + UP/DOWN)
