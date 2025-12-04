@@ -68,11 +68,9 @@ namespace WPEFramework
             ioctl(mUinputFd, UI_SET_KEYBIT, KEY_RIGHT);
             ioctl(mUinputFd, UI_SET_KEYBIT, KEY_ENTER);
             ioctl(mUinputFd, UI_SET_KEYBIT, KEY_ESC);
-            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_BACK);
-            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_HOMEPAGE);
-            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_MENU);
-            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_INFO);
-            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_HELP);
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_HOME);    // Menu/Guide
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_F2);      // Help
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_F9);      // Info
             ioctl(mUinputFd, UI_SET_KEYBIT, KEY_PAGEUP);
             ioctl(mUinputFd, UI_SET_KEYBIT, KEY_PAGEDOWN);
 
@@ -94,16 +92,14 @@ namespace WPEFramework
             ioctl(mUinputFd, UI_SET_KEYBIT, KEY_KPMINUS);     // Volume down
             ioctl(mUinputFd, UI_SET_KEYBIT, KEY_KPASTERISK);  // Mute
 
-            // Media control keys
-            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_PLAYPAUSE);
-            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_PLAY);
-            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_PAUSE);
-            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_STOP);
-            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_RECORD);
-            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_REWIND);
-            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_FASTFORWARD);
-            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_NEXTSONG);
-            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_PREVIOUSSONG);
+            // Media control keys (function keys as per keySimulator)
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_F7);   // Record
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_F10);  // Rewind
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_F11);  // Play/Pause
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_F12);  // Fast Forward
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_S);    // Stop (with CTRL)
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_NEXT);
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_PREVIOUS);
             ioctl(mUinputFd, UI_SET_KEYBIT, KEY_EJECTCD);
 
             // Power
@@ -287,12 +283,12 @@ namespace WPEFramework
             if (strcmp(keyName, "left") == 0) return KEY_LEFT;
             if (strcmp(keyName, "right") == 0) return KEY_RIGHT;
             if (strcmp(keyName, "select") == 0) return KEY_ENTER;
-            if (strcmp(keyName, "back") == 0) return KEY_BACK;
+            if (strcmp(keyName, "back") == 0) return KEY_ESC;  // KED_BACK -> KEY_ESC
             if (strcmp(keyName, "exit") == 0) return KEY_ESC;
-            if (strcmp(keyName, "home") == 0) return KEY_HOMEPAGE;
-            if (strcmp(keyName, "menu") == 0) return KEY_MENU;
-            if (strcmp(keyName, "info") == 0) return KEY_INFO;
-            if (strcmp(keyName, "help") == 0) return KEY_HELP;
+            if (strcmp(keyName, "home") == 0) return KEY_HOME;  // KED_MENU/GUIDE -> KEY_HOME
+            if (strcmp(keyName, "menu") == 0) return KEY_HOME;  // KED_MENU -> KEY_HOME
+            if (strcmp(keyName, "info") == 0) return KEY_F9;    // KED_INFO -> KEY_F9
+            if (strcmp(keyName, "help") == 0) return KEY_F2;    // KED_HELP -> KEY_F2
             if (strcmp(keyName, "pageup") == 0) return KEY_PAGEUP;
             if (strcmp(keyName, "pagedown") == 0) return KEY_PAGEDOWN;
 
@@ -313,16 +309,16 @@ namespace WPEFramework
             if (strcmp(keyName, "voldown") == 0) return KEY_KPMINUS;
             if (strcmp(keyName, "mute") == 0) return KEY_KPASTERISK;
 
-            // Media controls
-            if (strcmp(keyName, "playpause") == 0) return KEY_PLAYPAUSE;
-            if (strcmp(keyName, "play") == 0) return KEY_PLAY;
-            if (strcmp(keyName, "pause") == 0) return KEY_PAUSE;
-            if (strcmp(keyName, "stop") == 0) return KEY_STOP;
-            if (strcmp(keyName, "record") == 0) return KEY_RECORD;
-            if (strcmp(keyName, "rewind") == 0) return KEY_REWIND;
-            if (strcmp(keyName, "fastforward") == 0) return KEY_FASTFORWARD;
-            if (strcmp(keyName, "forward") == 0) return KEY_NEXTSONG;
-            if (strcmp(keyName, "backward") == 0) return KEY_PREVIOUSSONG;
+            // Media controls (using function keys as per keySimulator mapping)
+            if (strcmp(keyName, "playpause") == 0) return KEY_F11;
+            if (strcmp(keyName, "play") == 0) return KEY_F11;
+            if (strcmp(keyName, "pause") == 0) return KEY_F11;
+            if (strcmp(keyName, "stop") == 0) return KEY_S;  // Will use CTRL+S
+            if (strcmp(keyName, "record") == 0) return KEY_F7;
+            if (strcmp(keyName, "rewind") == 0) return KEY_F10;
+            if (strcmp(keyName, "fastforward") == 0) return KEY_F12;
+            if (strcmp(keyName, "forward") == 0) return KEY_NEXT;
+            if (strcmp(keyName, "backward") == 0) return KEY_PREVIOUS;
             if (strcmp(keyName, "eject") == 0) return KEY_EJECTCD;
 
             // Power
@@ -470,7 +466,10 @@ namespace WPEFramework
                     break;
                 case KeypadInput::CECKeyCodeEnum::kStop:
                 case KeypadInput::CECKeyCodeEnum::kStopFunction:
-                    keySimCmd = "stop";
+                    // Stop uses CTRL+S
+                    useModifier = true;
+                    modifierCode = KEY_LEFTCTRL;
+                    mainKeyCode = KEY_S;
                     break;
                 case KeypadInput::CECKeyCodeEnum::kRecord:
                 case KeypadInput::CECKeyCodeEnum::kRecordFunction:
