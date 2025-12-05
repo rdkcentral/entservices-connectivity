@@ -25,6 +25,8 @@
 #include <unistd.h>
 #include <cstring>
 #include <sys/time.h>
+#include <cstdlib>
+#include <array>
 
 using namespace chip;
 using namespace chip::app::Clusters;
@@ -561,16 +563,47 @@ namespace WPEFramework
 
             ApplicationLauncher::Commands::LauncherResponse::Type response;
 
-            // TODO: Integrate with Thunder application management
-            // For now, return success
-            response.status = ApplicationLauncher::StatusEnum::kSuccess;
-            // response.data is Optional, leave it unset (no data to return)
+            // Extract application ID as string
+            std::string appId(reinterpret_cast<const char*>(application.applicationID.data()),
+                            application.applicationID.size());
+
+            // Build Thunder API command to launch app
+            std::string command = "curl -X POST \"http://127.0.0.1:9005/as/apps/action/launch?appId=" + appId + "\" -d '' 2>&1";
+
+            ChipLogProgress(AppServer, "Launching app with command: %s", command.c_str());
+
+            // Execute the command
+            std::array<char, 128> buffer;
+            std::string result;
+            FILE* pipe = popen(command.c_str(), "r");
+
+            if (pipe)
+            {
+                while (fgets(buffer.data(), buffer.size(), pipe) != nullptr)
+                {
+                    result += buffer.data();
+                }
+                int exitCode = pclose(pipe);
+
+                if (exitCode == 0)
+                {
+                    response.status = ApplicationLauncher::StatusEnum::kSuccess;
+                    ChipLogProgress(AppServer, "Application launched successfully: %s", appId.c_str());
+                }
+                else
+                {
+                    response.status = ApplicationLauncher::StatusEnum::kSystemBusy;
+                    ChipLogError(AppServer, "Failed to launch app %s, exit code: %d, output: %s",
+                               appId.c_str(), exitCode, result.c_str());
+                }
+            }
+            else
+            {
+                response.status = ApplicationLauncher::StatusEnum::kSystemBusy;
+                ChipLogError(AppServer, "Failed to execute launch command for %s", appId.c_str());
+            }
 
             helper.Success(response);
-
-            // TODO: Launch the application via Thunder plugin
-            // Example: use rdkshell or residentapp to launch the specified application
-            ChipLogProgress(AppServer, "Application launch would be executed here");
         }
 
         void MatterApplicationLauncherDelegate::HandleStopApp(
@@ -584,13 +617,47 @@ namespace WPEFramework
 
             ApplicationLauncher::Commands::LauncherResponse::Type response;
 
-            // TODO: Integrate with Thunder application management
-            response.status = ApplicationLauncher::StatusEnum::kSuccess;
+            // Extract application ID as string
+            std::string appId(reinterpret_cast<const char*>(application.applicationID.data()),
+                            application.applicationID.size());
+
+            // Build Thunder API command to close app
+            std::string command = "curl -X POST \"http://127.0.0.1:9005/as/apps/action/close?appId=" + appId + "\" -d '' 2>&1";
+
+            ChipLogProgress(AppServer, "Closing app with command: %s", command.c_str());
+
+            // Execute the command
+            std::array<char, 128> buffer;
+            std::string result;
+            FILE* pipe = popen(command.c_str(), "r");
+
+            if (pipe)
+            {
+                while (fgets(buffer.data(), buffer.size(), pipe) != nullptr)
+                {
+                    result += buffer.data();
+                }
+                int exitCode = pclose(pipe);
+
+                if (exitCode == 0)
+                {
+                    response.status = ApplicationLauncher::StatusEnum::kSuccess;
+                    ChipLogProgress(AppServer, "Application closed successfully: %s", appId.c_str());
+                }
+                else
+                {
+                    response.status = ApplicationLauncher::StatusEnum::kSystemBusy;
+                    ChipLogError(AppServer, "Failed to close app %s, exit code: %d, output: %s",
+                               appId.c_str(), exitCode, result.c_str());
+                }
+            }
+            else
+            {
+                response.status = ApplicationLauncher::StatusEnum::kSystemBusy;
+                ChipLogError(AppServer, "Failed to execute close command for %s", appId.c_str());
+            }
 
             helper.Success(response);
-
-            // TODO: Stop the application via Thunder plugin
-            ChipLogProgress(AppServer, "Application stop would be executed here");
         }
 
         void MatterApplicationLauncherDelegate::HandleHideApp(
