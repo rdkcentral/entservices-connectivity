@@ -275,6 +275,116 @@ namespace WPEFramework
             ChipLogProgress(AppServer, "Sent key with modifier: modifier=%d, key=%d", modifierKeyCode, mainKeyCode);
         }
 
+        void MatterKeypadInputDelegate::SendKeyHold(int linuxKeyCode, int holdDurationMs)
+        {
+            if (mUinputFd < 0)
+            {
+                ChipLogError(AppServer, "Uinput not initialized");
+                return;
+            }
+
+            struct input_event ev;
+            memset(&ev, 0, sizeof(ev));
+
+            // Press key
+            gettimeofday(&ev.time, NULL);
+            ev.type = EV_KEY;
+            ev.code = linuxKeyCode;
+            ev.value = 1;
+            write(mUinputFd, &ev, sizeof(ev));
+
+            ev.type = EV_SYN;
+            ev.code = SYN_REPORT;
+            ev.value = 0;
+            write(mUinputFd, &ev, sizeof(ev));
+
+            // Hold the key for specified duration
+            usleep(holdDurationMs * 1000);
+
+            // Release key
+            gettimeofday(&ev.time, NULL);
+            ev.type = EV_KEY;
+            ev.code = linuxKeyCode;
+            ev.value = 0;
+            write(mUinputFd, &ev, sizeof(ev));
+
+            ev.type = EV_SYN;
+            ev.code = SYN_REPORT;
+            ev.value = 0;
+            write(mUinputFd, &ev, sizeof(ev));
+
+            ChipLogProgress(AppServer, "Sent key hold: code=%d, duration=%dms", linuxKeyCode, holdDurationMs);
+        }
+
+        void MatterKeypadInputDelegate::PressKey(int linuxKeyCode)
+        {
+            if (mUinputFd < 0)
+            {
+                ChipLogError(AppServer, "Uinput not initialized");
+                return;
+            }
+
+            // Release any currently held key first
+            ReleaseCurrentHeldKey();
+
+            struct input_event ev;
+            memset(&ev, 0, sizeof(ev));
+
+            // Press key
+            gettimeofday(&ev.time, NULL);
+            ev.type = EV_KEY;
+            ev.code = linuxKeyCode;
+            ev.value = 1;
+            write(mUinputFd, &ev, sizeof(ev));
+
+            ev.type = EV_SYN;
+            ev.code = SYN_REPORT;
+            ev.value = 0;
+            write(mUinputFd, &ev, sizeof(ev));
+
+            mCurrentHeldKey = linuxKeyCode;
+            ChipLogProgress(AppServer, "Key pressed and held: code=%d", linuxKeyCode);
+        }
+
+        void MatterKeypadInputDelegate::ReleaseKey(int linuxKeyCode)
+        {
+            if (mUinputFd < 0)
+            {
+                ChipLogError(AppServer, "Uinput not initialized");
+                return;
+            }
+
+            struct input_event ev;
+            memset(&ev, 0, sizeof(ev));
+
+            // Release key
+            gettimeofday(&ev.time, NULL);
+            ev.type = EV_KEY;
+            ev.code = linuxKeyCode;
+            ev.value = 0;
+            write(mUinputFd, &ev, sizeof(ev));
+
+            ev.type = EV_SYN;
+            ev.code = SYN_REPORT;
+            ev.value = 0;
+            write(mUinputFd, &ev, sizeof(ev));
+
+            if (mCurrentHeldKey == linuxKeyCode)
+            {
+                mCurrentHeldKey = -1;
+            }
+
+            ChipLogProgress(AppServer, "Key released: code=%d", linuxKeyCode);
+        }
+
+        void MatterKeypadInputDelegate::ReleaseCurrentHeldKey()
+        {
+            if (mCurrentHeldKey >= 0)
+            {
+                ReleaseKey(mCurrentHeldKey);
+            }
+        }
+
         int MatterKeypadInputDelegate::GetLinuxKeyCode(const char* keyName)
         {
             // Map device key names to Linux input key codes
@@ -463,10 +573,18 @@ namespace WPEFramework
                 // Media playback controls
                 case KeypadInput::CECKeyCodeEnum::kPlay:
                 case KeypadInput::CECKeyCodeEnum::kPlayFunction:
+                    // Release any held key before play
+                    useModifier = true;
+                    modifierCode = -3;  // Special marker for release + play
+                    mainKeyCode = -1;
                     keySimCmd = "play";
                     break;
                 case KeypadInput::CECKeyCodeEnum::kPause:
                 case KeypadInput::CECKeyCodeEnum::kPausePlayFunction:
+                    // Release any held key before pause
+                    useModifier = true;
+                    modifierCode = -3;  // Special marker for release + pause
+                    mainKeyCode = -1;
                     keySimCmd = "pause";
                     break;
                 case KeypadInput::CECKeyCodeEnum::kStop:
@@ -481,10 +599,16 @@ namespace WPEFramework
                     keySimCmd = "record";
                     break;
                 case KeypadInput::CECKeyCodeEnum::kRewind:
-                    keySimCmd = "rewind";
+                    // Press and hold LEFT key indefinitely
+                    useModifier = true;
+                    modifierCode = -2;  // Special marker for press and hold
+                    mainKeyCode = KEY_LEFT;
                     break;
                 case KeypadInput::CECKeyCodeEnum::kFastForward:
-                    keySimCmd = "fastforward";
+                    // Press and hold RIGHT key indefinitely
+                    useModifier = true;
+                    modifierCode = -2;  // Special marker for press and hold
+                    mainKeyCode = KEY_RIGHT;
                     break;
                 case KeypadInput::CECKeyCodeEnum::kForward:
                     keySimCmd = "forward";
@@ -517,7 +641,28 @@ namespace WPEFramework
             helper.Success(response);
 
             // Inject key via uinput
-            if (useModifier && modifierCode >= 0 && mainKeyCode >= 0)
+            if (useModifier && modifierCode == -2 && mainKeyCode >= 0)
+            {
+                // Fast forward/Rewind: Press and hold key indefinitely
+                PressKey(mainKeyCode);
+                ChipLogProgress(AppServer, "Key pressed and holding: key=%d", mainKeyCode);
+            }
+            else if (useModifier && modifierCode == -3)
+            {
+                // Play/Pause: Release any held key first
+                ReleaseCurrentHeldKey();
+                // Then send the play/pause command
+                if (keySimCmd != nullptr)
+                {
+                    int linuxKeyCode = GetLinuxKeyCode(keySimCmd);
+                    if (linuxKeyCode >= 0)
+                    {
+                        SendKeyEvent(linuxKeyCode);
+                        ChipLogProgress(AppServer, "Released held key and injected: %s (code=%d)", keySimCmd, linuxKeyCode);
+                    }
+                }
+            }
+            else if (useModifier && modifierCode >= 0 && mainKeyCode >= 0)
             {
                 // Channel keys use CTRL+UP/DOWN
                 SendKeyWithModifier(modifierCode, mainKeyCode);
@@ -567,6 +712,9 @@ namespace WPEFramework
             std::string appId(reinterpret_cast<const char*>(application.applicationID.data()),
                             application.applicationID.size());
 
+            // Log the extracted appId for debugging
+            ChipLogProgress(AppServer, "Extracted appId: %s", appId.c_str());
+
             // Build Thunder API command to launch app
             std::string command = "curl -X POST \"http://127.0.0.1:9005/as/apps/action/launch?appId=" + appId + "\" -d '' 2>&1";
 
@@ -584,6 +732,9 @@ namespace WPEFramework
                     result += buffer.data();
                 }
                 int exitCode = pclose(pipe);
+
+                // Log the curl output for debugging
+                ChipLogProgress(AppServer, "Curl output: %s", result.c_str());
 
                 if (exitCode == 0)
                 {

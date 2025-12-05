@@ -66,11 +66,18 @@ namespace WPEFramework
             // Send key event directly to uinput
             void SendKeyEvent(int linuxKeyCode);
             void SendKeyWithModifier(int modifierKeyCode, int mainKeyCode);
+            void SendKeyHold(int linuxKeyCode, int holdDurationMs);
 
             // Map RDK key codes to Linux input key codes
             int GetLinuxKeyCode(const char* keyName);
 
+            // Press/Release key without completing the cycle
+            void PressKey(int linuxKeyCode);
+            void ReleaseKey(int linuxKeyCode);
+            void ReleaseCurrentHeldKey();
+
             int mUinputFd = -1;  // File descriptor for /dev/uinput
+            int mCurrentHeldKey = -1;  // Currently held key code (-1 = none)
         };
 
         /**
