@@ -409,7 +409,7 @@ namespace WPEFramework
             if (strcmp(keyName, "down") == 0) return KEY_DOWN;
             if (strcmp(keyName, "left") == 0) return KEY_LEFT;
             if (strcmp(keyName, "right") == 0) return KEY_RIGHT;
-            if (strcmp(keyName, "select") == 0) return KEY_OK;  // Try KEY_OK (352) first - explicit OK button
+            if (strcmp(keyName, "select") == 0) return KEY_ENTER;  // Maps to Qt Key_Return / Key_Select
             if (strcmp(keyName, "back") == 0) return KEY_ESC;  // KED_BACK -> KEY_ESC
             if (strcmp(keyName, "exit") == 0) return KEY_ESC;
             if (strcmp(keyName, "home") == 0) return KEY_HOME;  // KED_MENU/GUIDE -> KEY_HOME
