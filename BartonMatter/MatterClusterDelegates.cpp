@@ -28,6 +28,11 @@
 #include <cstdlib>
 #include <array>
 
+// Ensure BUS_VIRTUAL is defined
+#ifndef BUS_VIRTUAL
+#define BUS_VIRTUAL 0x06
+#endif
+
 using namespace chip;
 using namespace chip::app::Clusters;
 
@@ -58,9 +63,11 @@ namespace WPEFramework
                 return false;
             }
 
-            // Enable key events
+            // Enable key events (match VNC device capabilities)
             ioctl(mUinputFd, UI_SET_EVBIT, EV_KEY);
             ioctl(mUinputFd, UI_SET_EVBIT, EV_SYN);
+            ioctl(mUinputFd, UI_SET_EVBIT, EV_MSC);  // Add MSC events like IR device has
+            ioctl(mUinputFd, UI_SET_MSCBIT, MSC_SCAN);  // Scancode events
 
             // Enable all key codes we might use
             // Navigation keys
@@ -68,7 +75,11 @@ namespace WPEFramework
             ioctl(mUinputFd, UI_SET_KEYBIT, KEY_DOWN);
             ioctl(mUinputFd, UI_SET_KEYBIT, KEY_LEFT);
             ioctl(mUinputFd, UI_SET_KEYBIT, KEY_RIGHT);
-            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_OK);     // Select/Enter
+            // Enable multiple select key options
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_ENTER);   // Standard Enter/Return
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_KPENTER); // Keypad Enter
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_OK);      // Explicit OK button (352)
+            ioctl(mUinputFd, UI_SET_KEYBIT, KEY_SELECT);  // Explicit Select button (353)
             ioctl(mUinputFd, UI_SET_KEYBIT, KEY_ESC);
             ioctl(mUinputFd, UI_SET_KEYBIT, KEY_HOME);    // Menu/Guide
             ioctl(mUinputFd, UI_SET_KEYBIT, KEY_F2);      // Help
@@ -111,12 +122,12 @@ namespace WPEFramework
             ioctl(mUinputFd, UI_SET_KEYBIT, KEY_EPG);         // Electronic Program Guide
             ioctl(mUinputFd, UI_SET_KEYBIT, KEY_FAVORITES);
 
-            // Setup device
+            // Setup device (match VNC daemon bus type and similar vendor ID)
             struct uinput_setup usetup;
             memset(&usetup, 0, sizeof(usetup));
-            usetup.id.bustype = BUS_USB;
-            usetup.id.vendor = 0xbeef;
-            usetup.id.product = 0xfedc;
+            usetup.id.bustype = BUS_VIRTUAL;  // 0x0006 - same as VNC device
+            usetup.id.vendor = 0x27d6;  // Similar to VNC (0x27d5) for Matter
+            usetup.id.product = 0x6d74;  // 'mt' for Matter
             usetup.id.version = 1;
             strncpy(usetup.name, "matter-key-injector", UINPUT_MAX_NAME_SIZE);
 
@@ -180,7 +191,9 @@ namespace WPEFramework
             ev.type = EV_KEY;
             ev.code = linuxKeyCode;
             ev.value = 1;
-            write(mUinputFd, &ev, sizeof(ev));
+            ssize_t ret = write(mUinputFd, &ev, sizeof(ev));
+            ChipLogProgress(AppServer, "Key press: code=%d, type=%d, value=%d, write_ret=%zd",
+                          linuxKeyCode, ev.type, ev.value, ret);
 
             // Sync is necessary, else kernel keeps on waiting
             ev.type = EV_SYN;
@@ -196,7 +209,9 @@ namespace WPEFramework
             ev.code = linuxKeyCode;
             ev.value = 0;
             gettimeofday(&ev.time, NULL);
-            write(mUinputFd, &ev, sizeof(ev));
+            ret = write(mUinputFd, &ev, sizeof(ev));
+            ChipLogProgress(AppServer, "Key release: code=%d, type=%d, value=%d, write_ret=%zd",
+                          linuxKeyCode, ev.type, ev.value, ret);
 
             // Sync
             ev.type = EV_SYN;
@@ -394,7 +409,7 @@ namespace WPEFramework
             if (strcmp(keyName, "down") == 0) return KEY_DOWN;
             if (strcmp(keyName, "left") == 0) return KEY_LEFT;
             if (strcmp(keyName, "right") == 0) return KEY_RIGHT;
-            if (strcmp(keyName, "select") == 0) return KEY_OK;  // KED_SELECT/ENTER -> KEY_OK
+            if (strcmp(keyName, "select") == 0) return KEY_OK;  // Try KEY_OK (352) first - explicit OK button
             if (strcmp(keyName, "back") == 0) return KEY_ESC;  // KED_BACK -> KEY_ESC
             if (strcmp(keyName, "exit") == 0) return KEY_ESC;
             if (strcmp(keyName, "home") == 0) return KEY_HOME;  // KED_MENU/GUIDE -> KEY_HOME
@@ -712,9 +727,6 @@ namespace WPEFramework
             std::string appId(reinterpret_cast<const char*>(application.applicationID.data()),
                             application.applicationID.size());
 
-            // Log the extracted appId for debugging
-            ChipLogProgress(AppServer, "Extracted appId: %s", appId.c_str());
-
             // Build Thunder API command to launch app
             std::string command = "curl -X POST \"http://127.0.0.1:9005/as/apps/action/launch?appId=" + appId + "\" -d '' 2>&1";
 
@@ -732,9 +744,6 @@ namespace WPEFramework
                     result += buffer.data();
                 }
                 int exitCode = pclose(pipe);
-
-                // Log the curl output for debugging
-                ChipLogProgress(AppServer, "Curl output: %s", result.c_str());
 
                 if (exitCode == 0)
                 {
