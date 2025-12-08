@@ -383,10 +383,15 @@ namespace WPEFramework
         JsonArray Bluetooth::getDiscoveredDevices()
         {
             JsonArray deviceArray;
-            BTRMGR_DiscoveredDevicesList_t discoveredDevices;
+            BTRMGR_DiscoveredDevicesList_t *discoveredDevices = (BTRMGR_DiscoveredDevicesList_t*)malloc(sizeof(BTRMGR_DiscoveredDevicesList_t));
+            if(discoveredDevices == nullptr)
+            {
+                LOGERR("Failed to allocate memory");
+                return deviceArray;
+            }
 
-            memset (&discoveredDevices, 0, sizeof(discoveredDevices));
-            BTRMGR_Result_t rc = BTRMGR_GetDiscoveredDevices(0, &discoveredDevices);
+            memset (discoveredDevices, 0, sizeof(BTRMGR_DiscoveredDevicesList_t));
+            BTRMGR_Result_t rc = BTRMGR_GetDiscoveredDevices(0, discoveredDevices);
             if (BTRMGR_RESULT_SUCCESS != rc)
             {
                 LOGERR("Failed to get the discovered devices");
@@ -395,19 +400,20 @@ namespace WPEFramework
             {
                 int i = 0;
                 JsonObject deviceDetails;
-                LOGINFO ("Success....   Discovered %d Devices", discoveredDevices.m_numOfDevices);
-                for (; i < discoveredDevices.m_numOfDevices; i++)
+                LOGINFO ("Success....   Discovered %d Devices", discoveredDevices->m_numOfDevices);
+                for (; i < discoveredDevices->m_numOfDevices; i++)
                 {
-                    deviceDetails["deviceID"] = std::to_string(discoveredDevices.m_deviceProperty[i].m_deviceHandle);
-                    deviceDetails["name"] = string(discoveredDevices.m_deviceProperty[i].m_name);
-                    deviceDetails["deviceType"] = string(BTRMGR_GetDeviceTypeAsString(discoveredDevices.m_deviceProperty[i].m_deviceType));
-                    deviceDetails["connected"] = discoveredDevices.m_deviceProperty[i].m_isConnected?true:false;
-                    deviceDetails["paired"] = discoveredDevices.m_deviceProperty[i].m_isPairedDevice?true:false;
-		    deviceDetails["rawDeviceType"] = std::to_string(discoveredDevices.m_deviceProperty[i].m_ui32DevClassBtSpec);
-                    deviceDetails["rawBleDeviceType"] = std::to_string(discoveredDevices.m_deviceProperty[i].m_ui16DevAppearanceBleSpec);
+                    deviceDetails["deviceID"] = std::to_string(discoveredDevices->m_deviceProperty[i].m_deviceHandle);
+                    deviceDetails["name"] = string(discoveredDevices->m_deviceProperty[i].m_name);
+                    deviceDetails["deviceType"] = string(BTRMGR_GetDeviceTypeAsString(discoveredDevices->m_deviceProperty[i].m_deviceType));
+                    deviceDetails["connected"] = discoveredDevices->m_deviceProperty[i].m_isConnected?true:false;
+                    deviceDetails["paired"] = discoveredDevices->m_deviceProperty[i].m_isPairedDevice?true:false;
+                    deviceDetails["rawDeviceType"] = std::to_string(discoveredDevices->m_deviceProperty[i].m_ui32DevClassBtSpec);
+                    deviceDetails["rawBleDeviceType"] = std::to_string(discoveredDevices->m_deviceProperty[i].m_ui16DevAppearanceBleSpec);
                     deviceArray.Add(deviceDetails);
                 }
             }
+            free(discoveredDevices);
             return deviceArray;
         }
 
