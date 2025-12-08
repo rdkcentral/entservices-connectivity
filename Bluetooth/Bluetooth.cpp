@@ -383,10 +383,6 @@ namespace WPEFramework
         JsonArray Bluetooth::getDiscoveredDevices()
         {
             JsonArray deviceArray;
-            // Copilot Fix: Changed from stack to heap allocation to prevent stack overflow
-            // Coverity STACK_USE (Line 386): Large struct allocated on stack risked overflow
-            // Fix: Use malloc/free pattern consistent with getPairedDevices() and getConnectedDevices()
-            // Reason: BTRMGR_DiscoveredDevicesList_t can be very large (multiple devices with properties)
             BTRMGR_DiscoveredDevicesList_t *discoveredDevices = (BTRMGR_DiscoveredDevicesList_t*)malloc(sizeof(BTRMGR_DiscoveredDevicesList_t));
             if(discoveredDevices == nullptr)
             {
