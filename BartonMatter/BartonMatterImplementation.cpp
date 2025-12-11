@@ -133,6 +133,56 @@ namespace WPEFramework
                     LOGWARN("=== DeviceAdded: Commissioning complete for %s ===", deviceUuid);
                     LOGWARN("Configuring ACL before client can initiate discovery...");
 
+                    // Store commissioned device UUID for later retrieval
+                    {
+                        std::lock_guard<std::mutex> lock(plugin->commissionedDeviceInfoMtx);
+                        plugin->commissionedDeviceUuid = std::string(deviceUuid);
+                        LOGINFO("Stored commissioned device UUID: %s", deviceUuid);
+                    }
+
+                    // Try to get product name from device metadata
+                    if (plugin->bartonClient) {
+                        g_autolist(BCoreDevice) deviceObjects = b_core_client_get_devices(plugin->bartonClient);
+                        for (GList *iter = deviceObjects; iter != NULL; iter = iter->next) {
+                            BCoreDevice *device = B_CORE_DEVICE(iter->data);
+                            g_autofree gchar *uuid = NULL;
+                            g_object_get(device, B_CORE_DEVICE_PROPERTY_NAMES[B_CORE_DEVICE_PROP_UUID], &uuid, NULL);
+
+                            if (uuid && std::string(uuid) == std::string(deviceUuid)) {
+                                // Found the device - try to get metadata for product name
+                                g_autolist(BCoreMetadata) metadataList = NULL;
+                                g_object_get(device, B_CORE_DEVICE_PROPERTY_NAMES[B_CORE_DEVICE_PROP_METADATA], &metadataList, NULL);
+
+                                for (GList *metaIter = metadataList; metaIter != NULL; metaIter = metaIter->next) {
+                                    BCoreMetadata *metadata = B_CORE_METADATA(metaIter->data);
+                                    g_autofree gchar *id = NULL;
+                                    g_autofree gchar *value = NULL;
+
+                                    g_object_get(metadata,
+                                                B_CORE_METADATA_PROPERTY_NAMES[B_CORE_METADATA_PROP_ID], &id,
+                                                B_CORE_METADATA_PROPERTY_NAMES[B_CORE_METADATA_PROP_VALUE], &value,
+                                                NULL);
+
+                                    // Look for product name in metadata (could be "productName", "matter.productName", etc.)
+                                    if (id && value && (g_str_has_suffix(id, "productName") || g_str_has_suffix(id, "ProductName"))) {
+                                        std::lock_guard<std::mutex> lock(plugin->commissionedDeviceInfoMtx);
+                                        plugin->commissionedDeviceProductName = std::string(value);
+                                        LOGINFO("Stored commissioned device product name: %s", value);
+                                        break;
+                                    }
+                                }
+
+                                // If no product name found in metadata, use device class as fallback
+                                if (plugin->commissionedDeviceProductName.empty() && deviceClass) {
+                                    std::lock_guard<std::mutex> lock(plugin->commissionedDeviceInfoMtx);
+                                    plugin->commissionedDeviceProductName = std::string(deviceClass);
+                                    LOGINFO("No product name in metadata, using device class: %s", deviceClass);
+                                }
+                                break;
+                            }
+                        }
+                    }
+
                     // Configure ACL immediately after commissioning, before commissioned device
                     // can start its endpoint discovery sequence. This timing is critical:
                     // - DeviceAddedHandler fires synchronously in commissioning completion path
@@ -978,6 +1028,30 @@ void BartonMatterImplementation::OnSessionFailure(const chip::ScopedNodeId & pee
             deviceList += "]";
 
             LOGINFO("Total devices found: %zu", deviceUuids.size());
+            return Core::ERROR_NONE;
+        }
+
+        Core::hresult BartonMatterImplementation::GetCommissionedDeviceInfo(std::string& deviceInfo /* @out */)
+        {
+            std::lock_guard<std::mutex> lock(commissionedDeviceInfoMtx);
+
+            if (commissionedDeviceUuid.empty()) {
+                LOGWARN("No commissioned device information available");
+                deviceInfo = "{\"error\":\"No device commissioned yet\"}";
+                return Core::ERROR_UNAVAILABLE;
+            }
+
+            // Build JSON response with device info
+            deviceInfo = "{";
+            deviceInfo += "\"uuid\":\"" + commissionedDeviceUuid + "\"";
+
+            if (!commissionedDeviceProductName.empty()) {
+                deviceInfo += ",\"productName\":\"" + commissionedDeviceProductName + "\"";
+            }
+
+            deviceInfo += "}";
+
+            LOGINFO("Returning commissioned device info: %s", deviceInfo.c_str());
             return Core::ERROR_NONE;
         }
 

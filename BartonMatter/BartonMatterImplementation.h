@@ -72,6 +72,7 @@ namespace WPEFramework
             virtual Core::hresult ReadResource(std::string uri /* @in*/, std::string resourceType /* @in*/, std::string &result /* @out*/)override;
             virtual Core::hresult WriteResource(std::string uri /* @in*/, std::string resourceType /* @in*/, std::string value /* @in*/)override;
             virtual Core::hresult ListDevices(std::string& deviceList /* @out */) override;
+            virtual Core::hresult GetCommissionedDeviceInfo(std::string& deviceInfo /* @out */) override;
 
             void InitializeClient(gchar *confDir);
             static void SetDefaultParameters(BCoreInitializeParamsContainer *params);
@@ -96,6 +97,9 @@ namespace WPEFramework
             BCoreClient *bartonClient; // Pointer to Barton Core client instance
             std::string savedDeviceUri; // Store the device URI from endpoint
             std::mutex deviceUriMtx; // Protect access to savedDeviceUri
+            std::string commissionedDeviceProductName; // Store product name of last commissioned device
+            std::string commissionedDeviceUuid; // Store UUID of last commissioned device
+            std::mutex commissionedDeviceInfoMtx; // Protect access to commissioned device info
             static gchar* GetConfigDirectory();
             chip::Callback::Callback<void (*)(void*, chip::Messaging::ExchangeManager&, const chip::SessionHandle&)> mSuccessCallback;
             chip::Callback::Callback<void (*)(void*, const chip::ScopedNodeId&, CHIP_ERROR)> mFailureCallback;

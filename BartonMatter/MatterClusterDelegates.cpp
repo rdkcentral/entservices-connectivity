@@ -178,7 +178,7 @@ namespace WPEFramework
 	     * 	struct timeval time;
 	     *	short type;
 	     *	short code;
-	     *	int code;
+	     *	int value;
 	     * }
 	     *
 	     * */
