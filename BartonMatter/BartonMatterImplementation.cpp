@@ -140,47 +140,13 @@ namespace WPEFramework
                         LOGINFO("Stored commissioned device UUID: %s", deviceUuid);
                     }
 
-                    // Try to get product name from device metadata
-                    if (plugin->bartonClient) {
-                        g_autolist(BCoreDevice) deviceObjects = b_core_client_get_devices(plugin->bartonClient);
-                        for (GList *iter = deviceObjects; iter != NULL; iter = iter->next) {
-                            BCoreDevice *device = B_CORE_DEVICE(iter->data);
-                            g_autofree gchar *uuid = NULL;
-                            g_object_get(device, B_CORE_DEVICE_PROPERTY_NAMES[B_CORE_DEVICE_PROP_UUID], &uuid, NULL);
-
-                            if (uuid && std::string(uuid) == std::string(deviceUuid)) {
-                                // Found the device - try to get metadata for product name
-                                g_autolist(BCoreMetadata) metadataList = NULL;
-                                g_object_get(device, B_CORE_DEVICE_PROPERTY_NAMES[B_CORE_DEVICE_PROP_METADATA], &metadataList, NULL);
-
-                                for (GList *metaIter = metadataList; metaIter != NULL; metaIter = metaIter->next) {
-                                    BCoreMetadata *metadata = B_CORE_METADATA(metaIter->data);
-                                    g_autofree gchar *id = NULL;
-                                    g_autofree gchar *value = NULL;
-
-                                    g_object_get(metadata,
-                                                B_CORE_METADATA_PROPERTY_NAMES[B_CORE_METADATA_PROP_ID], &id,
-                                                B_CORE_METADATA_PROPERTY_NAMES[B_CORE_METADATA_PROP_VALUE], &value,
-                                                NULL);
-
-                                    // Look for product name in metadata (could be "productName", "matter.productName", etc.)
-                                    if (id && value && (g_str_has_suffix(id, "productName") || g_str_has_suffix(id, "ProductName"))) {
-                                        std::lock_guard<std::mutex> lock(plugin->commissionedDeviceInfoMtx);
-                                        plugin->commissionedDeviceProductName = std::string(value);
-                                        LOGINFO("Stored commissioned device product name: %s", value);
-                                        break;
-                                    }
-                                }
-
-                                // If no product name found in metadata, use device class as fallback
-                                if (plugin->commissionedDeviceProductName.empty() && deviceClass) {
-                                    std::lock_guard<std::mutex> lock(plugin->commissionedDeviceInfoMtx);
-                                    plugin->commissionedDeviceProductName = std::string(deviceClass);
-                                    LOGINFO("No product name in metadata, using device class: %s", deviceClass);
-                                }
-                                break;
-                            }
-                        }
+// Store product name - use device class as the product name
+                    // In the future, this could be enhanced to read from device metadata
+                    // or from Matter Basic Information cluster
+                    if (deviceClass) {
+                        std::lock_guard<std::mutex> lock(plugin->commissionedDeviceInfoMtx);
+                        plugin->commissionedDeviceProductName = std::string(deviceClass);
+                        LOGINFO("Stored commissioned device product name from device class: %s", deviceClass);
                     }
 
                     // Configure ACL immediately after commissioning, before commissioned device
