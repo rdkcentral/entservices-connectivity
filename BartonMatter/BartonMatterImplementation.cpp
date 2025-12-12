@@ -1119,6 +1119,8 @@ void BartonMatterImplementation::OnSessionFailure(const chip::ScopedNodeId & pee
 
             LOGINFO("Updated device cache: nodeId=%s, model=%s (total devices: %zu)",
                    nodeId.c_str(), modelName.c_str(), commissionedDevicesCache.size());
+        }
+
     } // namespace Plugin
 } // namespace WPEFramework
 
