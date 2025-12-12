@@ -97,9 +97,17 @@ namespace WPEFramework
             BCoreClient *bartonClient; // Pointer to Barton Core client instance
             std::string savedDeviceUri; // Store the device URI from endpoint
             std::mutex deviceUriMtx; // Protect access to savedDeviceUri
-            std::string commissionedDeviceProductName; // Store product name of last commissioned device
-            std::string commissionedDeviceUuid; // Store UUID of last commissioned device
-            std::mutex commissionedDeviceInfoMtx; // Protect access to commissioned device info
+
+            // Cached device info: nodeId -> model name
+            std::map<std::string, std::string> commissionedDevicesCache;
+            std::mutex devicesCacheMtx; // Protect access to device cache
+            bool devicesCacheInitialized = false;
+
+            // Helper methods for device info management
+            void ScanDeviceDatabase();
+            std::string ExtractModelFromDeviceFile(const std::string& filePath);
+            void UpdateDeviceCache(const std::string& nodeId, const std::string& modelName);
+
             static gchar* GetConfigDirectory();
             chip::Callback::Callback<void (*)(void*, chip::Messaging::ExchangeManager&, const chip::SessionHandle&)> mSuccessCallback;
             chip::Callback::Callback<void (*)(void*, const chip::ScopedNodeId&, CHIP_ERROR)> mFailureCallback;

@@ -19,6 +19,9 @@
 
 #include "BartonMatterImplementation.h"
 #include "MatterClusterDelegates.h"
+#include <fstream>
+#include <dirent.h>
+#include <map>
 
 using namespace std;
 
@@ -133,20 +136,11 @@ namespace WPEFramework
                     LOGWARN("=== DeviceAdded: Commissioning complete for %s ===", deviceUuid);
                     LOGWARN("Configuring ACL before client can initiate discovery...");
 
-                    // Store commissioned device UUID for later retrieval
-                    {
-                        std::lock_guard<std::mutex> lock(plugin->commissionedDeviceInfoMtx);
-                        plugin->commissionedDeviceUuid = std::string(deviceUuid);
-                        LOGINFO("Stored commissioned device UUID: %s", deviceUuid);
-                    }
-
-// Store product name - use device class as the product name
-                    // In the future, this could be enhanced to read from device metadata
-                    // or from Matter Basic Information cluster
+// Store commissioned device in cache with device class as initial model name
+                    // The actual model name from devicedb will be loaded later
                     if (deviceClass) {
-                        std::lock_guard<std::mutex> lock(plugin->commissionedDeviceInfoMtx);
-                        plugin->commissionedDeviceProductName = std::string(deviceClass);
-                        LOGINFO("Stored commissioned device product name from device class: %s", deviceClass);
+                        plugin->UpdateDeviceCache(std::string(deviceUuid), std::string(deviceClass));
+                        LOGINFO("Cached commissioned device: %s with model: %s", deviceUuid, deviceClass);
                     }
 
                     // Configure ACL immediately after commissioning, before commissioned device
@@ -999,28 +993,132 @@ void BartonMatterImplementation::OnSessionFailure(const chip::ScopedNodeId & pee
 
         Core::hresult BartonMatterImplementation::GetCommissionedDeviceInfo(std::string& deviceInfo /* @out */)
         {
-            std::lock_guard<std::mutex> lock(commissionedDeviceInfoMtx);
+            std::lock_guard<std::mutex> lock(devicesCacheMtx);
 
-            if (commissionedDeviceUuid.empty()) {
-                LOGWARN("No commissioned device information available");
-                deviceInfo = "{\"error\":\"No device commissioned yet\"}";
+            // Scan devicedb on first call to populate cache
+            if (!devicesCacheInitialized) {
+                ScanDeviceDatabase();
+                devicesCacheInitialized = true;
+            }
+
+            if (commissionedDevicesCache.empty()) {
+                LOGWARN("No commissioned devices found");
+                deviceInfo = "[]";
                 return Core::ERROR_UNAVAILABLE;
             }
 
-            // Build JSON response with device info
-            deviceInfo = "{";
-            deviceInfo += "\"uuid\":\"" + commissionedDeviceUuid + "\"";
+            // Build JSON array response with all devices
+            deviceInfo = "[";
+            bool first = true;
 
-            if (!commissionedDeviceProductName.empty()) {
-                deviceInfo += ",\"productName\":\"" + commissionedDeviceProductName + "\"";
+            for (const auto& device : commissionedDevicesCache) {
+                if (!first) {
+                    deviceInfo += ",";
+                }
+                first = false;
+
+                deviceInfo += "{";
+                deviceInfo += "\"nodeId\":\"" + device.first + "\"";
+                deviceInfo += ",\"model\":\"" + device.second + "\"";
+                deviceInfo += "}";
             }
 
-            deviceInfo += "}";
+            deviceInfo += "]";
 
-            LOGINFO("Returning commissioned device info: %s", deviceInfo.c_str());
+            LOGINFO("Returning %zu commissioned devices", commissionedDevicesCache.size());
             return Core::ERROR_NONE;
         }
 
+        void BartonMatterImplementation::ScanDeviceDatabase()
+        {
+            const std::string dbPath = "/opt/.brtn-ds/storage/devicedb";
+
+            DIR* dir = opendir(dbPath.c_str());
+            if (!dir) {
+                LOGWARN("Could not open devicedb directory: %s", dbPath.c_str());
+                return;
+            }
+
+            struct dirent* entry;
+            while ((entry = readdir(dir)) != nullptr) {
+                std::string filename(entry->d_name);
+
+                // Skip ".", "..", backup files, and system files
+                if (filename[0] == '.' ||
+                    filename.find(".bak") != std::string::npos ||
+                    filename.find("system") != std::string::npos) {
+                    continue;
+                }
+
+                // This is a device file (node ID)
+                std::string nodeId = filename;
+                std::string filePath = dbPath + "/" + filename;
+
+                // Extract model name from device file
+                std::string modelName = ExtractModelFromDeviceFile(filePath);
+
+                if (!modelName.empty()) {
+                    commissionedDevicesCache[nodeId] = modelName;
+                    LOGINFO("Found device in DB: nodeId=%s, model=%s", nodeId.c_str(), modelName.c_str());
+                }
+            }
+
+            closedir(dir);
+            LOGINFO("Device database scan complete. Found %zu devices", commissionedDevicesCache.size());
+        }
+
+        std::string BartonMatterImplementation::ExtractModelFromDeviceFile(const std::string& filePath)
+        {
+            std::ifstream file(filePath, std::ios::binary);
+            if (!file.is_open()) {
+                LOGWARN("Could not open device file: %s", filePath.c_str());
+                return "";
+            }
+
+            // Read entire file into string
+            std::string content((std::istreambuf_iterator<char>(file)),
+                               std::istreambuf_iterator<char>());
+            file.close();
+
+            // Search for "model" field and extract value
+            // Pattern: "model": { ... "value": "TV-CASTING" ...
+            size_t modelPos = content.find("\"model\"");
+            if (modelPos == std::string::npos) {
+                return "";
+            }
+
+            // Find the "value" field within the model object
+            size_t valuePos = content.find("\"value\"", modelPos);
+            if (valuePos == std::string::npos) {
+                return "";
+            }
+
+            // Find the start of the value string
+            size_t valueStart = content.find('"', valuePos + 7); // Skip '"value"'
+            if (valueStart == std::string::npos) {
+                return "";
+            }
+            valueStart++; // Skip opening quote
+
+            // Find the end of the value string
+            size_t valueEnd = content.find('"', valueStart);
+            if (valueEnd == std::string::npos) {
+                return "";
+            }
+
+            std::string modelName = content.substr(valueStart, valueEnd - valueStart);
+            return modelName;
+        }
+
+        void BartonMatterImplementation::UpdateDeviceCache(const std::string& nodeId, const std::string& modelName)
+        {
+            std::lock_guard<std::mutex> lock(devicesCacheMtx);
+
+            // Update or add device to cache (prevents duplicates)
+            commissionedDevicesCache[nodeId] = modelName;
+
+            LOGINFO("Updated device cache: nodeId=%s, model=%s (total devices: %zu)",
+                   nodeId.c_str(), modelName.c_str(), commissionedDevicesCache.size());
     } // namespace Plugin
 } // namespace WPEFramework
 
