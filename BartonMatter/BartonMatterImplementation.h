@@ -28,6 +28,7 @@
 #include <provider/barton-core-network-credentials-provider.h>
 #include <events/barton-core-endpoint-added-event.h>
 #include <events/barton-core-device-added-event.h>
+#include <events/barton-core-device-removed-event.h>
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -73,11 +74,13 @@ namespace WPEFramework
             virtual Core::hresult WriteResource(std::string uri /* @in*/, std::string resourceType /* @in*/, std::string value /* @in*/)override;
             virtual Core::hresult ListDevices(std::string& deviceList /* @out */) override;
             virtual Core::hresult GetCommissionedDeviceInfo(std::string& deviceInfo /* @out */) override;
+            virtual Core::hresult RemoveDevice(const std::string deviceUuid /* @in */) override;
 
             void InitializeClient(gchar *confDir);
             static void SetDefaultParameters(BCoreInitializeParamsContainer *params);
             bool Commission(BCoreClient *client, gchar *setupPayload, guint16 timeoutSeconds);
 	        static void DeviceAddedHandler(BCoreClient *source, BCoreDeviceAddedEvent *event, gpointer userData);
+	        static void DeviceRemovedHandler(BCoreClient *source, BCoreDeviceRemovedEvent *event, gpointer userData);
 	        bool ConfigureClientACL(const std::string& deviceUuid, uint16_t vendorId, uint16_t productId);
 	        bool AddACLEntryForClient(uint16_t vendorId, uint16_t productId, const std::string& deviceUuid);
             bool GetNodeIdFromDeviceUuid(const std::string& deviceUuid, uint64_t& nodeId);
@@ -107,6 +110,7 @@ namespace WPEFramework
             void ScanDeviceDatabase();
             std::string ExtractModelFromDeviceFile(const std::string& filePath);
             void UpdateDeviceCache(const std::string& nodeId, const std::string& modelName);
+            void RemoveDeviceFromCache(const std::string& nodeId);
 
             static gchar* GetConfigDirectory();
             chip::Callback::Callback<void (*)(void*, chip::Messaging::ExchangeManager&, const chip::SessionHandle&)> mSuccessCallback;

@@ -162,6 +162,35 @@ namespace WPEFramework
                 }
             }
         }
+
+        void BartonMatterImplementation::DeviceRemovedHandler(BCoreClient *source, BCoreDeviceRemovedEvent *event, gpointer userData)
+        {
+            LOGINFO("Device removed event received - device disconnected!");
+
+            // Get properties from BCoreDeviceRemovedEvent
+            g_autofree gchar *deviceUuid = NULL;
+            g_autofree gchar *deviceClass = NULL;
+            g_object_get(G_OBJECT(event),
+                         B_CORE_DEVICE_REMOVED_EVENT_PROPERTY_NAMES[B_CORE_DEVICE_REMOVED_EVENT_PROP_DEVICE_UUID],
+                         &deviceUuid,
+                         B_CORE_DEVICE_REMOVED_EVENT_PROPERTY_NAMES[B_CORE_DEVICE_REMOVED_EVENT_PROP_DEVICE_CLASS],
+                         &deviceClass,
+                         NULL);
+
+            LOGWARN("Device removed! UUID=%s, class=%s",
+                    deviceUuid ? deviceUuid : "NULL",
+                    deviceClass ? deviceClass : "NULL");
+
+            // Remove device from cache
+            if (deviceUuid) {
+                BartonMatterImplementation* plugin = static_cast<BartonMatterImplementation*>(userData);
+                if (plugin) {
+                    plugin->RemoveDeviceFromCache(std::string(deviceUuid));
+                    LOGINFO("Removed device from cache: %s", deviceUuid);
+                }
+            }
+        }
+
         Core::hresult BartonMatterImplementation::SetWifiCredentials(const std::string ssid /* @in */, const std::string password /* @in */)
         {
             LOGWARN("BartonMatter: set wifi cred invoked");
@@ -293,6 +322,9 @@ namespace WPEFramework
 
             // Connect device added signal handler - this is where we create ACLs
             g_signal_connect(bartonClient, B_CORE_CLIENT_SIGNAL_NAME_DEVICE_ADDED, G_CALLBACK(DeviceAddedHandler), this);
+
+            // Connect device removed signal handler - this is where we remove from cache
+            g_signal_connect(bartonClient, B_CORE_CLIENT_SIGNAL_NAME_DEVICE_REMOVED, G_CALLBACK(DeviceRemovedHandler), this);
 
             // Connect endpoint added signal handler
             g_signal_connect(bartonClient, B_CORE_CLIENT_SIGNAL_NAME_ENDPOINT_ADDED, G_CALLBACK(EndpointAddedHandler), this);
@@ -1029,6 +1061,42 @@ void BartonMatterImplementation::OnSessionFailure(const chip::ScopedNodeId & pee
             return Core::ERROR_NONE;
         }
 
+        Core::hresult BartonMatterImplementation::RemoveDevice(const std::string deviceUuid /* @in */)
+        {
+            LOGINFO("RemoveDevice called for device: %s", deviceUuid.c_str());
+
+            if (!bartonClient) {
+                LOGERR("Barton client not initialized");
+                return Core::ERROR_UNAVAILABLE;
+            }
+
+            if (deviceUuid.empty()) {
+                LOGERR("Invalid device UUID: cannot be empty");
+                return Core::ERROR_INVALID_INPUT_LENGTH;
+            }
+
+            // Call Barton's device removal API
+            // This will:
+            // 1. Remove the device from Barton's internal device list
+            // 2. Delete the device's database file from /opt/.brtn-ds/storage/devicedb/
+            // 3. Clean up all associated endpoints and resources
+            // 4. Trigger the device-removed signal (which our DeviceRemovedHandler catches)
+            gboolean result = b_core_client_remove_device(bartonClient, deviceUuid.c_str());
+
+            if (result) {
+                LOGINFO("Successfully removed device %s (devicedb file and all data deleted)", deviceUuid.c_str());
+
+                // Note: DeviceRemovedHandler will automatically remove from cache when signal fires
+                // But we can also remove proactively here for immediate consistency
+                RemoveDeviceFromCache(deviceUuid);
+
+                return Core::ERROR_NONE;
+            } else {
+                LOGERR("Failed to remove device %s", deviceUuid.c_str());
+                return Core::ERROR_GENERAL;
+            }
+        }
+
         void BartonMatterImplementation::ScanDeviceDatabase()
         {
             const std::string dbPath = "/opt/.brtn-ds/storage/devicedb";
@@ -1119,6 +1187,20 @@ void BartonMatterImplementation::OnSessionFailure(const chip::ScopedNodeId & pee
 
             LOGINFO("Updated device cache: nodeId=%s, model=%s (total devices: %zu)",
                    nodeId.c_str(), modelName.c_str(), commissionedDevicesCache.size());
+        }
+
+        void BartonMatterImplementation::RemoveDeviceFromCache(const std::string& nodeId)
+        {
+            std::lock_guard<std::mutex> lock(devicesCacheMtx);
+
+            auto it = commissionedDevicesCache.find(nodeId);
+            if (it != commissionedDevicesCache.end()) {
+                commissionedDevicesCache.erase(it);
+                LOGINFO("Removed device from cache: nodeId=%s (remaining devices: %zu)",
+                       nodeId.c_str(), commissionedDevicesCache.size());
+            } else {
+                LOGWARN("Device not found in cache: nodeId=%s", nodeId.c_str());
+            }
         }
 
     } // namespace Plugin
