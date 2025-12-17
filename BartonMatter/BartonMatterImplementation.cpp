@@ -1075,20 +1075,19 @@ void BartonMatterImplementation::OnSessionFailure(const chip::ScopedNodeId & pee
                 return Core::ERROR_INVALID_INPUT_LENGTH;
             }
 
-            // Call Barton's device removal API
-            // This will:
-            // 1. Remove the device from Barton's internal device list
-            // 2. Delete the device's database file from /opt/.brtn-ds/storage/devicedb/
-            // 3. Clean up all associated endpoints and resources
-            // 4. Trigger the device-removed signal (which our DeviceRemovedHandler catches)
             gboolean result = b_core_client_remove_device(bartonClient, deviceUuid.c_str());
 
             if (result) {
                 LOGINFO("Successfully removed device %s (devicedb file and all data deleted)", deviceUuid.c_str());
 
-                // Note: DeviceRemovedHandler will automatically remove from cache when signal fires
-                // But we can also remove proactively here for immediate consistency
-                RemoveDeviceFromCache(deviceUuid);
+                // Clear cache and force rescan on next GetCommissionedDeviceInfo call
+                // This ensures cache stays in sync with filesystem
+                {
+                    std::lock_guard<std::mutex> lock(devicesCacheMtx);
+                    commissionedDevicesCache.clear();
+                    devicesCacheInitialized = false;
+                    LOGINFO("Cleared device cache and reset initialization flag to force rescan");
+                }
 
                 return Core::ERROR_NONE;
             } else {
