@@ -1061,88 +1061,6 @@ void BartonMatterImplementation::OnSessionFailure(const chip::ScopedNodeId & pee
             return Core::ERROR_NONE;
         }
 
-        /**
-         * @brief Remove ACL entries for a specific node ID
-         *
-         * This function iterates through all ACL entries on fabric 1 and deletes any entry
-         * that has the specified node ID as a subject. This is necessary to clean up access
-         * control state when removing a device.
-         *
-         * @param nodeId The Matter node ID whose ACL entries should be deleted
-         * @return true if deletion succeeded or no entries found, false on error
-         */
-        bool BartonMatterImplementation::RemoveACLEntriesForNode(uint64_t nodeId)
-        {
-            using namespace chip;
-            using namespace chip::Access;
-
-            chip::FabricIndex fabricIndex = 1;
-            LOGINFO("RemoveACLEntriesForNode: Searching for ACL entries for node 0x%016llx on fabric %d",
-                    (unsigned long long)nodeId, fabricIndex);
-
-            // Iterate through ACL entries to find ones with this node as subject
-            AccessControl::EntryIterator iterator;
-            CHIP_ERROR err = GetAccessControl().Entries(fabricIndex, iterator);
-            if (err != CHIP_NO_ERROR)
-            {
-                LOGERR("RemoveACLEntriesForNode: Failed to get entry iterator: 0x%08lx", (unsigned long)err.AsInteger());
-                return false;
-            }
-
-            std::vector<size_t> entriesToDelete;
-            size_t entryIndex = 0;
-
-            // First pass: identify which entries to delete
-            while (iterator.Next())
-            {
-                const AccessControl::Entry& entry = iterator.GetValue();
-
-                // Check if this entry has our node as a subject
-                AccessControl::Entry::SubjectIterator subjectIter;
-                err = entry.GetSubjectIterator(subjectIter);
-                if (err == CHIP_NO_ERROR)
-                {
-                    while (subjectIter.Next())
-                    {                        chip::NodeId subject = subjectIter.GetValue();
-                        if (subject == nodeId)
-                        {
-                            LOGINFO("RemoveACLEntriesForNode: Found ACL entry at index %zu for node 0x%016llx",
-                                    entryIndex, (unsigned long long)nodeId);
-                            entriesToDelete.push_back(entryIndex);
-                            break;
-                        }
-                    }
-                }
-                entryIndex++;
-            }
-
-            // Delete entries in reverse order to avoid index shifting issues
-            for (auto it = entriesToDelete.rbegin(); it != entriesToDelete.rend(); ++it)
-            {
-                err = GetAccessControl().DeleteEntry(nullptr, fabricIndex, *it);
-                if (err != CHIP_NO_ERROR)
-                {
-                    LOGERR("RemoveACLEntriesForNode: Failed to delete entry at index %zu: 0x%08lx",
-                           *it, (unsigned long)err.AsInteger());
-                    return false;
-                }
-                LOGINFO("RemoveACLEntriesForNode: Deleted ACL entry at index %zu", *it);
-            }
-
-            if (entriesToDelete.empty())
-            {
-                LOGWARN("RemoveACLEntriesForNode: No ACL entries found for node 0x%016llx",
-                        (unsigned long long)nodeId);
-            }
-            else
-            {
-                LOGINFO("RemoveACLEntriesForNode: Successfully deleted %zu ACL entries for node 0x%016llx",
-                        entriesToDelete.size(), (unsigned long long)nodeId);
-            }
-
-            return true;
-        }
-
         Core::hresult BartonMatterImplementation::RemoveDevice(const std::string deviceUuid /* @in */)
         {
             LOGINFO("RemoveDevice called for device: %s", deviceUuid.c_str());
@@ -1157,29 +1075,12 @@ void BartonMatterImplementation::OnSessionFailure(const chip::ScopedNodeId & pee
                 return Core::ERROR_INVALID_INPUT_LENGTH;
             }
 
-            // Step 1: Convert UUID to node ID and delete ACL entries
-            uint64_t nodeId = 0;
-            if (GetNodeIdFromDeviceUuid(deviceUuid, nodeId))
-            {
-                LOGINFO("RemoveDevice: Deleting ACL entries for node 0x%016llx", (unsigned long long)nodeId);
-                if (!RemoveACLEntriesForNode(nodeId))
-                {
-                    LOGERR("RemoveDevice: Failed to delete ACL entries for device %s", deviceUuid.c_str());
-                    // Continue anyway - ACL cleanup failure shouldn't block device removal
-                }
-            }
-            else
-            {
-                LOGWARN("RemoveDevice: Could not convert UUID to node ID for ACL cleanup");
-            }
-
-            // Step 2: Remove device from Barton (deletes devicedb file)
             gboolean result = b_core_client_remove_device(bartonClient, deviceUuid.c_str());
 
             if (result) {
                 LOGINFO("Successfully removed device %s (devicedb file and all data deleted)", deviceUuid.c_str());
 
-                // Step 3: Clear cache and force rescan on next GetCommissionedDeviceInfo call
+                // Clear cache and force rescan on next GetCommissionedDeviceInfo call
                 // This ensures cache stays in sync with filesystem
                 {
                     std::lock_guard<std::mutex> lock(devicesCacheMtx);
