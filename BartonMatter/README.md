@@ -1,5 +1,5 @@
 -----------------
-# bARTONmATTER
+# BARTON MATTER
 
 ## Versions
 `org.rdk.barton.1`
