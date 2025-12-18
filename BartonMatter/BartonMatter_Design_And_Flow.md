@@ -1,4 +1,28 @@
-# Barton Matter Plugin: System Architecture and Flow Design
+# Barton Matter Plugin: Top-to-Bottom User Flow and Layman's Explanation
+
+This document previously began with low-level implementation details (callback delegates and thread handling). To make it easier for engineers and application developers, the top of the document now starts with a simple, top-to-bottom user flow showing how the UI interacts with the plugin and what happens next inside Barton Core and the Matter SDK. Following the user flow is a brief layman's explanation summarizing the important steps in plain language.
+
+## Quick User Flow (UI → Plugin → Barton Core → Matter)
+
+1. UI (Application) calls plugin JSON-RPC: `InitializeCommissioner()` or `CommissionDevice(passcode)` or `RemoveDevice(deviceUuid)`.
+2. Plugin (`BartonMatterImplementation`) validates the request and delegates high-level lifecycle work to the Barton Core client (`b_core_client`) when appropriate.
+   - Commissioning and removal use `b_core_client_commission_device()` and `b_core_client_remove_device()`.
+3. Barton Core performs the heavy lifting for commissioning (PASE, NOC exchange, persistence to `devicedb`). It emits GLib signals when devices are added or configured.
+4. The plugin receives signals (GLib thread) and updates its in-memory cache (`commissionedDevicesCache`) and begins Matter-specific configuration (ACLs, bindings) by scheduling work to the Matter event loop thread.
+5. Matter thread performs secure operations (establish CASE sessions, create ACL entries, write binding attributes) via the Matter SDK and persists ACLs/KVS as needed.
+6. When operations complete, callback trampolines move execution back into the plugin logic, which then returns success/failure to the UI caller via JSON-RPC responses or status notifications.
+
+## Layman's Explanation (What happens when you press "Add Device"?)
+
+- The UI tells the plugin: "Add this device using this passcode." The plugin asks Barton Core to do the actual handshake with the device. Barton Core handles network and security details and writes a small device file to disk when finished.
+- Once Barton Core says the device is added, the plugin sets up permissions and connections so the new device can control the TV. This includes creating access control entries (ACLs) which say "this particular node is allowed to send commands" and writing binding entries on the client so it knows which endpoints to talk to.
+- When you tell the plugin to remove a device, the plugin removes the device file and also cleans up the permissions (ACLs) and any active secure sessions so the device can be safely recommissioned later.
+
+Notes for application developers:
+- If a device still appears after removal, it may be because the plugin keeps a cache; `GetCommissionedDeviceInfo()` scans the filesystem unless the cache is already initialized. Removing a device triggers cache invalidation so subsequent queries will reflect the change.
+- The plugin performs Matter SDK operations on a dedicated Matter event loop thread — JSON-RPC calls do not block while the Matter stack performs secure or network operations.
+
+---
 
 ## 1. Introduction
 
@@ -15,7 +39,7 @@ This document covers:
 - Flowcharts for inbound (device-to-plugin) and outbound (plugin-to-device) command paths.
 - Core implementation patterns for asynchronous operations, callbacks, and thread safety.
 
----
+----
 
 ## 2. System Architecture
 
@@ -57,130 +81,12 @@ The plugin uses the Matter SDK directly for features that are either not exposed
 
 **Rationale**: These are advanced, application-specific interactions. For example, setting up ACLs and Bindings is a specific requirement for the TV casting use case, allowing a client device to control Barton's endpoints. Handling inbound key presses requires implementing a specific Matter cluster delegate, which is outside the scope of Barton's generic device management.
 
----
+----
 
 ## 3. End-to-End API Flows
 
 This section details the sequence of events for each public API exposed by the plugin.
 
-### 3.1. `InitializeCommissioner`
-
-Initializes the Barton client, sets up Matter properties, and prepares the system to commission devices.
-
-```mermaid
-sequenceDiagram
-    participant App as Application/UI
-    participant Plugin as BartonMatter Plugin
-    participant BCore as Barton Core Client
-    participant Matter as Matter SDK
-
-    App->>Plugin: JSON-RPC: InitializeCommissioner()
-    Plugin->>Plugin: Set default Wi-Fi credentials if needed
-    Plugin->>BCore: InitializeClient() (creates BCoreClient instance)
-    Plugin->>BCore: b_core_client_start()
-    Plugin->>Matter: ScheduleWork(Initialize Cluster Delegates)
-    Matter-->>Plugin: (Async) Delegates are registered
-    Plugin-->>App: Return Success/Failure
-```
-
-### 3.2. `CommissionDevice`
-
-The most complex flow, involving all components to bring a new device into the Matter fabric.
-
-```mermaid
-sequenceDiagram
-    participant App as Application/UI
-    participant Plugin as BartonMatter Plugin
-    participant BCore as Barton Core Client
-    participant Matter as Matter SDK
-    participant Device as New Device
-
-    App->>Plugin: JSON-RPC: CommissionDevice(passcode)
-    Plugin->>BCore: b_core_client_commission_device(passcode)
-    BCore->>Matter: (Internally) Starts commissioning process
-    Matter->>Device: PASE session, network provisioning, etc.
-    Device-->>Matter: Joins fabric
-    Matter-->>BCore: Commissioning complete
-    BCore-->>Plugin: Emits "device-added" signal
-
-    Note right of Plugin: Now the ACL/Binding flow begins
-    Plugin->>Plugin: DeviceAddedHandler(deviceUuid)
-    Plugin->>Plugin: GetNodeIdFromDeviceUuid()
-    Plugin->>Matter: AddACLEntryForClient(nodeId)
-    Matter->>Matter: Stores new ACL in persistent KVS
-
-    Plugin->>Matter: ScheduleWork(EstablishSessionWork)
-    Matter-->>Matter: (Async) EstablishSessionWork() runs
-    Matter->>Device: CASE session establishment
-    Device-->>Matter: Session established
-    Matter-->>Plugin: Invokes OnSessionEstablished callback
-
-    Plugin->>Plugin: OnSessionEstablished(sessionHandle)
-    Plugin->>Matter: WriteClientBindings()
-    Matter->>Device: Write Binding cluster attribute
-    Device-->>Device: Stores bindings
-
-    Plugin-->>App: Return Success/Failure
-```
-
-### 3.3. `ListDevices` / `GetCommissionedDeviceInfo`
-
-Retrieves information about currently commissioned devices.
-
--   `ListDevices`: Uses `b_core_client_get_devices()` to get the runtime list of active devices from Barton Core.
--   `GetCommissionedDeviceInfo`: Reads from a local plugin cache (`commissionedDevicesCache`), which is populated by scanning the `/opt/.brtn-ds/storage/devicedb` directory. This provides a view of persistently stored devices, even if they are offline.
-
-```mermaid
-sequenceDiagram
-    participant App as Application/UI
-    participant Plugin as BartonMatter Plugin
-    participant BCore as Barton Core Client
-    participant Fs as Filesystem
-
-    App->>Plugin: JSON-RPC: ListDevices()
-    Plugin->>BCore: b_core_client_get_devices()
-    BCore-->>Plugin: Returns list of active devices
-    Plugin-->>App: JSON array of device UUIDs
-
-    App->>Plugin: JSON-RPC: GetCommissionedDeviceInfo()
-    Plugin->>Plugin: Check if cache is initialized
-    alt Cache not initialized
-        Plugin->>Fs: Scan /opt/.brtn-ds/storage/devicedb
-        Fs-->>Plugin: File list (node IDs)
-        Plugin->>Plugin: Populate commissionedDevicesCache
-    end
-    Plugin-->>App: JSON array from cache
-```
-
-### 3.4. `RemoveDevice`
-
-Removes a device from the fabric, including all associated data and access rights.
-
-```mermaid
-sequenceDiagram
-    participant App as Application/UI
-    participant Plugin as BartonMatter Plugin
-    participant BCore as Barton Core Client
-    participant Matter as Matter SDK
-    participant Fs as Filesystem
-
-    App->>Plugin: JSON-RPC: RemoveDevice(deviceUuid)
-    Plugin->>Plugin: GetNodeIdFromDeviceUuid(deviceUuid)
-
-    Note right of Plugin: Must clean up Matter state first!
-    Plugin->>Matter: RemoveACLEntriesForNode(nodeId)
-    Matter->>Matter: Deletes ACL entry from KVS
-
-    Plugin->>BCore: b_core_client_remove_device(deviceUuid)
-    BCore->>Fs: Deletes file in /opt/.brtn-ds/storage/devicedb
-
-    Note right of Plugin: Finally, clear local cache
-    Plugin->>Plugin: Clear commissionedDevicesCache
-
-    Plugin-->>App: Return Success/Failure
-```
-
----
 
 ## 4. Inbound and Outbound Control Flows
 
