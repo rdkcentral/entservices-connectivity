@@ -83,6 +83,7 @@ namespace WPEFramework
 	        static void DeviceRemovedHandler(BCoreClient *source, BCoreDeviceRemovedEvent *event, gpointer userData);
 	        bool ConfigureClientACL(const std::string& deviceUuid, uint16_t vendorId, uint16_t productId);
 	        bool AddACLEntryForClient(uint16_t vendorId, uint16_t productId, const std::string& deviceUuid);
+            bool RemoveACLEntriesForNode(uint64_t nodeId);
             bool GetNodeIdFromDeviceUuid(const std::string& deviceUuid, uint64_t& nodeId);
 	        static void DeviceConfigurationCompletedHandler(BCoreClient *client, const gchar *deviceUuid, gboolean success, gpointer userData);
             void OnSessionEstablished(const chip::SessionHandle & sessionHandle);

@@ -137,6 +137,78 @@ Simple explanation: We built the entry struct in memory. Now we tell Matter SDK 
 ### ACL Storage
 Matter SDK stores ACLs in KVS (Key-Value Storage). When a device tries to access an endpoint, Matter checks these ACL entries to decide allow/deny.
 
+### ACL Cleanup on Device Removal
+
+**Critical:** When removing a device, you **must delete its ACL entries** or recommissioning will fail with `CHIP_ERROR_DUPLICATE_KEY_ID` (0x00000019).
+
+**RemoveACLEntriesForNode implementation:**
+
+```cpp
+bool BartonMatterImplementation::RemoveACLEntriesForNode(uint64_t nodeId)
+{
+    chip::FabricIndex fabricIndex = 1;
+
+    // Get iterator for all ACL entries on this fabric
+    AccessControl::EntryIterator iterator;
+    CHIP_ERROR err = GetAccessControl().Entries(fabricIndex, iterator);
+
+    std::vector<size_t> entriesToDelete;
+    size_t entryIndex = 0;
+
+    // First pass: find entries with this node as subject
+    while (iterator.Next())
+    {
+        const AccessControl::Entry& entry = iterator.GetValue();
+        AccessControl::Entry::SubjectIterator subjectIter;
+        entry.GetSubjectIterator(subjectIter);
+
+        while (subjectIter.Next())
+        {
+            chip::NodeId subject = subjectIter.GetValue();
+            if (subject == nodeId)
+            {
+                entriesToDelete.push_back(entryIndex);
+                break;
+            }
+        }
+        entryIndex++;
+    }
+
+    // Delete in reverse order to avoid index shifting
+    for (auto it = entriesToDelete.rbegin(); it != entriesToDelete.rend(); ++it)
+    {
+        GetAccessControl().DeleteEntry(nullptr, fabricIndex, *it);
+    }
+}
+```
+
+**Called from RemoveDevice:**
+
+```cpp
+// Step 1: Delete ACL entries
+uint64_t nodeId = 0;
+if (GetNodeIdFromDeviceUuid(deviceUuid, nodeId))
+{
+    RemoveACLEntriesForNode(nodeId);  // Clean up ACLs first
+}
+
+// Step 2: Remove devicedb file
+b_core_client_remove_device(bartonClient, deviceUuid.c_str());
+
+// Step 3: Clear plugin cache
+commissionedDevicesCache.clear();
+devicesCacheInitialized = false;
+```
+
+Simple explanation:
+1. Convert device UUID to node ID
+2. Iterate all ACL entries, find ones with this node as subject
+3. Collect their indices
+4. Delete in reverse order (so indices stay valid)
+5. Then proceed with devicedb deletion and cache clearing
+
+**Why reverse deletion?** When you delete entry 0, all higher indices shift down. Deleting in reverse (3, 2, 1, 0) prevents this problem.
+
 ---
 
 ## 3. Matter Event Loop Scheduling
