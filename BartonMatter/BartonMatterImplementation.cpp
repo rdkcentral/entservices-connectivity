@@ -1202,6 +1202,68 @@ void BartonMatterImplementation::OnSessionFailure(const chip::ScopedNodeId & pee
             }
         }
 
+        /**
+         * @brief Open a commissioning window on this device to allow Alexa or other controllers to commission it
+         *
+         * This method opens a Matter commissioning window on the local device and returns the
+         * 11-digit manual setup code and QR code that controllers (like Alexa) can use to commission
+         * the device. The commissioning window stays open for the specified timeout period.
+         *
+         * @param timeoutSeconds How long to keep the commissioning window open (0 = default timeout)
+         * @param commissioningInfo Output JSON string containing manualCode and qrCode
+         * @return Core::ERROR_NONE on success, error code otherwise
+         */
+        Core::hresult BartonMatterImplementation::OpenCommissioningWindow(
+            const uint16_t timeoutSeconds /* @in */,
+            std::string& commissioningInfo /* @out */)
+        {
+            LOGINFO("OpenCommissioningWindow called with timeout: %u seconds", timeoutSeconds);
+
+            if (!bartonClient) {
+                LOGERR("Barton client not initialized");
+                commissioningInfo = "{}";
+                return Core::ERROR_UNAVAILABLE;
+            }
+
+            // Call Barton Core API to open commissioning window
+            // Pass NULL or "0" for deviceId to open window on local device
+            g_autoptr(BCoreCommissioningInfo) info =
+                b_core_client_open_commissioning_window(bartonClient, "0", timeoutSeconds);
+
+            if (!info) {
+                LOGERR("Failed to open commissioning window");
+                commissioningInfo = "{}";
+                return Core::ERROR_GENERAL;
+            }
+
+            // Extract manual code (11-digit setup code) and QR code from the returned info
+            g_autofree gchar *manualCode = NULL;
+            g_autofree gchar *qrCode = NULL;
+
+            g_object_get(info,
+                        "manual-code", &manualCode,
+                        "qr-code", &qrCode,
+                        NULL);
+
+            if (!manualCode || !qrCode) {
+                LOGERR("Failed to retrieve commissioning codes from info object");
+                commissioningInfo = "{}";
+                return Core::ERROR_GENERAL;
+            }
+
+            // Build JSON response
+            commissioningInfo = "{";
+            commissioningInfo += "\"manualCode\":\"" + std::string(manualCode) + "\"";
+            commissioningInfo += ",\"qrCode\":\"" + std::string(qrCode) + "\"";
+            commissioningInfo += "}";
+
+            LOGINFO("Commissioning window opened successfully");
+            LOGINFO("  Manual Code (11-digit): %s", manualCode);
+            LOGINFO("  QR Code: %s", qrCode);
+
+            return Core::ERROR_NONE;
+        }
+
     } // namespace Plugin
 } // namespace WPEFramework
 

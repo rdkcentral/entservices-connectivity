@@ -25,6 +25,7 @@
 #include <interfaces/Ids.h>
 #include <barton-core-client.h>
 #include <barton-core-properties.h>
+#include <barton-core-commissioning-info.h>
 #include <provider/barton-core-network-credentials-provider.h>
 #include <events/barton-core-endpoint-added-event.h>
 #include <events/barton-core-device-added-event.h>
@@ -75,6 +76,7 @@ namespace WPEFramework
             virtual Core::hresult ListDevices(std::string& deviceList /* @out */) override;
             virtual Core::hresult GetCommissionedDeviceInfo(std::string& deviceInfo /* @out */) override;
             virtual Core::hresult RemoveDevice(const std::string deviceUuid /* @in */) override;
+            virtual Core::hresult OpenCommissioningWindow(const uint16_t timeoutSeconds /* @in */, std::string& commissioningInfo /* @out */) override;
 
             void InitializeClient(gchar *confDir);
             static void SetDefaultParameters(BCoreInitializeParamsContainer *params);
