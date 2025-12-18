@@ -1,5 +1,4 @@
-# Barton Matter Plugin: Top-to-Bottom User Flow and Layman's Explanation
-
+# Barton Matter Plugin
 This document previously began with low-level implementation details (callback delegates and thread handling). To make it easier for engineers and application developers, the top of the document now starts with a simple, top-to-bottom user flow showing how the UI interacts with the plugin and what happens next inside Barton Core and the Matter SDK. Following the user flow is a brief layman's explanation summarizing the important steps in plain language.
 
 ## Quick User Flow (UI → Plugin → Barton Core → Matter)
