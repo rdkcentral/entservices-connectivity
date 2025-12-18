@@ -1,5 +1,5 @@
 # Barton Matter Plugin
-This document previously began with low-level implementation details (callback delegates and thread handling). To make it easier for engineers and application developers, the top of the document now starts with a simple, top-to-bottom user flow showing how the UI interacts with the plugin and what happens next inside Barton Core and the Matter SDK. Following the user flow is a brief layman's explanation summarizing the important steps in plain language.
+This document previously began with low-level implementation details (callback delegates and thread handling). To make it easier for engineers and application developers, the top of the document now starts with a simple, top-to-bottom user flow showing how the UI interacts with the plugin and what happens next inside Barton Core and the Matter SDK. Following the user flow is a brief plain-language explanation summarizing the important steps in plain language.
 
 ## Quick User Flow (UI → Plugin → Barton Core → Matter)
 
@@ -11,7 +11,7 @@ This document previously began with low-level implementation details (callback d
 5. Matter thread performs secure operations (establish CASE sessions, create ACL entries, write binding attributes) via the Matter SDK and persists ACLs/KVS as needed.
 6. When operations complete, callback trampolines move execution back into the plugin logic, which then returns success/failure to the UI caller via JSON-RPC responses or status notifications.
 
-## Layman's Explanation (What happens when you press "Add Device"?)
+## Plain-language Explanation (What happens when you press "Add Device"?)
 
 - The UI tells the plugin: "Add this device using this passcode." The plugin asks Barton Core to do the actual handshake with the device. Barton Core handles network and security details and writes a small device file to disk when finished.
 - Once Barton Core says the device is added, the plugin sets up permissions and connections so the new device can control the TV. This includes creating access control entries (ACLs) which say "this particular node is allowed to send commands" and writing binding entries on the client so it knows which endpoints to talk to.
@@ -96,33 +96,33 @@ This flow is used when the plugin needs to proactively write data to a client de
 ```mermaid
 graph TD
     subgraph BartonMatter Plugin
-        A[DeviceAddedHandler] --> B{AddACLEntryForClient};
-        B --> C{ScheduleWork(EstablishSessionWork)};
+        A[DeviceAddedHandler] --> B[AddACLEntryForClient]
+        B --> C[ScheduleWork - EstablishSessionWork]
     end
 
     subgraph Matter SDK Thread
-        D[EstablishSessionWork] --> E{CASESessionManager.FindOrEstablishSession};
-        E -- Success --> F[OnSessionEstablished Callback];
+        D[EstablishSessionWork] --> E[CASESessionManager.FindOrEstablishSession]
+        E -- Success --> F[OnSessionEstablished Callback]
     end
 
     subgraph BartonMatter Plugin
-        G[OnSessionEstablished] --> H{WriteClientBindings};
+        G[OnSessionEstablished] --> H[WriteClientBindings]
     end
 
     subgraph Matter SDK
-        I[Create WriteClient] --> J{Encode Attribute (Binding List)};
-        J --> K{SendWriteRequest};
+        I[Create WriteClient] --> J[Encode Attribute - Binding List]
+        J --> K[SendWriteRequest]
     end
 
-    C --> D;
-    F --> G;
-    H --> I;
+    C --> D
+    F --> G
+    H --> I
 
-    K --> L((Network));
+    K --> L(Network)
 
     subgraph Client Device
-        L --> M{Receive Write Request};
-        M --> N[Update Binding Cluster];
+        L --> M[Receive Write Request]
+        M --> N[Update Binding Cluster]
     end
 
     style A fill:#cde4ff
