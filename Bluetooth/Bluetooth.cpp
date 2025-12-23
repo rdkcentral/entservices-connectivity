@@ -143,7 +143,8 @@ namespace WPEFramework
         Bluetooth* Bluetooth::_instance = nullptr;
         static Core::TimerType<DiscoveryTimer> _discoveryTimer(64 * 1024, "DiscoveryTimer");
 
-        BTRMGR_Result_t bluetoothSrv_EventCallback (BTRMGR_EventMessage_t eventMsg)
+        // Coverity Issue #27: PASS_BY_VALUE - Pass large struct by const reference instead of by value for performance
+        BTRMGR_Result_t bluetoothSrv_EventCallback (const BTRMGR_EventMessage_t& eventMsg)
         {
             if (!Bluetooth::_instance) {
                 LOGERR ("Invalid pointer. Bluetooth is not initialized (yet?). Event of type %d ignored.", eventMsg.m_eventType);
@@ -665,7 +666,8 @@ namespace WPEFramework
             response["name"] = string(adapterName);
             LOGWARN ("Name set as %s", adapterName);
             if (rp) {
-                *rp = response;
+                // Coverity Issue #4: COPY_INSTEAD_OF_MOVE - Use std::move() to avoid unnecessary copy of JsonObject
+                *rp = std::move(response);
             }
             return BTRMGR_RESULT_SUCCESS == rc;
         }
