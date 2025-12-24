@@ -6,7 +6,7 @@ applyTo: "CMakeLists.txt"
 
 ### Coverity Scan Inclusion and Test Workflow Updates for New Plugins
 
-When adding a new plugin in `CMakeLists.txt`, you **must** also update the following to guarantee the plugin is included in all required test and Coverity analysis workflows:
+When adding a new plugin in `CMakeLists.txt`, you **must** also update the following files to ensure the plugin is included in all required test and Coverity analysis workflows:
 
 - **CI Workflow Files:**  
   - `L1-tests.yml`
@@ -64,4 +64,4 @@ When adding a new plugin in `CMakeLists.txt`, you **must** also update the follo
 **Summary:**  
 Whenever a new plugin is registered via `CMakeLists.txt`, always update:
 - `cov_build.sh` (add plugin flag to Coverity scan build step)
-- All test CI workflows (`L1-tests.yml`, `L2-tests.yml`, `L2-tests-oop.yml`) to include your plugin flag so that your plugin’s code quality and tests are assured!
+- All test CI workflows (`L1-tests.yml`, `L2-tests.yml`, `L2-tests-oop.yml`) to include your plugin flag to ensure your plugin undergoes proper code quality checks and testing.

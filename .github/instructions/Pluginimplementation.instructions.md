@@ -3,8 +3,8 @@ applyTo: "**/**Implementation.cpp,**/**Implementation.h,**/**.cpp,**/**.h"
 ---
 
 # Instruction Summary
-  1. [Inter-Plugin Communication](https://github.com/rdkcentral/entservices-connectivity/blob/develop/.github/instructions/Pluginimplementation.instructions.md#inter-plugin-communication)
-  2. [On-Demand Plugin Interface Acquisition](https://github.com/rdkcentral/entservices-connectivity/blob/develop/.github/instructions/Pluginimplementation.instructions.md#on-demand-plugin-interface-acquisition)
+  1. [Inter-Plugin Communication](#inter-plugin-communication)
+  2. [On-Demand Plugin Interface Acquisition](#on-demand-plugin-interface-acquisition)
 
 ### Inter-Plugin Communication
 
@@ -26,7 +26,7 @@ QueryInterface:
 _userSettingsPlugin = _service->QueryInterface<WPEFramework::Exchange::IUserSettings>();
 ```
 
-SHOULD not use JSON-RPC or LinkType for inter-plugin communication, as they introduce unnecessary overhead.
+Must not use JSON-RPC or LinkType for inter-plugin communication, as they introduce unnecessary overhead.
 
 ### Incorrect Example
 
@@ -35,12 +35,12 @@ LinkType:
 _telemetry = Core::ProxyType<JSONRPCLink>::Create(_T("org.rdk.telemetry"), _T(""), "token=" + token);
 ```
 
-Json-RPC:
+JSON-RPC:
 ```cpp
 uint32_t ret = m_SystemPluginObj->Invoke<JsonObject, JsonObject>(THUNDER_RPC_TIMEOUT, _T("getFriendlyName"), params, Result);
 ```
 
-Use COM-RPC for plugin event registration by passing a C++ callback interface pointer for low-latency communication. It is important to register for StateChange notifications to monitor the notifying plugin's lifecycle. This allows you to safely release the interface pointer upon deactivation and prevents accessing a non-existent service.
+Use COM-RPC for plugin event registration by passing a C++ callback interface pointer for low-latency communication. It is important to register for state change notifications to monitor the notifying plugin's lifecycle. This allows you to safely release the interface pointer upon deactivation and prevents accessing a non-existent service.
 
 ### Example
 
@@ -59,9 +59,8 @@ void Initialize(PluginHost::IShell* service) override {
     _service = service;
     _service->AddRef();
     
-    // 1. Tell the Framework to send ALL state changes to *this* object
-    // This enables the StateChange() method to work for ALL plugins.
-    _service->Register(this); 
+    // 1. Ask the framework to send state change notifications for all plugins to *this* object
+    // This enables this plugin's StateChange() method to receive notifications about other plugins.
 
     // 2. Check if the target plugins are ALREADY running (First-Time check)
     for (const std::string& callsign : MonitoredCallsigns) {
@@ -87,7 +86,7 @@ void Initialize(PluginHost::IShell* service) override {
 
 **2. Handle Activation (The Re-registration Step)**
 
-Always use if (plugin->Callsign() == "YourTargetCallsign") as the initial gate in your StateChange method. This guarantees that all subsequent logs and re-registration/cleanup logic are executed only for the plugin you are actively monitoring.
+Always use if (plugin->Callsign() == "YourTargetCallsign") as the initial gate in your state change method. This guarantees that all subsequent logs and re-registration/cleanup logic are executed only for the plugin you are actively monitoring.
 
 ```cpp
 // StateChange() called when TargetPlugin comes online
@@ -151,7 +150,7 @@ void RegisterWithTarget(const string& callsign, PluginHost::IShell* plugin) {
 }
 ```
 
-If the notifying plugin supports only JSON-RPC, then use a specialized smart link type when subscribing to its events. This method allows the framework to efficiently handle Plugin statechange events.
+If the notifying plugin supports only JSON-RPC, then use a specialized smart link type when subscribing to its events. This method allows the framework to efficiently handle plugin state change events.
 
 ### Example
 
