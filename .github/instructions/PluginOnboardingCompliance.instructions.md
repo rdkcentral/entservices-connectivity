@@ -2,7 +2,7 @@
 applyTo: "CMakeLists.txt"
 ---
 
-## Requirement
+### Requirement
 
 ### Coverity Scan Inclusion and Test Workflow Updates for New Plugins
 
@@ -35,9 +35,7 @@ When adding a new plugin in `CMakeLists.txt`, you **must** also update the follo
    cmake \
        -DPLUGIN_CORE=ON \
        -DPLUGIN_LEGACY=ON \
-       # <-- NEW PLUGIN FLAG
-       -DPLUGIN_MY_NEW_PLUGIN=ON \
-       .
+       -DPLUGIN_MY_NEW_PLUGIN=ON \  # <-- NEW PLUGIN FLAG
    ```
    This ensures Coverity runs on your new plugin.
 

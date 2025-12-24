@@ -14,12 +14,12 @@ Every plugin must implement:
 
 ### Initialization
 
-### Requirement
+#### Requirement
 
 - Initialize() must handle all setup logic; constructors should remain minimal.
 - It must validate inputs and acquire necessary references.
 
-### Example
+#### Example
 
 ```cpp
 const string HdcpProfile::Initialize(PluginHost::IShell* service) {
@@ -109,7 +109,7 @@ const string HdcpProfile::Initialize(PluginHost::IShell *service)
 
 ### Deinitialize and Cleanup
 
-### Requirement
+#### Requirement
 
 - Deinitialize() must clean up all resources acquired during Initialize(). It must release resources in reverse order of initialization.
 - Every pointer or instance must be checked for nullptr before cleanup.
@@ -222,7 +222,7 @@ void HdcpProfile::Deinitialize(PluginHost::IShell* service) {
 }
 ```
 
-- If AddRef() was called on the IShell instance in Initialize(), then it should call Release() on the IShell instance to decrement its reference count.
+-  If AddRef() was called on the IShell instance in Initialize(), then the plugin must call Release() on the IShell instance to decrement its reference count.
 
 **Example:**
 
@@ -250,7 +250,7 @@ void HdcpProfile::Deinitialize(PluginHost::IShell* service) {
 ```
 
 
-### Deactivated
+### Deactivated Method
 
 Each plugin should implement the Deactivated method. In Deactivated, check if the remote connection ID matches your plugin's connection ID. If it matches, the plugin should submit a deactivation job to handle the out-of-process failure gracefully.
 

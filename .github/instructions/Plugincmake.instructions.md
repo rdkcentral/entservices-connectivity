@@ -4,11 +4,11 @@ applyTo: "**/CMakeLists.txt"
 
 ### NAMESPACE Usage
 
-### Requirement
+#### Requirement
 
 All CMake targets, install paths, export sets, `find_package` and references must use the ${NAMESPACE} variable instead of hardcoded framework names (e.g., WPEFrameworkCore, WPEFrameworkPlugins).
 
-### Correct Example
+#### Correct Example
 
 ```cmake
 set(MODULE_NAME ${NAMESPACE}${PLUGIN_NAME})
@@ -25,7 +25,7 @@ target_link_libraries(${MODULE_NAME}
 ```
 
 
-### Incorrect Example
+#### Incorrect Example
 
 ```cmake
 set(MODULE_NAME WPEFramework${PLUGIN_NAME})

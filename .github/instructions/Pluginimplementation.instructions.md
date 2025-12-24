@@ -8,11 +8,11 @@ applyTo: "**/**Implementation.cpp,**/**Implementation.h,**/**.cpp,**/**.h"
 
 ### Inter-Plugin Communication
 
-### Requirement
+#### Requirement
 
 Plugins should use COM-RPC (e.g., use QueryInterfaceByCallsign or QueryInterface) to access other plugins.
 
-### Example
+#### Example
 
 Telemetry Plugin accessing UserSettings(via COM-RPC) through the IShell Interface API **QueryInterfaceByCallsign()** exposed for each Plugin - (Refer https://github.com/rdkcentral/entservices-infra/blob/7988b8a719e594782f041309ce2d079cf6f52863/Telemetry/TelemetryImplementation.cpp#L160 )
 
@@ -42,7 +42,7 @@ uint32_t ret = m_SystemPluginObj->Invoke<JsonObject, JsonObject>(THUNDER_RPC_TIM
 
 Use COM-RPC for plugin event registration by passing a C++ callback interface pointer for low-latency communication. It is important to register for state change notifications to monitor the notifying plugin's lifecycle. This allows you to safely release the interface pointer upon deactivation and prevents accessing a non-existent service.
 
-### Example
+#### Example
 
 **1. Initialize the Listener and Start Monitoring**
 
@@ -152,7 +152,7 @@ void RegisterWithTarget(const string& callsign, PluginHost::IShell* plugin) {
 
 If the notifying plugin supports only JSON-RPC, then use a specialized smart link type when subscribing to its events. This method allows the framework to efficiently handle plugin state change events.
 
-### Example
+#### Example
 
 ```cpp
 /**
@@ -216,12 +216,12 @@ void Network::subscribeToEvents(void) {
 
 ### On-Demand Plugin Interface Acquisition
 
-### Requirement
+#### Requirement
 
 When a Thunder plugin needs to communicate with another plugin (via JSON-RPC or COM-RPC), do not create and hold the other plugin's interface instance throughout the plugin lifecycle.
 Instead, create the instance only when needed and release it immediately after use. If the other plugin gets deactivated, your stored interface becomes stale. Calling methods on a stale interface leads to undefined behavior, crashes, or deadlocks. Thunder does not automatically invalidate your pointer when the remote plugin goes down.
 
-### Example
+#### Example
 
 ```cpp
 void MyPlugin::setNumber() {

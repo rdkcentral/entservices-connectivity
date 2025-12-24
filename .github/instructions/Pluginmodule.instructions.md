@@ -2,16 +2,15 @@
 applyTo: "**/Module.cpp,**/Module.h"
 ---
 
-
 ### Module Name Convention
 
-### Requirement
+#### Requirement
 
 - Every plugin must define MODULE_NAME because Thunder uses MODULE_NAME to identify each plugin.
 - Every plugin must also define the MODULE_NAME_DECLARATION() macro, which generates identifiers such as the module name string, SHA value, and version for the module, enabling the system to recognize and link it.
 - The MODULE_NAME should always start with the prefix Plugin_.
 
-### Example
+#### Example
 
 1. In Module.h:
 
