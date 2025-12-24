@@ -1,5 +1,5 @@
 ---
-applyTo: "**/*.config,**/*.conf.in"
+applyTo: "**/*.conf.in"
 ---
 
 ### Plugin Configuration
