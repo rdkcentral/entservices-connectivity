@@ -27,7 +27,7 @@ If the mode is explicitly set to LOCAL, the plugin runs out-of-process.
 
 The plugin mode is configured in the plugin's CMakeLists.txt file.
 
--  **locator** - Update with the name of the library (.so) that contains the actual plugin implementation code.
+- **locator** - Update with the name of the library (.so) that contains the actual plugin implementation code.
 
 #### Example
 

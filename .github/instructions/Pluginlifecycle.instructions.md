@@ -33,7 +33,7 @@ const string HdcpProfile::Initialize(PluginHost::IShell* service) {
 }
 ```
 
--  The plugin should register its listener object twice:
+- The plugin should register its listener object twice:
 
   - Framework Service (_service): Use _service->Register(listener) to receive general plugin state change notifications (like ACTIVATED/DEACTIVATED).
 
@@ -222,7 +222,7 @@ void HdcpProfile::Deinitialize(PluginHost::IShell* service) {
 }
 ```
 
--  If AddRef() was called on the IShell instance in Initialize(), then the plugin must call Release() on the IShell instance to decrement its reference count.
+- If AddRef() was called on the IShell instance in Initialize(), then the plugin must call Release() on the IShell instance to decrement its reference count.
 
 **Example:**
 
