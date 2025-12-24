@@ -14,7 +14,7 @@ applyTo: "**/*.config,**/*.conf.in"
 
   - **Custom properties**: Any additional configuration parameters required by the plugin. These are passed during activation via PluginHost::IShell::ConfigLine(). The following structural configuration elements are commonly defined:
     - startuporder - Specifies the order in which plugins are started, relative to others.
-    - precondition - If these preconditions aren't met, the plugin stays in the Preconditions state and activates automatically once they are satisfied. It is recommended to define the preconditions if the plugin depends on other subsystems being active.
+    - preconditions - If these preconditions aren't met, the plugin stays in the Preconditions state and activates automatically once they are satisfied. It is recommended to define the preconditions if the plugin depends on other subsystems being active.
     - mode - Defines the execution mode of the plugin.
 
 #### Plugin Mode Determination
@@ -27,7 +27,7 @@ If the mode is explicitly set to LOCAL, the plugin runs out-of-process.
 
 The plugin mode is configured in the plugin's CMakeLists.txt file.
 
-- **locator** - Update with the name of the library (.so) that contains the actual plugin Implementation code.
+-  **locator** - Update with the name of the library (.so) that contains the actual plugin implementation code.
 
 #### Example
 

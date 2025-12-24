@@ -2,7 +2,7 @@
 applyTo: "**/Module.cpp,**/Module.h"
 ---
 
-### Module Name Convention
+## Module Name Convention
 
 #### Requirement
 
