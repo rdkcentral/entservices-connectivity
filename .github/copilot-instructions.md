@@ -8,7 +8,7 @@ When writing review comments based on custom instructions located in .github/ins
 
 Refer: https://github.com/rdkcentral/entservices-connectivity/blob/develop/.github/instructions/Plugin.instructions.md#interface-implementation 
 
-Refer: https://github.com/rdkcentral/entservices-connectivity/blob/develop/.github/instructions/Pluginlifecycle.instructions.md#deactivated
+Refer: https://github.com/rdkcentral/entservices-connectivity/blob/develop/.github/instructions/Pluginlifecycle.instructions.md#deactivated-method
 
 Refer: https://github.com/rdkcentral/entservices-connectivity/blob/develop/.github/instructions/Pluginimplementation.instructions.md#inter-plugin-communication 
 
