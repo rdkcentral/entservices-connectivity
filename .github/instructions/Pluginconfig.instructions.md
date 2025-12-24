@@ -4,7 +4,7 @@ applyTo: "**/*.config,**/*.conf.in"
 
 ### Plugin Configuration
 
-### Requirement
+#### Requirement
 
 - Each plugin must define a <PluginName>.conf.in file that includes the following mandatory properties:
 
@@ -17,7 +17,7 @@ applyTo: "**/*.config,**/*.conf.in"
     - precondition - If these preconditions aren't met, the plugin stays in the Preconditions state and activates automatically once they are satisfied. It is recommended to define the preconditions if the plugin depends on other subsystems being active.
     - mode - Defines the execution mode of the plugin.
 
-### Plugin Mode Determination
+#### Plugin Mode Determination
 
 If the plugin's mode is set to OFF, it is treated as in-process.
 
@@ -29,7 +29,7 @@ The plugin mode is configured in the plugin's CMakeLists.txt file.
 
 - **locator** - Update with the name of the library (.so) that contains the actual plugin Implementation code.
 
-### Example
+#### Example
 
 <PluginName>.conf.in
 
