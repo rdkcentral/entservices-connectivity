@@ -19,6 +19,7 @@
 
 #include "BartonMatterImplementation.h"
 #include "MatterClusterDelegates.h"
+#include "NetworkCommissioningDriver.h"
 #include <fstream>
 #include <dirent.h>
 #include <map>
@@ -434,6 +435,9 @@ namespace WPEFramework
             chip::DeviceLayer::PlatformMgr().ScheduleWork([](intptr_t) {
                 ChipLogProgress(AppServer, "Scheduling cluster delegate initialization...");
                 MatterClusterDelegateManager::GetInstance().Initialize();
+
+                // Initialize NetworkCommissioning cluster driver
+                InitializeNetworkCommissioning();
             });
 
             LOGINFO("BartonMatter Commissioner initialized successfully");
