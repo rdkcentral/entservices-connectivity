@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document explains how BartonMatter configures Access Control Lists (ACLs) and Bindings when a client device (like Alexa) is commissioned and needs to control the TV.
+This document explains how BartonMatter configures Access Control Lists (ACLs) and Bindings when a client device (like tv-casting-app) is commissioned and needs to control the TV.
 
 ---
 
@@ -27,30 +27,30 @@ Imagine your TV is like a secured building with multiple rooms (endpoints):
 - **Room 2**: Speaker controls (audio settings)
 - **Room 3**: App controls (Netflix, YouTube, etc.)
 
-When Alexa wants to control your TV, we need to:
-1. **Give Alexa a key** (ACL - Access Control List) to enter specific rooms
-2. **Tell Alexa which rooms exist** (Bindings) and how to reach them
+When tv-casting-app wants to control your TV, we need to:
+1. **Give tv-casting-app a key** (ACL - Access Control List) to enter specific rooms
+2. **Tell tv-casting-app which rooms exist** (Bindings) and how to reach them
 
 ### The Solution
 
 **Step 1: Creating the Access Pass (ACL)**
-- When you say "Alexa, pair with my TV", the TV creates a special access pass
-- This pass lists exactly which rooms (endpoints) Alexa can access
-- It's like giving Alexa a hotel key card that only works on floors 1, 2, and 3
+- When you say "tv-casting-app, pair with my TV", the TV creates a special access pass
+- This pass lists exactly which rooms (endpoints) tv-casting-app can access
+- It's like giving tv-casting-app a hotel key card that only works on floors 1, 2, and 3
 
 **Step 2: Providing the Directory (Bindings)**
-- After giving the access pass, the TV sends Alexa a directory
+- After giving the access pass, the TV sends tv-casting-app a directory
 - The directory says: "Room 1 is for video, Room 2 is for audio, Room 3 is for apps"
-- Now Alexa knows where to send commands when you say "Play Netflix"
+- Now tv-casting-app knows where to send commands when you say "Play Netflix"
 
 ### Real-World Analogy
 
 ```
-You (via Alexa): "I want to control the TV"
+You (via tv-casting-app): "I want to control the TV"
 TV Security System: "Let me check your credentials..."
 TV: "OK, you're authorized! Here's your access card (ACL)"
 TV: "And here's a map showing all the rooms you can access (Bindings)"
-Alexa: "Great! Now when the user says 'play video', I know to go to Room 1"
+tv-casting-app: "Great! Now when the user says 'play video', I know to go to Room 1"
 ```
 
 ---
@@ -78,12 +78,12 @@ The ACL and Binding creation flow enables a commissioned Matter client (controll
 
 ```mermaid
 sequenceDiagram
-    participant User as User/Alexa
+    participant User as User/tv-casting-app
     participant Barton as BartonMatter Plugin
     participant Matter as Matter SDK
     participant ACL as Access Control
     participant Session as CASE Session Manager
-    participant Client as Alexa Device
+    participant Client as tv-casting-app Device
 
     User->>Barton: ConfigureClientACL(deviceUuid)
     Note over Barton: Entry point from commissioning
@@ -128,9 +128,9 @@ sequenceDiagram
     Client-->>Matter: Write Response (Success)
     Matter-->>Barton: Binding Write Complete ✓
 
-    Note over Client: Alexa now knows:<br/>1. It has access (ACL)<br/>2. TV endpoints (Bindings)<br/>3. Can send commands!
+    Note over Client: tv-casting-app now knows:<br/>1. It has access (ACL)<br/>2. TV endpoints (Bindings)<br/>3. Can send commands!
 
-    User->>Client: "Alexa, play Netflix"
+    User->>Client: "tv-casting-app, play Netflix"
     Client->>Barton: SendCommand(endpoint=3, LaunchApp)
     Barton-->>Client: Success
 ```
@@ -168,7 +168,7 @@ ACL Entry {
     FabricIndex: 1                    // Which fabric this applies to
     Privilege: Administer             // Full access level
     AuthMode: CASE                    // Certificate-based authentication
-    Subject: 0x90034FD9068DFF14       // Alexa's NodeId
+    Subject: 0x90034FD9068DFF14       // tv-casting-app's NodeId
     Targets: [
         { Endpoint: 1 },              // Video Player
         { Endpoint: 2 },              // Speaker
@@ -249,7 +249,7 @@ bool ConfigureClientACL(const string& deviceUuid, uint16_t vendorId, uint16_t pr
 ```
 
 **Purpose**: Public API called after device commissioning
-**Triggers**: User pairs Alexa with TV via voice command or app
+**Triggers**: User pairs tv-casting-app with TV via voice command or app
 **Returns**: `true` if ACL created successfully, `false` otherwise
 
 ---
@@ -279,7 +279,7 @@ bool AddACLEntryForClient(uint16_t vendorId, uint16_t productId, const string& d
    entry.SetFabricIndex(1);                    // Fabric 1
    entry.SetPrivilege(Privilege::kAdminister); // Full access
    entry.SetAuthMode(AuthMode::kCase);         // CASE authentication
-   entry.AddSubject(nullptr, nodeId);          // Alexa's NodeId
+   entry.AddSubject(nullptr, nodeId);          // tv-casting-app's NodeId
    ```
 
 4. **Add Target Endpoints** (repeated 3 times)
@@ -297,7 +297,7 @@ bool AddACLEntryForClient(uint16_t vendorId, uint16_t productId, const string& d
    ```
 
 **Security Model:**
-- **Subject**: WHO gets access (Alexa's NodeId)
+- **Subject**: WHO gets access (tv-casting-app's NodeId)
 - **Target**: WHAT can be accessed (Endpoints 1, 2, 3)
 - **Privilege**: HOW MUCH access (Administer = full control)
 - **AuthMode**: HOW to authenticate (CASE = certificate-based)
@@ -323,10 +323,10 @@ void EstablishSessionWork(intptr_t context)
 
 **CASE Session Handshake:**
 ```
-TV → Alexa: Sigma1 (Initiator Hello + Random)
-TV ← Alexa: Sigma2 (Responder Hello + Certificate)
-TV → Alexa: Sigma3 (Verify + Finalize)
-TV ← Alexa: Session Established ✓
+TV → tv-casting-app: Sigma1 (Initiator Hello + Random)
+TV ← tv-casting-app: Sigma2 (Responder Hello + Certificate)
+TV → tv-casting-app: Sigma3 (Verify + Finalize)
+TV ← tv-casting-app: Session Established ✓
 ```
 
 **Callbacks:**
@@ -581,7 +581,7 @@ matter-cli fabric list
 **Diagnosis:**
 ```bash
 # Check network connectivity
-ping <alexa-device-ip>
+ping <tv-casting-app-device-ip>
 
 # Check Matter mDNS discovery
 dns-sd -B _matter._tcp
@@ -641,4 +641,5 @@ For questions or issues related to ACL/Binding implementation:
 - Repository: BartonCore entservices-connectivity
 - Module: BartonMatter
 - Component: MatterCommissioning
+
 
