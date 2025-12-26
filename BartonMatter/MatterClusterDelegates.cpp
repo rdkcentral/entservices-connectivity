@@ -898,10 +898,119 @@ namespace WPEFramework
             }
             mRegisteredEndpoints.clear();
 
-            // Cleanup
+            // Cleanup NetworkCommissioning
+            mNetworkCommissioningInstance.reset();
+            mWiFiDriver.reset();
+
+            // Cleanup cluster delegates
             mKeypadInputDelegate.reset();
             mApplicationLauncherDelegate.reset();
             mInitialized = false;
+        }
+
+        void MatterClusterDelegateManager::InitializeNetworkCommissioning()
+        {
+            ChipLogProgress(AppServer, "Initializing NetworkCommissioning cluster on endpoint 0");
+
+            // Create WiFi driver
+            mWiFiDriver = std::make_unique<WiFiDriver>();
+
+            // Create NetworkCommissioning instance on endpoint 0
+            mNetworkCommissioningInstance = std::make_unique<NetworkCommissioning::Instance>(0, mWiFiDriver.get());
+
+            CHIP_ERROR err = mNetworkCommissioningInstance->Init();
+            if (err != CHIP_NO_ERROR)
+            {
+                ChipLogError(AppServer, "Failed to initialize NetworkCommissioning instance: %s", chip::ErrorStr(err));
+                return;
+            }
+
+            ChipLogProgress(AppServer, "NetworkCommissioning cluster initialized successfully with WiFi driver");
+        }
+
+        // WiFiDriver Implementation
+
+        CHIP_ERROR WiFiDriver::Init(chip::DeviceLayer::NetworkCommissioning::Internal::BaseDriver::NetworkStatusChangeCallback * callback)
+        {
+            mStatusChangeCallback = callback;
+            ChipLogProgress(AppServer, "WiFiDriver initialized");
+            return CHIP_NO_ERROR;
+        }
+
+        void WiFiDriver::Shutdown()
+        {
+            mStatusChangeCallback = nullptr;
+        }
+
+        CHIP_ERROR WiFiDriver::CommitConfiguration()
+        {
+            ChipLogProgress(AppServer, "WiFiDriver: CommitConfiguration called");
+            return CHIP_NO_ERROR;
+        }
+
+        CHIP_ERROR WiFiDriver::RevertConfiguration()
+        {
+            ChipLogProgress(AppServer, "WiFiDriver: RevertConfiguration called");
+            return CHIP_NO_ERROR;
+        }
+
+        WiFiDriver::Status WiFiDriver::RemoveNetwork(chip::ByteSpan networkId, chip::MutableCharSpan & outDebugText, uint8_t & outNetworkIndex)
+        {
+            ChipLogProgress(AppServer, "WiFiDriver: RemoveNetwork called");
+            return Status::kSuccess;
+        }
+
+        WiFiDriver::Status WiFiDriver::ReorderNetwork(chip::ByteSpan networkId, uint8_t index, chip::MutableCharSpan & outDebugText)
+        {
+            ChipLogProgress(AppServer, "WiFiDriver: ReorderNetwork called");
+            return Status::kSuccess;
+        }
+
+        void WiFiDriver::ConnectNetwork(chip::ByteSpan networkId, ConnectCallback * callback)
+        {
+            ChipLogProgress(AppServer, "WiFiDriver: ConnectNetwork called");
+            // Device is already connected to WiFi via system configuration
+            if (callback)
+            {
+                callback->OnResult(Status::kSuccess, chip::CharSpan(), 0);
+            }
+        }
+
+        void WiFiDriver::ScanNetworks(chip::ByteSpan ssid, ScanCallback * callback)
+        {
+            ChipLogProgress(AppServer, "WiFiDriver: ScanNetworks called");
+            // Return empty scan results - device manages WiFi at OS level
+            if (callback)
+            {
+                callback->OnFinished(Status::kSuccess, chip::CharSpan(), nullptr);
+            }
+        }
+
+        CHIP_ERROR WiFiDriver::AddOrUpdateNetwork(chip::ByteSpan ssid, chip::ByteSpan credentials, chip::MutableCharSpan & outDebugText, uint8_t & outNetworkIndex)
+        {
+            ChipLogProgress(AppServer, "WiFiDriver: AddOrUpdateNetwork called (SSID len=%u)", static_cast<unsigned>(ssid.size()));
+            // Device WiFi is managed at OS level, but accept the configuration for Matter commissioning
+            outNetworkIndex = 0;
+            return CHIP_NO_ERROR;
+        }
+
+        void WiFiDriver::OnNetworkStatusChange()
+        {
+            ChipLogProgress(AppServer, "WiFiDriver: OnNetworkStatusChange called");
+        }
+
+        chip::BitFlags<chip::app::Clusters::NetworkCommissioning::WiFiSecurityBitmap> WiFiDriver::GetSecurityTypes()
+        {
+            return chip::BitFlags<chip::app::Clusters::NetworkCommissioning::WiFiSecurityBitmap>(
+                chip::app::Clusters::NetworkCommissioning::WiFiSecurityBitmap::kWpa2Personal |
+                chip::app::Clusters::NetworkCommissioning::WiFiSecurityBitmap::kWpa3Personal);
+        }
+
+        chip::BitFlags<chip::app::Clusters::NetworkCommissioning::WiFiBandBitmap> WiFiDriver::GetWiFiBands()
+        {
+            return chip::BitFlags<chip::app::Clusters::NetworkCommissioning::WiFiBandBitmap>(
+                chip::app::Clusters::NetworkCommissioning::WiFiBandBitmap::k2g4 |
+                chip::app::Clusters::NetworkCommissioning::WiFiBandBitmap::k5g);
         }
 
     } // namespace Plugin

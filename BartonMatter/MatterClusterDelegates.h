@@ -21,6 +21,8 @@
 
 #include <app/clusters/application-launcher-server/application-launcher-server.h>
 #include <app/clusters/keypad-input-server/keypad-input-server.h>
+#include <app/clusters/network-commissioning/network-commissioning.h>
+#include <platform/NetworkCommissioningDriver.h>
 #include <memory>
 #include <vector>
 
@@ -28,6 +30,42 @@ namespace WPEFramework
 {
     namespace Plugin
     {
+        /**
+         * @brief WiFi driver for NetworkCommissioning cluster
+         *
+         * Implements WiFi driver interface for commissioner/commissionee device.
+         * Device acts as commissioner when pairing other devices, and as
+         * commissionee when paired by controllers like Alexa.
+         *
+         * WiFi is managed at OS level, so driver methods are stubs that
+         * return success to satisfy Matter SDK requirements.
+         */
+        class WiFiDriver : public chip::DeviceLayer::NetworkCommissioning::WiFiDriver
+        {
+        public:
+            chip::CHIP_ERROR Init(chip::DeviceLayer::NetworkCommissioning::Internal::BaseDriver::NetworkStatusChangeCallback * callback) override;
+            void Shutdown() override;
+
+            uint8_t GetMaxNetworks() override { return 1; }
+            uint8_t GetScanNetworkTimeoutSeconds() override { return 10; }
+            uint8_t GetConnectNetworkTimeoutSeconds() override { return 20; }
+
+            chip::CHIP_ERROR CommitConfiguration() override;
+            chip::CHIP_ERROR RevertConfiguration() override;
+
+            Status RemoveNetwork(chip::ByteSpan networkId, chip::MutableCharSpan & outDebugText, uint8_t & outNetworkIndex) override;
+            Status ReorderNetwork(chip::ByteSpan networkId, uint8_t index, chip::MutableCharSpan & outDebugText) override;
+            void ConnectNetwork(chip::ByteSpan networkId, ConnectCallback * callback) override;
+            void ScanNetworks(chip::ByteSpan ssid, ScanCallback * callback) override;
+            chip::CHIP_ERROR AddOrUpdateNetwork(chip::ByteSpan ssid, chip::ByteSpan credentials, chip::MutableCharSpan & outDebugText, uint8_t & outNetworkIndex) override;
+            void OnNetworkStatusChange() override;
+
+            chip::BitFlags<chip::app::Clusters::NetworkCommissioning::WiFiSecurityBitmap> GetSecurityTypes() override;
+            chip::BitFlags<chip::app::Clusters::NetworkCommissioning::WiFiBandBitmap> GetWiFiBands() override;
+
+        private:
+            chip::DeviceLayer::NetworkCommissioning::Internal::BaseDriver::NetworkStatusChangeCallback * mStatusChangeCallback = nullptr;
+        };
         /**
          * @brief KeypadInput delegate for handling remote control key commands
          *
@@ -132,6 +170,8 @@ namespace WPEFramework
 
         /**
          * @brief Cluster delegate manager for Matter endpoints
+         *
+         * Manages all cluster delegate implementations and NetworkCommissioning driver
          */
         class MatterClusterDelegateManager
         {
@@ -140,6 +180,12 @@ namespace WPEFramework
 
             void Initialize();
             void Shutdown();
+
+            /**
+             * @brief Initialize NetworkCommissioning cluster with WiFi driver
+             * Must be called on Matter event loop thread
+             */
+            void InitializeNetworkCommissioning();
 
         private:
             MatterClusterDelegateManager() = default;
@@ -150,6 +196,8 @@ namespace WPEFramework
             bool mInitialized = false;
             std::unique_ptr<MatterKeypadInputDelegate> mKeypadInputDelegate;
             std::unique_ptr<MatterApplicationLauncherDelegate> mApplicationLauncherDelegate;
+            std::unique_ptr<WiFiDriver> mWiFiDriver;
+            std::unique_ptr<chip::app::Clusters::NetworkCommissioning::Instance> mNetworkCommissioningInstance;
             std::vector<chip::EndpointId> mRegisteredEndpoints;
         };
 

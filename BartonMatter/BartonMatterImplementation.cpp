@@ -19,7 +19,6 @@
 
 #include "BartonMatterImplementation.h"
 #include "MatterClusterDelegates.h"
-#include "NetworkCommissioningDriver.h"
 #include <fstream>
 #include <dirent.h>
 #include <map>
@@ -437,14 +436,7 @@ namespace WPEFramework
                 MatterClusterDelegateManager::GetInstance().Initialize();
 
                 // Initialize NetworkCommissioning cluster driver
-                InitializeNetworkCommissioning();
-            });
-
-            LOGINFO("BartonMatter Commissioner initialized successfully");
-
-            return (Core::ERROR_NONE);
-        }
-
+                MatterClusterDelegateManager::GetInstance().InitializeNetworkCommissioning();
         gchar* BartonMatterImplementation::GetConfigDirectory()
         {
             const std::string pathStr = "/opt/.brtn-ds";
@@ -719,6 +711,7 @@ namespace WPEFramework
 
             // Build binding list for all accessible endpoints
             std::vector<Structs::TargetStruct::Type> bindings;
+            bindings.reserve(endpoints.size());  // Pre-allocate to avoid reallocation during push_back
 
             for (chip::EndpointId endpoint : endpoints)
             {
