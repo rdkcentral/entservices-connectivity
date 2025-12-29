@@ -22,7 +22,7 @@
 #include <app/clusters/application-launcher-server/application-launcher-server.h>
 #include <app/clusters/keypad-input-server/keypad-input-server.h>
 #include <app/clusters/network-commissioning/network-commissioning.h>
-#include <platform/NetworkCommissioningDriver.h>
+#include <platform/Linux/NetworkCommissioningDriver.h>
 #include <memory>
 #include <vector>
 
