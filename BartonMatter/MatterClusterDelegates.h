@@ -42,6 +42,7 @@ namespace WPEFramework
          * return success to satisfy Matter SDK requirements.
          */
         class WiFiDriver : public chip::DeviceLayer::NetworkCommissioning::WiFiDriver
+                    chip::DeviceLayer::NetworkCommissioning::NetworkIterator * GetNetworks() override;
         {
         public:
 
