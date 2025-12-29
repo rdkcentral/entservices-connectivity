@@ -996,25 +996,6 @@ namespace WPEFramework
         }
 
 
-        chip::BitFlags<chip::app::Clusters::NetworkCommissioning::WiFiSecurityBitmap> WiFiDriver::GetSecurityTypes()
-        {
-            return chip::BitFlags<chip::app::Clusters::NetworkCommissioning::WiFiSecurityBitmap>(
-                chip::app::Clusters::NetworkCommissioning::WiFiSecurityBitmap::kWpa2Personal |
-                chip::app::Clusters::NetworkCommissioning::WiFiSecurityBitmap::kWpa3Personal);
-        }
-
-        chip::BitFlags<chip::app::Clusters::NetworkCommissioning::WiFiBandEnum> WiFiDriver::GetWiFiBands()
-        {
-            return chip::BitFlags<chip::app::Clusters::NetworkCommissioning::WiFiBandEnum>(
-                chip::app::Clusters::NetworkCommissioning::WiFiBandEnum::k2g4 |
-                chip::app::Clusters::NetworkCommissioning::WiFiBandEnum::k5g);
-        }
-
-        size_t WiFiDriver::GetNetworks(chip::DeviceLayer::NetworkCommissioning::Network * networks, size_t maxNetworks)
-        {
-            // No networks managed by driver; always return 0
-            return 0;
-        }
 
     } // namespace Plugin
 } // namespace WPEFramework
