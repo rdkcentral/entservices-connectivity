@@ -23,6 +23,7 @@
 #include <app/clusters/keypad-input-server/keypad-input-server.h>
 #include <app/clusters/network-commissioning/network-commissioning.h>
 #include <platform/Linux/NetworkCommissioningDriver.h>
+#include <lib/core/CHIPError.h>
 #include <memory>
 #include <vector>
 
@@ -43,25 +44,26 @@ namespace WPEFramework
         class WiFiDriver : public chip::DeviceLayer::NetworkCommissioning::WiFiDriver
         {
         public:
-            chip::CHIP_ERROR Init(chip::DeviceLayer::NetworkCommissioning::Internal::BaseDriver::NetworkStatusChangeCallback * callback) override;
+
+            CHIP_ERROR Init(chip::DeviceLayer::NetworkCommissioning::Internal::BaseDriver::NetworkStatusChangeCallback * callback) override;
             void Shutdown() override;
 
-            uint8_t GetMaxNetworks() override { return 1; }
-            uint8_t GetScanNetworkTimeoutSeconds() override { return 10; }
-            uint8_t GetConnectNetworkTimeoutSeconds() override { return 20; }
+            uint8_t GetMaxNetworks() const override { return 1; }
+            uint8_t GetScanNetworkTimeoutSeconds() const override { return 10; }
+            uint8_t GetConnectNetworkTimeoutSeconds() const override { return 20; }
 
-            chip::CHIP_ERROR CommitConfiguration() override;
-            chip::CHIP_ERROR RevertConfiguration() override;
+            CHIP_ERROR CommitConfiguration() override;
+            CHIP_ERROR RevertConfiguration() override;
 
-            Status RemoveNetwork(chip::ByteSpan networkId, chip::MutableCharSpan & outDebugText, uint8_t & outNetworkIndex) override;
-            Status ReorderNetwork(chip::ByteSpan networkId, uint8_t index, chip::MutableCharSpan & outDebugText) override;
+            chip::DeviceLayer::NetworkCommissioning::Status RemoveNetwork(chip::ByteSpan networkId, chip::MutableCharSpan & outDebugText, uint8_t & outNetworkIndex) override;
+            chip::DeviceLayer::NetworkCommissioning::Status ReorderNetwork(chip::ByteSpan networkId, uint8_t index, chip::MutableCharSpan & outDebugText) override;
             void ConnectNetwork(chip::ByteSpan networkId, ConnectCallback * callback) override;
             void ScanNetworks(chip::ByteSpan ssid, ScanCallback * callback) override;
-            chip::CHIP_ERROR AddOrUpdateNetwork(chip::ByteSpan ssid, chip::ByteSpan credentials, chip::MutableCharSpan & outDebugText, uint8_t & outNetworkIndex) override;
+            CHIP_ERROR AddOrUpdateNetwork(chip::ByteSpan ssid, chip::ByteSpan credentials, chip::MutableCharSpan & outDebugText, uint8_t & outNetworkIndex) override;
             void OnNetworkStatusChange() override;
 
-            chip::BitFlags<chip::app::Clusters::NetworkCommissioning::WiFiSecurityBitmap> GetSecurityTypes() override;
-            chip::BitFlags<chip::app::Clusters::NetworkCommissioning::WiFiBandBitmap> GetWiFiBands() override;
+            chip::BitFlags<chip::app::Clusters::NetworkCommissioning::WiFiSecurityBitmap> GetSecurityTypes() const override;
+            chip::BitFlags<chip::app::Clusters::NetworkCommissioning::WiFiBandEnum> GetWiFiBands() const override;
 
         private:
             chip::DeviceLayer::NetworkCommissioning::Internal::BaseDriver::NetworkStatusChangeCallback * mStatusChangeCallback = nullptr;

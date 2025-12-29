@@ -954,16 +954,16 @@ namespace WPEFramework
             return CHIP_NO_ERROR;
         }
 
-        WiFiDriver::Status WiFiDriver::RemoveNetwork(chip::ByteSpan networkId, chip::MutableCharSpan & outDebugText, uint8_t & outNetworkIndex)
+        chip::DeviceLayer::NetworkCommissioning::Status WiFiDriver::RemoveNetwork(chip::ByteSpan networkId, chip::MutableCharSpan & outDebugText, uint8_t & outNetworkIndex)
         {
             ChipLogProgress(AppServer, "WiFiDriver: RemoveNetwork called");
-            return Status::kSuccess;
+            return chip::DeviceLayer::NetworkCommissioning::Status::kSuccess;
         }
 
-        WiFiDriver::Status WiFiDriver::ReorderNetwork(chip::ByteSpan networkId, uint8_t index, chip::MutableCharSpan & outDebugText)
+        chip::DeviceLayer::NetworkCommissioning::Status WiFiDriver::ReorderNetwork(chip::ByteSpan networkId, uint8_t index, chip::MutableCharSpan & outDebugText)
         {
             ChipLogProgress(AppServer, "WiFiDriver: ReorderNetwork called");
-            return Status::kSuccess;
+            return chip::DeviceLayer::NetworkCommissioning::Status::kSuccess;
         }
 
         void WiFiDriver::ConnectNetwork(chip::ByteSpan networkId, ConnectCallback * callback)
@@ -972,7 +972,7 @@ namespace WPEFramework
             // Device is already connected to WiFi via system configuration
             if (callback)
             {
-                callback->OnResult(Status::kSuccess, chip::CharSpan(), 0);
+                callback->OnResult(chip::DeviceLayer::NetworkCommissioning::Status::kSuccess, chip::CharSpan(), 0);
             }
         }
 
@@ -982,7 +982,7 @@ namespace WPEFramework
             // Return empty scan results - device manages WiFi at OS level
             if (callback)
             {
-                callback->OnFinished(Status::kSuccess, chip::CharSpan(), nullptr);
+                callback->OnFinished(chip::DeviceLayer::NetworkCommissioning::Status::kSuccess, chip::CharSpan(), nullptr);
             }
         }
 
@@ -999,18 +999,18 @@ namespace WPEFramework
             ChipLogProgress(AppServer, "WiFiDriver: OnNetworkStatusChange called");
         }
 
-        chip::BitFlags<chip::app::Clusters::NetworkCommissioning::WiFiSecurityBitmap> WiFiDriver::GetSecurityTypes()
+        chip::BitFlags<chip::app::Clusters::NetworkCommissioning::WiFiSecurityBitmap> WiFiDriver::GetSecurityTypes() const
         {
             return chip::BitFlags<chip::app::Clusters::NetworkCommissioning::WiFiSecurityBitmap>(
                 chip::app::Clusters::NetworkCommissioning::WiFiSecurityBitmap::kWpa2Personal |
                 chip::app::Clusters::NetworkCommissioning::WiFiSecurityBitmap::kWpa3Personal);
         }
 
-        chip::BitFlags<chip::app::Clusters::NetworkCommissioning::WiFiBandBitmap> WiFiDriver::GetWiFiBands()
+        chip::BitFlags<chip::app::Clusters::NetworkCommissioning::WiFiBandEnum> WiFiDriver::GetWiFiBands() const
         {
-            return chip::BitFlags<chip::app::Clusters::NetworkCommissioning::WiFiBandBitmap>(
-                chip::app::Clusters::NetworkCommissioning::WiFiBandBitmap::k2g4 |
-                chip::app::Clusters::NetworkCommissioning::WiFiBandBitmap::k5g);
+            return chip::BitFlags<chip::app::Clusters::NetworkCommissioning::WiFiBandEnum>(
+                chip::app::Clusters::NetworkCommissioning::WiFiBandEnum::k2g4 |
+                chip::app::Clusters::NetworkCommissioning::WiFiBandEnum::k5g);
         }
 
     } // namespace Plugin
