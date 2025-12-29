@@ -437,6 +437,9 @@ namespace WPEFramework
 
                 // Initialize NetworkCommissioning cluster driver
                 MatterClusterDelegateManager::GetInstance().InitializeNetworkCommissioning();
+            }); // <-- Close the lambda and ScheduleWork call
+        }
+
         gchar* BartonMatterImplementation::GetConfigDirectory()
         {
             const std::string pathStr = "/opt/.brtn-ds";
