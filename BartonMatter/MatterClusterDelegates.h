@@ -48,9 +48,9 @@ namespace WPEFramework
             CHIP_ERROR Init(chip::DeviceLayer::NetworkCommissioning::Internal::BaseDriver::NetworkStatusChangeCallback * callback) override;
             void Shutdown() override;
 
-            uint8_t GetMaxNetworks() const override { return 1; }
-            uint8_t GetScanNetworkTimeoutSeconds() const override { return 10; }
-            uint8_t GetConnectNetworkTimeoutSeconds() const override { return 20; }
+            uint8_t GetMaxNetworks() override { return 1; }
+            uint8_t GetScanNetworkTimeoutSeconds() override { return 10; }
+            uint8_t GetConnectNetworkTimeoutSeconds() override { return 20; }
 
             CHIP_ERROR CommitConfiguration() override;
             CHIP_ERROR RevertConfiguration() override;
@@ -62,8 +62,11 @@ namespace WPEFramework
             CHIP_ERROR AddOrUpdateNetwork(chip::ByteSpan ssid, chip::ByteSpan credentials, chip::MutableCharSpan & outDebugText, uint8_t & outNetworkIndex) override;
             void OnNetworkStatusChange() override;
 
-            chip::BitFlags<chip::app::Clusters::NetworkCommissioning::WiFiSecurityBitmap> GetSecurityTypes() const override;
-            chip::BitFlags<chip::app::Clusters::NetworkCommissioning::WiFiBandEnum> GetWiFiBands() const override;
+            chip::BitFlags<chip::app::Clusters::NetworkCommissioning::WiFiSecurityBitmap> GetSecurityTypes() override;
+            chip::BitFlags<chip::app::Clusters::NetworkCommissioning::WiFiBandEnum> GetWiFiBands() override;
+
+            // Add missing GetNetworks() override if required by the base class
+            size_t GetNetworks(chip::DeviceLayer::NetworkCommissioning::Network * networks, size_t maxNetworks) override;
 
         private:
             chip::DeviceLayer::NetworkCommissioning::Internal::BaseDriver::NetworkStatusChangeCallback * mStatusChangeCallback = nullptr;
