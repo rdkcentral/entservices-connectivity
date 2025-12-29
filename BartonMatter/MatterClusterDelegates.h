@@ -41,10 +41,11 @@ namespace WPEFramework
          * WiFi is managed at OS level, so driver methods are stubs that
          * return success to satisfy Matter SDK requirements.
          */
-        class WiFiDriver : public chip::DeviceLayer::NetworkCommissioning::WiFiDriver
+
+                class WiFiDriver : public chip::DeviceLayer::NetworkCommissioning::WiFiDriver
+                {
+                public:
                     chip::DeviceLayer::NetworkCommissioning::NetworkIterator * GetNetworks() override;
-        {
-        public:
 
             CHIP_ERROR Init(chip::DeviceLayer::NetworkCommissioning::Internal::BaseDriver::NetworkStatusChangeCallback * callback) override;
             void Shutdown() override;
