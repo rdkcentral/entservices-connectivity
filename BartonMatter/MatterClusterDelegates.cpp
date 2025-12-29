@@ -986,17 +986,13 @@ namespace WPEFramework
             }
         }
 
-        CHIP_ERROR WiFiDriver::AddOrUpdateNetwork(chip::ByteSpan ssid, chip::ByteSpan credentials, chip::MutableCharSpan & outDebugText, uint8_t & outNetworkIndex)
+
+        chip::DeviceLayer::NetworkCommissioning::Status WiFiDriver::AddOrUpdateNetwork(chip::ByteSpan ssid, chip::ByteSpan credentials, chip::MutableCharSpan & outDebugText, uint8_t & outNetworkIndex)
         {
             ChipLogProgress(AppServer, "WiFiDriver: AddOrUpdateNetwork called (SSID len=%u)", static_cast<unsigned>(ssid.size()));
             // Device WiFi is managed at OS level, but accept the configuration for Matter commissioning
             outNetworkIndex = 0;
-            return CHIP_NO_ERROR;
-        }
-
-        void WiFiDriver::OnNetworkStatusChange()
-        {
-            ChipLogProgress(AppServer, "WiFiDriver: OnNetworkStatusChange called");
+            return chip::DeviceLayer::NetworkCommissioning::Status::kSuccess;
         }
 
 

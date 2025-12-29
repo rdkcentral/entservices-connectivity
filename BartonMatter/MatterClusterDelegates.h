@@ -59,14 +59,7 @@ namespace WPEFramework
             chip::DeviceLayer::NetworkCommissioning::Status ReorderNetwork(chip::ByteSpan networkId, uint8_t index, chip::MutableCharSpan & outDebugText) override;
             void ConnectNetwork(chip::ByteSpan networkId, ConnectCallback * callback) override;
             void ScanNetworks(chip::ByteSpan ssid, ScanCallback * callback) override;
-            CHIP_ERROR AddOrUpdateNetwork(chip::ByteSpan ssid, chip::ByteSpan credentials, chip::MutableCharSpan & outDebugText, uint8_t & outNetworkIndex) override;
-            void OnNetworkStatusChange() override;
-
-            chip::BitFlags<chip::app::Clusters::NetworkCommissioning::WiFiSecurityBitmap> GetSecurityTypes() override;
-            chip::BitFlags<chip::app::Clusters::NetworkCommissioning::WiFiBandEnum> GetWiFiBands() override;
-
-            // Add missing GetNetworks() override if required by the base class
-            size_t GetNetworks(chip::DeviceLayer::NetworkCommissioning::Network * networks, size_t maxNetworks) override;
+            chip::DeviceLayer::NetworkCommissioning::Status AddOrUpdateNetwork(chip::ByteSpan ssid, chip::ByteSpan credentials, chip::MutableCharSpan & outDebugText, uint8_t & outNetworkIndex) override;
 
         private:
             chip::DeviceLayer::NetworkCommissioning::Internal::BaseDriver::NetworkStatusChangeCallback * mStatusChangeCallback = nullptr;
