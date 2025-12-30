@@ -438,6 +438,8 @@ namespace WPEFramework
                 // Initialize NetworkCommissioning cluster driver
                 MatterClusterDelegateManager::GetInstance().InitializeNetworkCommissioning();
             }); // <-- Close the lambda and ScheduleWork call
+
+            return Core::ERROR_NONE;
         }
 
         gchar* BartonMatterImplementation::GetConfigDirectory()
