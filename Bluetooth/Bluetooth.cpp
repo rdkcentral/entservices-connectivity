@@ -142,8 +142,7 @@ namespace WPEFramework
 
         Bluetooth* Bluetooth::_instance = nullptr;
         static Core::TimerType<DiscoveryTimer> _discoveryTimer(64 * 1024, "DiscoveryTimer");
-		// Coverity Issue #27: PASS_BY_VALUE - Callback signature must match external BTRMGR API (pass-by-value required).
-        // However, we optimize by passing const reference to notifyEventWrapper to avoid additional internal copies.
+
         BTRMGR_Result_t bluetoothSrv_EventCallback (BTRMGR_EventMessage_t eventMsg)
         {
             if (!Bluetooth::_instance) {
@@ -666,7 +665,6 @@ namespace WPEFramework
             response["name"] = string(adapterName);
             LOGWARN ("Name set as %s", adapterName);
             if (rp) {
-                // Coverity Issue #4: COPY_INSTEAD_OF_MOVE - Use std::move() to avoid unnecessary copy of JsonObject
                 *rp = std::move(response);
             }
             return BTRMGR_RESULT_SUCCESS == rc;
@@ -890,7 +888,6 @@ namespace WPEFramework
             }
             return mediaTrackInfo;
         }
-        // Coverity Issue #27: PASS_BY_VALUE - Pass large struct by const reference instead of by value for performance
         void Bluetooth::notifyEventWrapper (const BTRMGR_EventMessage_t &eventMsg)
         {
             JsonObject params;
