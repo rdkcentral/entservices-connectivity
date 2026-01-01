@@ -142,7 +142,8 @@ namespace WPEFramework
 
         Bluetooth* Bluetooth::_instance = nullptr;
         static Core::TimerType<DiscoveryTimer> _discoveryTimer(64 * 1024, "DiscoveryTimer");
-
+		// Coverity Issue #27: PASS_BY_VALUE - Callback signature must match external BTRMGR API (pass-by-value required).
+        // However, we optimize by passing const reference to notifyEventWrapper to avoid additional internal copies.
         BTRMGR_Result_t bluetoothSrv_EventCallback (BTRMGR_EventMessage_t eventMsg)
         {
             if (!Bluetooth::_instance) {
