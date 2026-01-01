@@ -143,8 +143,7 @@ namespace WPEFramework
         Bluetooth* Bluetooth::_instance = nullptr;
         static Core::TimerType<DiscoveryTimer> _discoveryTimer(64 * 1024, "DiscoveryTimer");
 
-        // Coverity Issue #27: PASS_BY_VALUE - Pass large struct by const reference instead of by value for performance
-        BTRMGR_Result_t bluetoothSrv_EventCallback (const BTRMGR_EventMessage_t& eventMsg)
+        BTRMGR_Result_t bluetoothSrv_EventCallback (BTRMGR_EventMessage_t eventMsg)
         {
             if (!Bluetooth::_instance) {
                 LOGERR ("Invalid pointer. Bluetooth is not initialized (yet?). Event of type %d ignored.", eventMsg.m_eventType);
@@ -890,8 +889,8 @@ namespace WPEFramework
             }
             return mediaTrackInfo;
         }
-
-        void Bluetooth::notifyEventWrapper (BTRMGR_EventMessage_t &eventMsg)
+        // Coverity Issue #27: PASS_BY_VALUE - Pass large struct by const reference instead of by value for performance
+        void Bluetooth::notifyEventWrapper (const BTRMGR_EventMessage_t &eventMsg)
         {
             JsonObject params;
             string profileInfo;
