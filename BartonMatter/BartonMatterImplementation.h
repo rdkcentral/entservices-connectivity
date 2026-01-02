@@ -26,7 +26,6 @@
 #include <barton-core-client.h>
 #include <barton-core-properties.h>
 #include <barton-core-commissioning-info.h>
-#include <barton-core-network-credentials-provider.h>
 #include <events/barton-core-endpoint-added-event.h>
 #include <events/barton-core-device-added-event.h>
 #include <events/barton-core-device-removed-event.h>
@@ -40,6 +39,27 @@
 #include <app/server/Server.h>
 #include <app/WriteClient.h>
 #include <app-common/zap-generated/cluster-objects.h>
+
+// Forward declarations for WiFi network credentials types from Barton Core
+typedef struct _BCoreNetworkCredentialsProvider BCoreNetworkCredentialsProvider;
+typedef struct _BCoreNetworkCredentialsProviderInterface BCoreNetworkCredentialsProviderInterface;
+typedef struct _BCoreWifiNetworkCredentials BCoreWifiNetworkCredentials;
+
+// WiFi credential property enum and names array
+typedef enum
+{
+    B_CORE_WIFI_NETWORK_CREDENTIALS_PROP_SSID = 1,
+    B_CORE_WIFI_NETWORK_CREDENTIALS_PROP_PSK,
+} BCoreWifiNetworkCredentialsProperty;
+
+static const char *B_CORE_WIFI_NETWORK_CREDENTIALS_PROPERTY_NAMES[] = {NULL, "ssid", "psk"};
+
+#define B_CORE_WIFI_NETWORK_CREDENTIALS_TYPE (b_core_wifi_network_credentials_get_type())
+#define B_CORE_NETWORK_CREDENTIALS_PROVIDER_TYPE (b_core_network_credentials_provider_get_type())
+
+GType b_core_wifi_network_credentials_get_type(void);
+GType b_core_network_credentials_provider_get_type(void);
+BCoreWifiNetworkCredentials *b_core_wifi_network_credentials_new(void);
 
 #ifdef __cplusplus
 extern "C" {
