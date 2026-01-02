@@ -51,8 +51,7 @@ namespace WPEFramework
             TRACE(Trace::Information, (_T("Destructing BartonMatterImplementation Service: %p"), this));
 
             // Shutdown cluster delegates
-            MatterClusterDelegateManager::GetInstance().Shutdown();
-
+            MatterClusterDelegateManager::GetInstance().Shutdown();\n
             // Cleanup barton client if initialized
             if (bartonClient) {
                 b_core_client_stop(bartonClient);

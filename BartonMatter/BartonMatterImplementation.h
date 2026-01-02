@@ -26,7 +26,7 @@
 #include <barton-core-client.h>
 #include <barton-core-properties.h>
 #include <barton-core-commissioning-info.h>
-#include <provider/barton-core-network-credentials-provider.h>
+#include <barton-core-network-credentials-provider.h>
 #include <events/barton-core-endpoint-added-event.h>
 #include <events/barton-core-device-added-event.h>
 #include <events/barton-core-device-removed-event.h>
