@@ -40,26 +40,7 @@
 #include <app/WriteClient.h>
 #include <app-common/zap-generated/cluster-objects.h>
 
-// Forward declarations for WiFi network credentials types from Barton Core
-typedef struct _BCoreNetworkCredentialsProvider BCoreNetworkCredentialsProvider;
-typedef struct _BCoreNetworkCredentialsProviderInterface BCoreNetworkCredentialsProviderInterface;
-typedef struct _BCoreWifiNetworkCredentials BCoreWifiNetworkCredentials;
-
-// WiFi credential property enum and names array
-typedef enum
-{
-    B_CORE_WIFI_NETWORK_CREDENTIALS_PROP_SSID = 1,
-    B_CORE_WIFI_NETWORK_CREDENTIALS_PROP_PSK,
-} BCoreWifiNetworkCredentialsProperty;
-
-static const char *B_CORE_WIFI_NETWORK_CREDENTIALS_PROPERTY_NAMES[] = {NULL, "ssid", "psk"};
-
-#define B_CORE_WIFI_NETWORK_CREDENTIALS_TYPE (b_core_wifi_network_credentials_get_type())
-#define B_CORE_NETWORK_CREDENTIALS_PROVIDER_TYPE (b_core_network_credentials_provider_get_type())
-
-GType b_core_wifi_network_credentials_get_type(void);
-GType b_core_network_credentials_provider_get_type(void);
-BCoreWifiNetworkCredentials *b_core_wifi_network_credentials_new(void);
+// WiFi network credentials types are provided by barton-core-client.h includes
 
 #ifdef __cplusplus
 extern "C" {
