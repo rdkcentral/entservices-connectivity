@@ -1284,15 +1284,17 @@ struct _BReferenceNetworkCredentialsProvider
     GObject parent_instance;
 };
 
-static void
-b_reference_network_credentials_provider_interface_init(BCoreNetworkCredentialsProviderInterface *iface);
+// Forward declarations for GObject type system
+static void b_reference_network_credentials_provider_init(BReferenceNetworkCredentialsProvider *self);
+static void b_reference_network_credentials_provider_class_init(BReferenceNetworkCredentialsProviderClass *klass);
+static void b_reference_network_credentials_provider_interface_init(BCoreNetworkCredentialsProviderInterface *iface);
 
 // Lazy type registration to avoid library load-time dependencies
-static volatile gsize b_reference_network_credentials_provider_type = 0;
+static gsize b_reference_network_credentials_provider_type_id = 0;
 
 GType b_reference_network_credentials_provider_get_type(void)
 {
-    if (g_once_init_enter(&b_reference_network_credentials_provider_type))
+    if (g_once_init_enter((void*)&b_reference_network_credentials_provider_type_id))
     {
         GType type;
 
@@ -1325,10 +1327,10 @@ GType b_reference_network_credentials_provider_get_type(void)
                                     B_CORE_NETWORK_CREDENTIALS_PROVIDER_TYPE,
                                     &interface_info);
 
-        g_once_init_leave(&b_reference_network_credentials_provider_type, type);
+        g_once_init_leave((void*)&b_reference_network_credentials_provider_type_id, type);
     }
 
-    return b_reference_network_credentials_provider_type;
+    return b_reference_network_credentials_provider_type_id;
 }
 
 /*
