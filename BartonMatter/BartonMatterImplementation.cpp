@@ -1290,7 +1290,7 @@ static void b_reference_network_credentials_provider_class_init(BReferenceNetwor
 static void b_reference_network_credentials_provider_interface_init(BCoreNetworkCredentialsProviderInterface *iface);
 
 // Lazy type registration to avoid library load-time dependencies
-static volatile gsize b_reference_network_credentials_provider_type_id = 0;
+static gsize b_reference_network_credentials_provider_type_id = 0;
 
 GType b_reference_network_credentials_provider_get_type(void)
 {
