@@ -434,6 +434,9 @@ namespace WPEFramework
             chip::DeviceLayer::PlatformMgr().ScheduleWork([](intptr_t) {
                 ChipLogProgress(AppServer, "Scheduling cluster delegate initialization...");
                 MatterClusterDelegateManager::GetInstance().Initialize();
+
+                // Note: NetworkCommissioning cluster is initialized by emberAfNetworkCommissioningClusterInitCallback
+                // which is called during server initialization, ensuring proper timing
             });
 
             LOGINFO("BartonMatter Commissioner initialized successfully");

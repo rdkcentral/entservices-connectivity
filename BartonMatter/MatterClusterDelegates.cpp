@@ -885,6 +885,8 @@ namespace WPEFramework
 
         void MatterClusterDelegateManager::Shutdown()
         {
+            std::lock_guard<std::mutex> lock(mInitMutex);
+
             if (!mInitialized)
             {
                 return;
@@ -898,13 +900,184 @@ namespace WPEFramework
             }
             mRegisteredEndpoints.clear();
 
-            // Cleanup
+            // Cleanup NetworkCommissioning cluster (if initialized)
+            if (mNetworkCommissioningInitialized && mNetworkCommissioningCluster)
+            {
+                ChipLogProgress(AppServer, "Shutting down NetworkCommissioning cluster");
+                mNetworkCommissioningCluster->Deinit();
+                mNetworkCommissioningCluster.reset();
+                mNetworkCommissioningInitialized = false;
+            }
+
+            // Cleanup WiFiDriver (if initialized)
+            if (mWiFiDriver)
+            {
+                mWiFiDriver->Shutdown();
+                mWiFiDriver.reset();
+            }
+
+            // Cleanup other delegates
             mKeypadInputDelegate.reset();
             mApplicationLauncherDelegate.reset();
             mInitialized = false;
         }
 
+        void MatterClusterDelegateManager::InitializeNetworkCommissioning()
+        {
+            std::lock_guard<std::mutex> lock(mInitMutex);
+
+            // Prevent double initialization
+            if (mNetworkCommissioningInitialized)
+            {
+                ChipLogProgress(AppServer, "NetworkCommissioning already initialized, skipping");
+                return;
+            }
+
+            ChipLogProgress(AppServer, "InitializeNetworkCommissioning called");
+
+            // Create WiFiDriver instance
+            mWiFiDriver = std::make_unique<WiFiDriver>();
+
+            // Initialize the driver
+            CHIP_ERROR err = mWiFiDriver->Init(nullptr);
+            if (err != CHIP_NO_ERROR)
+            {
+                ChipLogError(AppServer, "Failed to initialize WiFiDriver: %s", chip::ErrorStr(err));
+                mWiFiDriver.reset();
+                return;
+            }
+
+            // Create NetworkCommissioning cluster instance for endpoint 0 with WiFiDriver
+            mNetworkCommissioningCluster = std::make_unique<chip::app::Clusters::NetworkCommissioningCluster>(
+                0, /* endpoint 0 - root device */
+                mWiFiDriver.get(),
+                mBreadcrumbTracker
+            );
+
+            // Initialize the cluster (registers with attribute server)
+            err = mNetworkCommissioningCluster->Init();
+            if (err != CHIP_NO_ERROR)
+            {
+                ChipLogError(AppServer, "Failed to initialize NetworkCommissioning cluster: %s",
+                           chip::ErrorStr(err));
+                mNetworkCommissioningCluster.reset();
+                mWiFiDriver->Shutdown();
+                mWiFiDriver.reset();
+                return;
+            }
+
+            mNetworkCommissioningInitialized = true;
+            ChipLogProgress(AppServer, "NetworkCommissioning cluster initialized on endpoint 0 with WiFiDriver");
+        }
+
+        // WiFiDriver Implementation
+
+        WiFiDriver::WiFiDriver()
+        {
+            ChipLogProgress(AppServer, "WiFiDriver created");
+        }
+
+        CHIP_ERROR WiFiDriver::Init(chip::DeviceLayer::NetworkCommissioning::BaseDriver::NetworkStatusChangeCallback * statusChangeCallback)
+        {
+            ChipLogProgress(AppServer, "WiFiDriver::Init called");
+            mpStatusChangeCallback = statusChangeCallback;
+            return CHIP_NO_ERROR;
+        }
+
+        void WiFiDriver::Shutdown()
+        {
+            ChipLogProgress(AppServer, "WiFiDriver::Shutdown called");
+            mpStatusChangeCallback = nullptr;
+        }
+
+        CHIP_ERROR WiFiDriver::CommitConfiguration()
+        {
+            ChipLogProgress(AppServer, "WiFiDriver::CommitConfiguration - network config committed");
+            return CHIP_NO_ERROR;
+        }
+
+        CHIP_ERROR WiFiDriver::RevertConfiguration()
+        {
+            ChipLogProgress(AppServer, "WiFiDriver::RevertConfiguration - network config reverted");
+            return CHIP_NO_ERROR;
+        }
+
+        chip::DeviceLayer::NetworkCommissioning::Status WiFiDriver::AddOrUpdateNetwork(
+            chip::ByteSpan ssid, chip::ByteSpan credentials, chip::MutableCharSpan & outDebugText,
+            uint8_t & outNetworkIndex)
+        {
+            ChipLogProgress(AppServer, "WiFiDriver::AddOrUpdateNetwork - SSID: %.*s",
+                          static_cast<int>(ssid.size()), ssid.data());
+
+            // Store credentials (in production, persist to secure storage)
+            outNetworkIndex = 0;
+            return chip::DeviceLayer::NetworkCommissioning::Status::kSuccess;
+        }
+
+        chip::DeviceLayer::NetworkCommissioning::Status WiFiDriver::RemoveNetwork(
+            chip::ByteSpan networkId, chip::MutableCharSpan & outDebugText, uint8_t & outNetworkIndex)
+        {
+            ChipLogProgress(AppServer, "WiFiDriver::RemoveNetwork called");
+            outNetworkIndex = 0;
+            return chip::DeviceLayer::NetworkCommissioning::Status::kSuccess;
+        }
+
+        chip::DeviceLayer::NetworkCommissioning::Status WiFiDriver::ReorderNetwork(
+            chip::ByteSpan networkId, uint8_t index, chip::MutableCharSpan & outDebugText)
+        {
+            ChipLogProgress(AppServer, "WiFiDriver::ReorderNetwork - index: %d", index);
+            return chip::DeviceLayer::NetworkCommissioning::Status::kSuccess;
+        }
+
+        void WiFiDriver::ConnectNetwork(chip::ByteSpan networkId,
+                                       chip::DeviceLayer::NetworkCommissioning::ConnectCallback * callback)
+        {
+            ChipLogProgress(AppServer, "WiFiDriver::ConnectNetwork - networkId: %.*s",
+                          static_cast<int>(networkId.size()), networkId.data());
+
+            // Simulate successful connection (in production, actually connect to WiFi)
+            if (callback)
+            {
+                callback->OnResult(chip::DeviceLayer::NetworkCommissioning::Status::kSuccess,
+                                 chip::CharSpan(), 0);
+            }
+        }
+
+        void WiFiDriver::ScanNetworks(chip::ByteSpan ssid,
+                                     chip::DeviceLayer::NetworkCommissioning::WiFiDriver::ScanCallback * callback)
+        {
+            ChipLogProgress(AppServer, "WiFiDriver::ScanNetworks called");
+
+            // Return empty scan results (Alexa doesn't require scan during commissioning)
+            if (callback)
+            {
+                callback->OnFinished(chip::DeviceLayer::NetworkCommissioning::Status::kSuccess,
+                                   chip::CharSpan(), nullptr);
+            }
+        }
+
+        chip::DeviceLayer::NetworkCommissioning::NetworkIterator * WiFiDriver::GetNetworks()
+        {
+            ChipLogProgress(AppServer, "WiFiDriver::GetNetworks called");
+            // Return nullptr to indicate no stored networks (fresh device state)
+            return nullptr;
+        }
+
     } // namespace Plugin
 } // namespace WPEFramework
+
+// Ember callback for NetworkCommissioning cluster initialization (called by generated code)
+void emberAfNetworkCommissioningClusterInitCallback(chip::EndpointId endpoint)
+{
+    ChipLogProgress(AppServer, "emberAfNetworkCommissioningClusterInitCallback called for endpoint %d", endpoint);
+
+    // Initialize NetworkCommissioning cluster immediately when generated code expects it
+    // This ensures the cluster is ready before Alexa tries to read attributes
+    if (endpoint == 0)
+    {
+        WPEFramework::Plugin::MatterClusterDelegateManager::GetInstance().InitializeNetworkCommissioning();
+        ChipLogProgress(AppServer, "NetworkCommissioning cluster initialized for endpoint 0");
+    }
+}
 
 
