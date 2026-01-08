@@ -436,7 +436,8 @@ namespace WPEFramework
                 MatterClusterDelegateManager::GetInstance().Initialize();
 
                 // Initialize NetworkCommissioning cluster driver
-                MatterClusterDelegateManager::GetInstance().InitializeNetworkCommissioning();
+                // TEMPORARILY DISABLED FOR DEBUGGING
+                // MatterClusterDelegateManager::GetInstance().InitializeNetworkCommissioning();
             }); // <-- Close the lambda and ScheduleWork call
 
             return Core::ERROR_NONE;
@@ -1284,54 +1285,14 @@ struct _BReferenceNetworkCredentialsProvider
     GObject parent_instance;
 };
 
-// Forward declarations for GObject type system
-static void b_reference_network_credentials_provider_init(BReferenceNetworkCredentialsProvider *self);
-static void b_reference_network_credentials_provider_class_init(BReferenceNetworkCredentialsProviderClass *klass);
-static void b_reference_network_credentials_provider_interface_init(BCoreNetworkCredentialsProviderInterface *iface);
+static void
+b_reference_network_credentials_provider_interface_init(BCoreNetworkCredentialsProviderInterface *iface);
 
-// Lazy type registration to avoid library load-time dependencies
-static gsize b_reference_network_credentials_provider_type_id = 0;
-
-GType b_reference_network_credentials_provider_get_type(void)
-{
-    if (g_once_init_enter(&b_reference_network_credentials_provider_type_id))
-    {
-        GType type;
-
-        static const GTypeInfo type_info = {
-            sizeof(BReferenceNetworkCredentialsProviderClass),
-            NULL, // base_init
-            NULL, // base_finalize
-            (GClassInitFunc) b_reference_network_credentials_provider_class_init,
-            NULL, // class_finalize
-            NULL, // class_data
-            sizeof(BReferenceNetworkCredentialsProvider),
-            0,    // n_preallocs
-            (GInstanceInitFunc) b_reference_network_credentials_provider_init,
-            NULL  // value_table
-        };
-
-        type = g_type_register_static(G_TYPE_OBJECT,
-                                      "BReferenceNetworkCredentialsProvider",
-                                      &type_info,
-                                      (GTypeFlags) 0);
-
-        // Add interface implementation
-        static const GInterfaceInfo interface_info = {
-            (GInterfaceInitFunc) b_reference_network_credentials_provider_interface_init,
-            NULL, // interface_finalize
-            NULL  // interface_data
-        };
-
-        g_type_add_interface_static(type,
-                                    B_CORE_NETWORK_CREDENTIALS_PROVIDER_TYPE,
-                                    &interface_info);
-
-        g_once_init_leave(&b_reference_network_credentials_provider_type_id, type);
-    }
-
-    return b_reference_network_credentials_provider_type_id;
-}
+G_DEFINE_TYPE_WITH_CODE(BReferenceNetworkCredentialsProvider,
+                        b_reference_network_credentials_provider,
+                        G_TYPE_OBJECT,
+                        G_IMPLEMENT_INTERFACE(B_CORE_NETWORK_CREDENTIALS_PROVIDER_TYPE,
+                                              b_reference_network_credentials_provider_interface_init))
 
 /*
  * Implementation of BCoreNetworkCredentialsProvider get_wifi_network_credentials
