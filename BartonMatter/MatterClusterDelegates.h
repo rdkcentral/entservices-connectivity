@@ -22,8 +22,8 @@
 #include <app/clusters/application-launcher-server/application-launcher-server.h>
 #include <app/clusters/keypad-input-server/keypad-input-server.h>
 #include <app/clusters/network-commissioning/NetworkCommissioningCluster.h>
+#include <app/clusters/general-commissioning-server/BreadCrumbTracker.h>
 #include <platform/NetworkCommissioning.h>
-#include <app/server/BreadcrumbTracker.h>
 #include <memory>
 #include <vector>
 #include <mutex>
@@ -202,7 +202,20 @@ namespace WPEFramework
             std::unique_ptr<MatterApplicationLauncherDelegate> mApplicationLauncherDelegate;
             std::unique_ptr<WiFiDriver> mWiFiDriver;
             std::unique_ptr<chip::app::Clusters::NetworkCommissioningCluster> mNetworkCommissioningCluster;
-            chip::app::BreadcrumbTracker mBreadcrumbTracker;
+
+            // BreadCrumbTracker implementation (required by NetworkCommissioningCluster)
+            class SimpleBreadCrumbTracker : public chip::app::Clusters::BreadCrumbTracker
+            {
+            public:
+                void SetBreadCrumb(uint64_t value) override
+                {
+                    mBreadCrumb = value;
+                }
+            private:
+                uint64_t mBreadCrumb = 0;
+            };
+            SimpleBreadCrumbTracker mBreadcrumbTracker;
+
             std::vector<chip::EndpointId> mRegisteredEndpoints;
         };
 
