@@ -156,7 +156,7 @@ namespace WPEFramework
             virtual ~WiFiDriver() = default;
 
             // WiFiDriver interface implementation
-            CHIP_ERROR Init(chip::DeviceLayer::NetworkCommissioning::BaseDriver::NetworkStatusChangeCallback * statusChangeCallback) override;
+            CHIP_ERROR Init(chip::DeviceLayer::NetworkCommissioning::Internal::BaseDriver::NetworkStatusChangeCallback * statusChangeCallback) override;
             void Shutdown() override;
 
             uint8_t GetMaxNetworks() override { return 1; }
@@ -176,14 +176,14 @@ namespace WPEFramework
             chip::DeviceLayer::NetworkCommissioning::Status ReorderNetwork(
                 chip::ByteSpan networkId, uint8_t index, chip::MutableCharSpan & outDebugText) override;
 
-            void ConnectNetwork(chip::ByteSpan networkId, chip::DeviceLayer::NetworkCommissioning::ConnectCallback * callback) override;
+            void ConnectNetwork(chip::ByteSpan networkId, chip::DeviceLayer::NetworkCommissioning::Internal::WirelessDriver::ConnectCallback * callback) override;
 
             void ScanNetworks(chip::ByteSpan ssid, chip::DeviceLayer::NetworkCommissioning::WiFiDriver::ScanCallback * callback) override;
 
             chip::DeviceLayer::NetworkCommissioning::NetworkIterator * GetNetworks() override;
 
         private:
-            chip::DeviceLayer::NetworkCommissioning::BaseDriver::NetworkStatusChangeCallback * mpStatusChangeCallback = nullptr;
+            chip::DeviceLayer::NetworkCommissioning::Internal::BaseDriver::NetworkStatusChangeCallback * mpStatusChangeCallback = nullptr;
         };
 
         /**

@@ -977,7 +977,7 @@ namespace WPEFramework
             ChipLogProgress(AppServer, "WiFiDriver created");
         }
 
-        CHIP_ERROR WiFiDriver::Init(chip::DeviceLayer::NetworkCommissioning::BaseDriver::NetworkStatusChangeCallback * statusChangeCallback)
+        CHIP_ERROR WiFiDriver::Init(chip::DeviceLayer::NetworkCommissioning::Internal::BaseDriver::NetworkStatusChangeCallback * statusChangeCallback)
         {
             ChipLogProgress(AppServer, "WiFiDriver::Init called");
             mpStatusChangeCallback = statusChangeCallback;
@@ -1030,7 +1030,7 @@ namespace WPEFramework
         }
 
         void WiFiDriver::ConnectNetwork(chip::ByteSpan networkId,
-                                       chip::DeviceLayer::NetworkCommissioning::ConnectCallback * callback)
+                                       chip::DeviceLayer::NetworkCommissioning::Internal::WirelessDriver::ConnectCallback * callback)
         {
             ChipLogProgress(AppServer, "WiFiDriver::ConnectNetwork - networkId: %.*s",
                           static_cast<int>(networkId.size()), networkId.data());
