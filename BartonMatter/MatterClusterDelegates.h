@@ -31,11 +31,6 @@ namespace chip {
     namespace app {
         namespace Clusters {
             class NetworkCommissioningCluster;
-            class BreadCrumbTracker {
-            public:
-                virtual ~BreadCrumbTracker() = default;
-                virtual void SetBreadCrumb(uint64_t value) = 0;
-            };
         }
     }
     namespace DeviceLayer {
@@ -179,20 +174,6 @@ namespace WPEFramework
             std::unique_ptr<MatterApplicationLauncherDelegate> mApplicationLauncherDelegate;
             std::unique_ptr<WiFiDriver> mWiFiDriver;
             std::unique_ptr<chip::app::Clusters::NetworkCommissioningCluster> mNetworkCommissioningCluster;
-
-            // BreadCrumbTracker implementation (required by NetworkCommissioningCluster)
-            class SimpleBreadCrumbTracker : public chip::app::Clusters::BreadCrumbTracker
-            {
-            public:
-                void SetBreadCrumb(uint64_t value) override
-                {
-                    mBreadCrumb = value;
-                }
-            private:
-                uint64_t mBreadCrumb = 0;
-            };
-            SimpleBreadCrumbTracker mBreadcrumbTracker;
-
             std::vector<chip::EndpointId> mRegisteredEndpoints;
         };
 

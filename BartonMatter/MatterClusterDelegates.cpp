@@ -996,10 +996,10 @@ namespace WPEFramework
             }
 
             // Create NetworkCommissioning cluster instance for endpoint 0 with WiFiDriver
+            // Note: Yocto Matter SDK version only takes 2 args (no BreadcrumbTracker)
             mNetworkCommissioningCluster = std::make_unique<chip::app::Clusters::NetworkCommissioningCluster>(
                 0, /* endpoint 0 - root device */
-                mWiFiDriver.get(),
-                mBreadcrumbTracker
+                mWiFiDriver.get()
             );
 
             // Initialize the cluster (registers with attribute server)
