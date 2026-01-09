@@ -22,11 +22,20 @@
 #include <app/clusters/application-launcher-server/application-launcher-server.h>
 #include <app/clusters/keypad-input-server/keypad-input-server.h>
 #include <app/clusters/network-commissioning/NetworkCommissioningCluster.h>
-#include <app/clusters/general-commissioning-server/BreadCrumbTracker.h>
 #include <platform/NetworkCommissioning.h>
 #include <memory>
 #include <vector>
 #include <mutex>
+
+// Forward declaration to avoid header dependency
+namespace chip { namespace app { namespace Clusters {
+    class BreadCrumbTracker
+    {
+    public:
+        virtual ~BreadCrumbTracker() = default;
+        virtual void SetBreadCrumb(uint64_t value) = 0;
+    };
+}}} // namespace chip::app::Clusters
 
 namespace WPEFramework
 {
