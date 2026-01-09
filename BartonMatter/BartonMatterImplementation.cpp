@@ -18,7 +18,7 @@
  **/
 
 #include "BartonMatterImplementation.h"
-#include "MatterClusterDelegates.h"
+#include "MatterClusterDelegateManager.h"
 #include <fstream>
 #include <dirent.h>
 #include <map>
