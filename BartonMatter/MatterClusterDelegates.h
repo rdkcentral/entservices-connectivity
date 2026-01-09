@@ -21,21 +21,29 @@
 
 #include <app/clusters/application-launcher-server/application-launcher-server.h>
 #include <app/clusters/keypad-input-server/keypad-input-server.h>
-#include <app/clusters/network-commissioning/NetworkCommissioningCluster.h>
-#include <platform/NetworkCommissioning.h>
 #include <memory>
 #include <vector>
 #include <mutex>
 
-// Forward declaration to avoid header dependency
-namespace chip { namespace app { namespace Clusters {
-    class BreadCrumbTracker
-    {
-    public:
-        virtual ~BreadCrumbTracker() = default;
-        virtual void SetBreadCrumb(uint64_t value) = 0;
-    };
-}}} // namespace chip::app::Clusters
+// Forward declarations to avoid including NetworkCommissioning headers
+// (they cause ABI conflicts with Thunder/WPEFramework)
+namespace chip {
+    namespace app {
+        namespace Clusters {
+            class NetworkCommissioningCluster;
+            class BreadCrumbTracker {
+            public:
+                virtual ~BreadCrumbTracker() = default;
+                virtual void SetBreadCrumb(uint64_t value) = 0;
+            };
+        }
+    }
+    namespace DeviceLayer {
+        namespace NetworkCommissioning {
+            class WiFiDriver;
+        }
+    }
+}
 
 namespace WPEFramework
 {
@@ -143,48 +151,8 @@ namespace WPEFramework
             CHIP_ERROR HandleGetCatalogList(chip::app::AttributeValueEncoder & encoder) override;
         };
 
-        /**
-         * @brief WiFi Driver for NetworkCommissioning cluster
-         *
-         * Implements WiFi network management for Matter commissioning.
-         * Handles network scanning, connecting, and credential management.
-         */
-        class WiFiDriver : public chip::DeviceLayer::NetworkCommissioning::WiFiDriver
-        {
-        public:
-            WiFiDriver();
-            virtual ~WiFiDriver() = default;
-
-            // WiFiDriver interface implementation
-            CHIP_ERROR Init(chip::DeviceLayer::NetworkCommissioning::Internal::BaseDriver::NetworkStatusChangeCallback * statusChangeCallback) override;
-            void Shutdown() override;
-
-            uint8_t GetMaxNetworks() override { return 1; }
-            uint8_t GetScanNetworkTimeoutSeconds() override { return 10; }
-            uint8_t GetConnectNetworkTimeoutSeconds() override { return 20; }
-
-            CHIP_ERROR CommitConfiguration() override;
-            CHIP_ERROR RevertConfiguration() override;
-
-            chip::DeviceLayer::NetworkCommissioning::Status AddOrUpdateNetwork(
-                chip::ByteSpan ssid, chip::ByteSpan credentials, chip::MutableCharSpan & outDebugText,
-                uint8_t & outNetworkIndex) override;
-
-            chip::DeviceLayer::NetworkCommissioning::Status RemoveNetwork(
-                chip::ByteSpan networkId, chip::MutableCharSpan & outDebugText, uint8_t & outNetworkIndex) override;
-
-            chip::DeviceLayer::NetworkCommissioning::Status ReorderNetwork(
-                chip::ByteSpan networkId, uint8_t index, chip::MutableCharSpan & outDebugText) override;
-
-            void ConnectNetwork(chip::ByteSpan networkId, chip::DeviceLayer::NetworkCommissioning::Internal::WirelessDriver::ConnectCallback * callback) override;
-
-            void ScanNetworks(chip::ByteSpan ssid, chip::DeviceLayer::NetworkCommissioning::WiFiDriver::ScanCallback * callback) override;
-
-            chip::DeviceLayer::NetworkCommissioning::NetworkIterator * GetNetworks() override;
-
-        private:
-            chip::DeviceLayer::NetworkCommissioning::Internal::BaseDriver::NetworkStatusChangeCallback * mpStatusChangeCallback = nullptr;
-        };
+        // Forward declaration - full implementation in .cpp to avoid ABI conflicts
+        class WiFiDriver;
 
         /**
          * @brief Cluster delegate manager for Matter endpoints

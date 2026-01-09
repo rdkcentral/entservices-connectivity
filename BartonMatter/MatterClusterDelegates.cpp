@@ -28,6 +28,10 @@
 #include <cstdlib>
 #include <array>
 
+// NetworkCommissioning includes ONLY in .cpp to avoid ABI conflicts
+#include <app/clusters/network-commissioning/NetworkCommissioningCluster.h>
+#include <platform/NetworkCommissioning.h>
+
 // Ensure BUS_VIRTUAL is defined
 #ifndef BUS_VIRTUAL
 #define BUS_VIRTUAL 0x06
@@ -35,6 +39,50 @@
 
 using namespace chip;
 using namespace chip::app::Clusters;
+
+namespace WPEFramework
+{
+    namespace Plugin
+    {
+        // WiFiDriver class definition (full implementation to avoid ABI conflicts in header)
+        class WiFiDriver : public chip::DeviceLayer::NetworkCommissioning::WiFiDriver
+        {
+        public:
+            WiFiDriver();
+            virtual ~WiFiDriver() = default;
+
+            // WiFiDriver interface implementation
+            CHIP_ERROR Init(chip::DeviceLayer::NetworkCommissioning::Internal::BaseDriver::NetworkStatusChangeCallback * statusChangeCallback) override;
+            void Shutdown() override;
+
+            uint8_t GetMaxNetworks() override { return 1; }
+            uint8_t GetScanNetworkTimeoutSeconds() override { return 10; }
+            uint8_t GetConnectNetworkTimeoutSeconds() override { return 20; }
+
+            CHIP_ERROR CommitConfiguration() override;
+            CHIP_ERROR RevertConfiguration() override;
+
+            chip::DeviceLayer::NetworkCommissioning::Status AddOrUpdateNetwork(
+                chip::ByteSpan ssid, chip::ByteSpan credentials, chip::MutableCharSpan & outDebugText,
+                uint8_t & outNetworkIndex) override;
+
+            chip::DeviceLayer::NetworkCommissioning::Status RemoveNetwork(
+                chip::ByteSpan networkId, chip::MutableCharSpan & outDebugText, uint8_t & outNetworkIndex) override;
+
+            chip::DeviceLayer::NetworkCommissioning::Status ReorderNetwork(
+                chip::ByteSpan networkId, uint8_t index, chip::MutableCharSpan & outDebugText) override;
+
+            void ConnectNetwork(chip::ByteSpan networkId, chip::DeviceLayer::NetworkCommissioning::Internal::WirelessDriver::ConnectCallback * callback) override;
+
+            void ScanNetworks(chip::ByteSpan ssid, chip::DeviceLayer::NetworkCommissioning::WiFiDriver::ScanCallback * callback) override;
+
+            chip::DeviceLayer::NetworkCommissioning::NetworkIterator * GetNetworks() override;
+
+        private:
+            chip::DeviceLayer::NetworkCommissioning::Internal::BaseDriver::NetworkStatusChangeCallback * mpStatusChangeCallback = nullptr;
+        };
+    }
+}
 
 namespace WPEFramework
 {
