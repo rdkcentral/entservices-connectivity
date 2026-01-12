@@ -143,7 +143,7 @@ namespace WPEFramework
         Bluetooth* Bluetooth::_instance = nullptr;
         static Core::TimerType<DiscoveryTimer> _discoveryTimer(64 * 1024, "DiscoveryTimer");
 
-        BTRMGR_Result_t bluetoothSrv_EventCallback (BTRMGR_EventMessage_t &eventMsg)
+        BTRMGR_Result_t bluetoothSrv_EventCallback (BTRMGR_EventMessage_t eventMsg)
         {
             if (!Bluetooth::_instance) {
                 LOGERR ("Invalid pointer. Bluetooth is not initialized (yet?). Event of type %d ignored.", eventMsg.m_eventType);
@@ -888,6 +888,7 @@ namespace WPEFramework
             }
             return mediaTrackInfo;
         }
+
         void Bluetooth::notifyEventWrapper (BTRMGR_EventMessage_t &eventMsg)
         {
             JsonObject params;
