@@ -951,6 +951,8 @@ namespace WPEFramework
             mRegisteredEndpoints.clear();
 
             // Cleanup NetworkCommissioning cluster (if initialized)
+            // TEMPORARILY DISABLED TO DEBUG LIBRARY LOAD FAILURE
+            /*
             if (mNetworkCommissioningInitialized && mNetworkCommissioningCluster)
             {
                 ChipLogProgress(AppServer, "Shutting down NetworkCommissioning cluster");
@@ -965,6 +967,7 @@ namespace WPEFramework
                 mWiFiDriver->Shutdown();
                 mWiFiDriver.reset();
             }
+            */
 
             // Cleanup other delegates
             mKeypadInputDelegate.reset();
