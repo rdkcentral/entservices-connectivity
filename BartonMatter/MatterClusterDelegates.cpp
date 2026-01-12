@@ -29,8 +29,9 @@
 #include <array>
 
 // NetworkCommissioning includes ONLY in .cpp to avoid ABI conflicts
-#include <app/clusters/network-commissioning/NetworkCommissioningCluster.h>
-#include <platform/NetworkCommissioning.h>
+// TEMPORARILY DISABLED TO DEBUG LIBRARY LOAD FAILURE
+// #include <app/clusters/network-commissioning/NetworkCommissioningCluster.h>
+// #include <platform/NetworkCommissioning.h>
 
 // Ensure BUS_VIRTUAL is defined
 #ifndef BUS_VIRTUAL
@@ -40,49 +41,50 @@
 using namespace chip;
 using namespace chip::app::Clusters;
 
-namespace WPEFramework
-{
-    namespace Plugin
-    {
-        // WiFiDriver class definition (full implementation to avoid ABI conflicts in header)
-        class WiFiDriver : public chip::DeviceLayer::NetworkCommissioning::WiFiDriver
-        {
-        public:
-            WiFiDriver();
-            virtual ~WiFiDriver() = default;
-
-            // WiFiDriver interface implementation
-            CHIP_ERROR Init(chip::DeviceLayer::NetworkCommissioning::Internal::BaseDriver::NetworkStatusChangeCallback * statusChangeCallback) override;
-            void Shutdown() override;
-
-            uint8_t GetMaxNetworks() override { return 1; }
-            uint8_t GetScanNetworkTimeoutSeconds() override { return 10; }
-            uint8_t GetConnectNetworkTimeoutSeconds() override { return 20; }
-
-            CHIP_ERROR CommitConfiguration() override;
-            CHIP_ERROR RevertConfiguration() override;
-
-            chip::DeviceLayer::NetworkCommissioning::Status AddOrUpdateNetwork(
-                chip::ByteSpan ssid, chip::ByteSpan credentials, chip::MutableCharSpan & outDebugText,
-                uint8_t & outNetworkIndex) override;
-
-            chip::DeviceLayer::NetworkCommissioning::Status RemoveNetwork(
-                chip::ByteSpan networkId, chip::MutableCharSpan & outDebugText, uint8_t & outNetworkIndex) override;
-
-            chip::DeviceLayer::NetworkCommissioning::Status ReorderNetwork(
-                chip::ByteSpan networkId, uint8_t index, chip::MutableCharSpan & outDebugText) override;
-
-            void ConnectNetwork(chip::ByteSpan networkId, chip::DeviceLayer::NetworkCommissioning::Internal::WirelessDriver::ConnectCallback * callback) override;
-
-            void ScanNetworks(chip::ByteSpan ssid, chip::DeviceLayer::NetworkCommissioning::WiFiDriver::ScanCallback * callback) override;
-
-            chip::DeviceLayer::NetworkCommissioning::NetworkIterator * GetNetworks() override;
-
-        private:
-            chip::DeviceLayer::NetworkCommissioning::Internal::BaseDriver::NetworkStatusChangeCallback * mpStatusChangeCallback = nullptr;
-        };
-    }
-}
+// TEMPORARILY DISABLED WiFiDriver TO DEBUG LIBRARY LOAD FAILURE
+// namespace WPEFramework
+// {
+//     namespace Plugin
+//     {
+//         // WiFiDriver class definition (full implementation to avoid ABI conflicts in header)
+//         class WiFiDriver : public chip::DeviceLayer::NetworkCommissioning::WiFiDriver
+//         {
+//         public:
+//             WiFiDriver();
+//             virtual ~WiFiDriver() = default;
+//
+//             // WiFiDriver interface implementation
+//             CHIP_ERROR Init(chip::DeviceLayer::NetworkCommissioning::Internal::BaseDriver::NetworkStatusChangeCallback * statusChangeCallback) override;
+//             void Shutdown() override;
+//
+//             uint8_t GetMaxNetworks() override { return 1; }
+//             uint8_t GetScanNetworkTimeoutSeconds() override { return 10; }
+//             uint8_t GetConnectNetworkTimeoutSeconds() override { return 20; }
+//
+//             CHIP_ERROR CommitConfiguration() override;
+//             CHIP_ERROR RevertConfiguration() override;
+//
+//             chip::DeviceLayer::NetworkCommissioning::Status AddOrUpdateNetwork(
+//                 chip::ByteSpan ssid, chip::ByteSpan credentials, chip::MutableCharSpan & outDebugText,
+//                 uint8_t & outNetworkIndex) override;
+//
+//             chip::DeviceLayer::NetworkCommissioning::Status RemoveNetwork(
+//                 chip::ByteSpan networkId, chip::MutableCharSpan & outDebugText, uint8_t & outNetworkIndex) override;
+//
+//             chip::DeviceLayer::NetworkCommissioning::Status ReorderNetwork(
+//                 chip::ByteSpan networkId, uint8_t index, chip::MutableCharSpan & outDebugText) override;
+//
+//             void ConnectNetwork(chip::ByteSpan networkId, chip::DeviceLayer::NetworkCommissioning::Internal::WirelessDriver::ConnectCallback * callback) override;
+//
+//             void ScanNetworks(chip::ByteSpan ssid, chip::DeviceLayer::NetworkCommissioning::WiFiDriver::ScanCallback * callback) override;
+//
+//             chip::DeviceLayer::NetworkCommissioning::NetworkIterator * GetNetworks() override;
+//
+//         private:
+//             chip::DeviceLayer::NetworkCommissioning::Internal::BaseDriver::NetworkStatusChangeCallback * mpStatusChangeCallback = nullptr;
+//         };
+//     }
+// }
 
 namespace WPEFramework
 {
@@ -972,6 +974,9 @@ namespace WPEFramework
 
         void MatterClusterDelegateManager::InitializeNetworkCommissioning()
         {
+            // TEMPORARILY DISABLED TO DEBUG LIBRARY LOAD FAILURE
+            ChipLogProgress(AppServer, "InitializeNetworkCommissioning called - DISABLED FOR DEBUGGING");
+            /*
             std::lock_guard<std::mutex> lock(mInitMutex);
 
             // Prevent double initialization
@@ -998,7 +1003,7 @@ namespace WPEFramework
             // Create NetworkCommissioning cluster instance for endpoint 0 with WiFiDriver
             // Note: Yocto Matter SDK version only takes 2 args (no BreadcrumbTracker)
             mNetworkCommissioningCluster = std::make_unique<chip::app::Clusters::NetworkCommissioningCluster>(
-                0, /* endpoint 0 - root device */
+                0,
                 mWiFiDriver.get()
             );
 
@@ -1016,10 +1021,11 @@ namespace WPEFramework
 
             mNetworkCommissioningInitialized = true;
             ChipLogProgress(AppServer, "NetworkCommissioning cluster initialized on endpoint 0 with WiFiDriver");
+            */
         }
 
-        // WiFiDriver Implementation
-
+        // WiFiDriver Implementation - TEMPORARILY DISABLED
+        /*
         WiFiDriver::WiFiDriver()
         {
             ChipLogProgress(AppServer, "WiFiDriver created");
@@ -1110,6 +1116,7 @@ namespace WPEFramework
             // Return nullptr to indicate no stored networks (fresh device state)
             return nullptr;
         }
+        */
 
     } // namespace Plugin
 } // namespace WPEFramework
