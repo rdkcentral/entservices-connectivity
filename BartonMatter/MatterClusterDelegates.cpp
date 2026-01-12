@@ -1119,13 +1119,13 @@ void emberAfNetworkCommissioningClusterInitCallback(chip::EndpointId endpoint)
 {
     ChipLogProgress(AppServer, "emberAfNetworkCommissioningClusterInitCallback called for endpoint %d", endpoint);
 
-    // Initialize NetworkCommissioning cluster immediately when generated code expects it
-    // This ensures the cluster is ready before Alexa tries to read attributes
-    if (endpoint == 0)
-    {
-        WPEFramework::Plugin::MatterClusterDelegateManager::GetInstance().InitializeNetworkCommissioning();
-        ChipLogProgress(AppServer, "NetworkCommissioning cluster initialized for endpoint 0");
-    }
+    // TODO: Initialize NetworkCommissioning cluster
+    // Temporarily disabled to debug library load failure
+    // if (endpoint == 0)
+    // {
+    //     WPEFramework::Plugin::MatterClusterDelegateManager::GetInstance().InitializeNetworkCommissioning();
+    //     ChipLogProgress(AppServer, "NetworkCommissioning cluster initialized for endpoint 0");
+    // }
 }
 
 
