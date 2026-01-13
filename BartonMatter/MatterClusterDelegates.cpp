@@ -939,8 +939,7 @@ namespace WPEFramework
             ChipLogProgress(AppServer, "NetworkCommissioning handled by platform layer");
         }
 
-    } // namespace BartonMatter
-} // namespace Plugin
+    } // namespace Plugin
 } // namespace WPEFramework
 
 // NOTE: NetworkCommissioning is handled by the Matter SDK's platform layer automatically
