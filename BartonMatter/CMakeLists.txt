@@ -11,6 +11,7 @@ add_library(${MODULE_NAME} SHARED
 	BartonMatterPlugin.cpp
 	BartonMatterImplementation.cpp
 	MatterClusterDelegates.cpp
+	NetworkCommissioningBridge.cpp
         Module.cpp
 )
 
