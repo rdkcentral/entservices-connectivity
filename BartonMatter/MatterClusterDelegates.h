@@ -172,8 +172,8 @@ namespace WPEFramework
             std::mutex mInitMutex;  // Protect initialization
             std::unique_ptr<MatterKeypadInputDelegate> mKeypadInputDelegate;
             std::unique_ptr<MatterApplicationLauncherDelegate> mApplicationLauncherDelegate;
-            std::unique_ptr<WiFiDriver> mWiFiDriver;
-            std::unique_ptr<chip::app::Clusters::NetworkCommissioningCluster> mNetworkCommissioningCluster;
+            // NOTE: WiFiDriver and NetworkCommissioningCluster removed to avoid ABI conflicts
+            // They are managed internally in .cpp file if needed
             std::vector<chip::EndpointId> mRegisteredEndpoints;
         };
 
