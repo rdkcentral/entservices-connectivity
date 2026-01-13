@@ -939,15 +939,20 @@ namespace WPEFramework
             ChipLogProgress(AppServer, "NetworkCommissioning handled by platform layer");
         }
 
+    } // namespace BartonMatter
+} // namespace Plugin
+} // namespace WPEFramework
 
-
-    // NOTE: NetworkCommissioning is handled by the Matter SDK's platform layer automatically
-    // for Linux. The platform code in src/platform/Linux/NetworkCommissioningWiFiDriver.cpp
-    // already provides the WiFi driver implementation. We just need to provide this empty
-    // callback to satisfy the generated code's requirements.
-    //
-    // The cluster initialization happens automatically via ChipLinuxAppInit() or similar
-    // platform initialization, similar to how all-clusters-app works.
+// NOTE: NetworkCommissioning is handled by the Matter SDK's platform layer automatically
+// for Linux. The platform code in src/platform/Linux/NetworkCommissioningWiFiDriver.cpp
+// already provides the WiFi driver implementation. We just need to provide this empty
+// callback to satisfy the generated code's requirements.
+//
+// The cluster initialization happens automatically via ChipLinuxAppInit() or similar
+// platform initialization, similar to how all-clusters-app works.
+void emberAfNetworkCommissioningClusterInitCallback(chip::EndpointId endpoint)
+{
+    // Empty implementation - platform layer handles everything
 }
 
 
