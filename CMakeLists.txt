@@ -39,7 +39,10 @@ include(CmakeHelperFunctions)
 if(PLUGIN_BLUETOOTH)
     add_subdirectory(Bluetooth)
 endif()
-add_subdirectory(BartonMatter)
+
+if(ENABLE_MATTER_BARTON)
+    add_subdirectory(BartonMatter)
+endif()
 
 
 if(WPEFRAMEWORK_CREATE_IPKG_TARGETS)
