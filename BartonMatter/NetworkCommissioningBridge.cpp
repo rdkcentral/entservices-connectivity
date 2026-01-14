@@ -17,10 +17,10 @@
 namespace {
     // Platform WiFi driver instance - statically allocated
     chip::DeviceLayer::NetworkCommissioning::LinuxWiFiDriver sWiFiDriver;
-    
+
     // NetworkCommissioning cluster instance wrapper
     chip::Optional<chip::app::Clusters::NetworkCommissioning::Instance> sWiFiNetworkCommissioningInstance;
-    
+
     bool sInitialized = false;
 }
 
