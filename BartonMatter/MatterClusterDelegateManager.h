@@ -33,7 +33,6 @@ namespace WPEFramework
             static MatterClusterDelegateManager& GetInstance();
             void Initialize();
             void Shutdown();
-            void InitializeNetworkCommissioning();
 
         private:
             MatterClusterDelegateManager() = default;

@@ -25,21 +25,6 @@
 #include <vector>
 #include <mutex>
 
-// Forward declarations to avoid including NetworkCommissioning headers
-// (they cause ABI conflicts with Thunder/WPEFramework)
-namespace chip {
-    namespace app {
-        namespace Clusters {
-            class NetworkCommissioningCluster;
-        }
-    }
-    namespace DeviceLayer {
-        namespace NetworkCommissioning {
-            class WiFiDriver;
-        }
-    }
-}
-
 namespace WPEFramework
 {
     namespace Plugin
@@ -146,9 +131,6 @@ namespace WPEFramework
             CHIP_ERROR HandleGetCatalogList(chip::app::AttributeValueEncoder & encoder) override;
         };
 
-        // Forward declaration - full implementation in .cpp to avoid ABI conflicts
-        class WiFiDriver;
-
         /**
          * @brief Cluster delegate manager for Matter endpoints
          */
@@ -159,7 +141,6 @@ namespace WPEFramework
 
             void Initialize();
             void Shutdown();
-            void InitializeNetworkCommissioning();
 
         private:
             MatterClusterDelegateManager() = default;
@@ -168,12 +149,9 @@ namespace WPEFramework
             MatterClusterDelegateManager& operator=(const MatterClusterDelegateManager&) = delete;
 
             bool mInitialized = false;
-            bool mNetworkCommissioningInitialized = false;
             std::mutex mInitMutex;  // Protect initialization
             std::unique_ptr<MatterKeypadInputDelegate> mKeypadInputDelegate;
             std::unique_ptr<MatterApplicationLauncherDelegate> mApplicationLauncherDelegate;
-            // NOTE: WiFiDriver and NetworkCommissioningCluster removed to avoid ABI conflicts
-            // They are managed internally in .cpp file if needed
             std::vector<chip::EndpointId> mRegisteredEndpoints;
         };
 

@@ -348,7 +348,7 @@ namespace WPEFramework
                         propProvider, B_CORE_BARTON_MATTER_PRODUCT_NAME, "Barton Device");
 
                 b_core_property_provider_set_property_uint16(
-                        propProvider, B_CORE_BARTON_MATTER_PRODUCT_ID, 0x5678);
+                        propProvider, B_CORE_BARTON_MATTER_PRODUCT_ID, 0x8001);
 
                 b_core_property_provider_set_property_uint16(
                         propProvider, B_CORE_BARTON_MATTER_HARDWARE_VERSION, 1);
@@ -434,9 +434,6 @@ namespace WPEFramework
             chip::DeviceLayer::PlatformMgr().ScheduleWork([](intptr_t) {
                 ChipLogProgress(AppServer, "Scheduling cluster delegate initialization...");
                 MatterClusterDelegateManager::GetInstance().Initialize();
-
-                // Note: NetworkCommissioning cluster is initialized by emberAfNetworkCommissioningClusterInitCallback
-                // which is called during server initialization, ensuring proper timing
             });
 
             LOGINFO("BartonMatter Commissioner initialized successfully");

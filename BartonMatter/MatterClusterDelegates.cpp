@@ -18,7 +18,6 @@
  **/
 
 #include "MatterClusterDelegates.h"
-#include "NetworkCommissioningBridge.h"
 #include <lib/support/logging/CHIPLogging.h>
 #include <linux/uinput.h>
 #include <linux/input.h>
@@ -28,13 +27,6 @@
 #include <sys/time.h>
 #include <cstdlib>
 #include <array>
-
-// NetworkCommissioning includes ONLY in .cpp to avoid ABI conflicts
-// NOTE: We don't need to manually implement NetworkCommissioning.
-// The Matter SDK platform layer (src/platform/Linux/NetworkCommissioningWiFiDriver.cpp)
-// already provides WiFi driver implementation automatically.
-// #include <platform/Linux/NetworkCommissioningDriver.h>
-// #include <app/clusters/network-commissioning/network-commissioning.h>
 
 // Ensure BUS_VIRTUAL is defined
 #ifndef BUS_VIRTUAL
@@ -908,59 +900,11 @@ namespace WPEFramework
             }
             mRegisteredEndpoints.clear();
 
-            // Cleanup NetworkCommissioning cluster (if initialized)
-            // TEMPORARILY DISABLED TO DEBUG LIBRARY LOAD FAILURE
-            /*
-            if (mNetworkCommissioningInitialized && mNetworkCommissioningCluster)
-            {
-                ChipLogProgress(AppServer, "Shutting down NetworkCommissioning cluster");
-                mNetworkCommissioningCluster->Deinit();
-                mNetworkCommissioningCluster.reset();
-                mNetworkCommissioningInitialized = false;
-            }
-
-            // Cleanup WiFiDriver (if initialized)
-            if (mWiFiDriver)
-            {
-                mWiFiDriver->Shutdown();
-                mWiFiDriver.reset();
-            }
-            */
-
             // Cleanup other delegates
             mKeypadInputDelegate.reset();
             mApplicationLauncherDelegate.reset();
             mInitialized = false;
         }
 
-        void MatterClusterDelegateManager::InitializeNetworkCommissioning()
-        {
-            // Use C API bridge to initialize NetworkCommissioning without crossing ABI boundaries.
-            // The bridge compiles the actual driver instantiation with Matter SDK compiler flags.
-            // Endpoint 0 is the root endpoint where NetworkCommissioning cluster is enabled in barton.zap
-            constexpr uint16_t kNetworkCommissioningEndpoint = 0;
-
-            ChipLogProgress(AppServer, "Initializing NetworkCommissioning via C API bridge for endpoint %u",
-                          kNetworkCommissioningEndpoint);
-
-            if (barton_network_commissioning_init(kNetworkCommissioningEndpoint) == 0)
-            {
-                ChipLogProgress(AppServer, "NetworkCommissioning initialized successfully");
-            }
-            else
-            {
-                ChipLogError(AppServer, "Failed to initialize NetworkCommissioning");
-            }
-        }
-
     } // namespace Plugin
 } // namespace WPEFramework
-
-// NetworkCommissioning cluster initialization callback required by ZAP-generated code.
-// This callback is invoked when the endpoint containing NetworkCommissioning cluster is initialized.
-// We call our InitializeNetworkCommissioning method which uses the C API bridge.
-void emberAfNetworkCommissioningClusterInitCallback(chip::EndpointId endpoint)
-{
-    ChipLogProgress(AppServer, "NetworkCommissioning cluster init callback for endpoint %u", endpoint);
-    WPEFramework::Plugin::MatterClusterDelegateManager::GetInstance().InitializeNetworkCommissioning();
-}
