@@ -18,7 +18,7 @@
  **/
 
 #include "BartonMatterImplementation.h"
-#include "MatterClusterDelegateManager.h"
+//#include "MatterClusterDelegateManager.h"
 #include <fstream>
 #include <dirent.h>
 #include <map>
@@ -51,7 +51,7 @@ namespace WPEFramework
             TRACE(Trace::Information, (_T("Destructing BartonMatterImplementation Service: %p"), this));
 
             // Shutdown cluster delegates
-            MatterClusterDelegateManager::GetInstance().Shutdown();
+            //MatterClusterDelegateManager::GetInstance().Shutdown();
 
             // Cleanup barton client if initialized
             if (bartonClient) {
@@ -431,10 +431,10 @@ namespace WPEFramework
 
             // Initialize cluster delegates for handling incoming commands
             // Must run on Matter event loop to ensure proper timing
-            chip::DeviceLayer::PlatformMgr().ScheduleWork([](intptr_t) {
+          /*  chip::DeviceLayer::PlatformMgr().ScheduleWork([](intptr_t) {
                 ChipLogProgress(AppServer, "Scheduling cluster delegate initialization...");
                 MatterClusterDelegateManager::GetInstance().Initialize();
-            });
+            });*/
 
             LOGINFO("BartonMatter Commissioner initialized successfully");
 
