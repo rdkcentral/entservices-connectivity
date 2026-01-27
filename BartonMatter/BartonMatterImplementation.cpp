@@ -1360,3 +1360,30 @@ BReferenceNetworkCredentialsProvider *b_reference_network_credentials_provider_n
 }
 
 } // extern "C"
+
+// ===== Matter Attribute Change Callback =====
+// This callback is called by Matter SDK when any attribute changes
+
+#include <app-common/zap-generated/ids/Attributes.h>
+#include <app-common/zap-generated/ids/Clusters.h>
+
+using namespace chip::app::Clusters;
+
+void MatterPostAttributeChangeCallback(const chip::app::ConcreteAttributePath & attributePath,
+                                       uint8_t type, uint16_t size, uint8_t * value)
+{
+    chip::EndpointId endpoint = attributePath.mEndpointId;
+    chip::ClusterId clusterId = attributePath.mClusterId;
+    chip::AttributeId attributeId = attributePath.mAttributeId;
+
+    // Handle OnOff cluster attribute changes
+    if (clusterId == OnOff::Id && attributeId == OnOff::Attributes::OnOff::Id)
+    {
+        bool onOffValue = *value != 0;
+
+        LOGINFO("OnOff attribute changed on endpoint %d: %s", endpoint, onOffValue ? "ON" : "OFF");
+
+        // TODO: Call Thunder plugin method here to control actual device
+        // Example: Call DisplaySettings or other RDK service to turn device on/off
+    }
+}
