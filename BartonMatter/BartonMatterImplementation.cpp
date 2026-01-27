@@ -1382,12 +1382,21 @@ void MatterPostAttributeChangeCallback(const chip::app::ConcreteAttributePath & 
         if(onOffValue)
         {
             LOGINFO("Device turned on");
-            // TODO: Call Thunder plugin method here to control actual device
+            // Call Thunder plugin method to setPowerState ON
+            system("curl -s -H 'Content-Type: application/json' --request POST "
+                   "--data '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"org.rdk.System.1.setPowerState\","
+                   "\"params\":{\"powerState\":\"ON\",\"standbyReason\":\"MatterCommand\"}}' "
+                   "http://127.0.0.1:9998/jsonrpc > /dev/null 2>&1 &");
         }
         else
         {
             LOGINFO("Device turned off");
-            // TODO: Call Thunder plugin method here to control actual device
+            // Call Thunder plugin method to setPowerState STANDBY
+            system("curl -s -H 'Content-Type: application/json' --request POST "
+                   "--data '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"org.rdk.System.1.setPowerState\","
+                   "\"params\":{\"powerState\":\"STANDBY\",\"standbyReason\":\"MatterCommand\"}}' "
+                   "http://127.0.0.1:9998/jsonrpc > /dev/null 2>&1 &");
+
         }
     }
 }
