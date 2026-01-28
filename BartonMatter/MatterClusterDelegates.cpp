@@ -202,7 +202,10 @@ namespace WPEFramework
 			    system("SetPowerState LIGHTSLEEP");
 		    }
 		    else
+		    {
+			    curPowerState = true;
 			    system("SetPowerState ON");
+		    }
 	    }
             // Sync is necessary, else kernel keeps on waiting
             ev.type = EV_SYN;
