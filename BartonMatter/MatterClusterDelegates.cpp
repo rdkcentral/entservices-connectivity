@@ -194,7 +194,16 @@ namespace WPEFramework
             ssize_t ret = write(mUinputFd, &ev, sizeof(ev));
             ChipLogProgress(AppServer, "Key press: code=%d, type=%d, value=%d, write_ret=%zd",
                           linuxKeyCode, ev.type, ev.value, ret);
-
+	    if (linuxKeyCode == 116)
+	    {
+		    if(curPowerState)
+		    {
+			    curPowerState = false;
+			    system("SetPowerState LIGHTSLEEP");
+		    }
+		    else
+			    system("SetPowerState ON");
+	    }
             // Sync is necessary, else kernel keeps on waiting
             ev.type = EV_SYN;
             ev.code = SYN_REPORT;

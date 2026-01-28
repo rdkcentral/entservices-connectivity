@@ -39,6 +39,7 @@ namespace WPEFramework
         {
         public:
             MatterKeypadInputDelegate();
+	    bool curPowerState = true;
             virtual ~MatterKeypadInputDelegate();
 
             /**
