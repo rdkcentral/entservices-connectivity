@@ -8,7 +8,7 @@ This document explains how BartonMatter implements Matter cluster delegates to h
 
 ## Table of Contents
 
-1. [Layman's Explanation](#laymans-explanation)
+1. [  Explanation](#laymans-explanation)
 2. [Technical Overview](#technical-overview)
 3. [Architecture](#architecture)
 4. [Existing Delegates](#existing-delegates)
@@ -22,7 +22,7 @@ This document explains how BartonMatter implements Matter cluster delegates to h
 
 ---
 
-## Layman's Explanation
+##   Explanation
 
 ### What is a Delegate?
 
