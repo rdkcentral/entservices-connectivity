@@ -1,6 +1,6 @@
 # BartonMatter API Reference
 
-Complete technical documentation for BartonMatter Thunder plugin APIs with flow diagrams, technical details, and layman's explanations.
+Complete technical documentation for BartonMatter Thunder plugin APIs with flow diagrams, technical details, and     explanations.
 
 ---
 
@@ -23,7 +23,7 @@ Complete technical documentation for BartonMatter Thunder plugin APIs with flow 
 
 ### BartonMatterImplementation()
 
-**Layman's Explanation:**
+**Explanation:**
 Creates a new BartonMatter service instance. Like turning on your TV - everything gets powered up and ready to use.
 
 **Technical Details:**
@@ -58,7 +58,7 @@ Creates a new BartonMatter service instance. Like turning on your TV - everythin
 
 ### ~BartonMatterImplementation()
 
-**Layman's Explanation:**
+**Explanation:**
 Shuts down everything gracefully when the service is stopped. Like turning off your TV - all connections are closed and memory is freed.
 
 **Technical Details:**
@@ -115,8 +115,8 @@ Shuts down everything gracefully when the service is stopped. Like turning off y
 Core::hresult SetWifiCredentials(const std::string ssid, const std::string password)
 ```
 
-**Layman's Explanation:**
-Tells your TV the WiFi network name and password so it can help other devices (like Alexa casting apps) connect to the same network during setup. Like saving your WiFi info in your phone's settings.
+**Explanation:**
+Tells your TV the WiFi network name and password so it can help other devices (like Alexa casting apps) connect to the same network during setup. Like saving your WiFi info in your phone   settings.
 
 **Technical Details:**
 - **Input Validation:** Checks if SSID and password are non-empty
@@ -176,7 +176,7 @@ result = bartonMatter->SetWifiCredentials("MyHomeWiFi", "SecurePassword123");
 - `Core::ERROR_NONE` (0): Success
 - `Core::ERROR_INVALID_INPUT_LENGTH`: Empty SSID or password
 
-**Thread Safety:** ✅ Yes - uses networkCredsMtx mutex
+**Thread Safety:**  Yes - uses networkCredsMtx mutex
 
 ---
 
@@ -187,7 +187,7 @@ result = bartonMatter->SetWifiCredentials("MyHomeWiFi", "SecurePassword123");
 Core::hresult InitializeCommissioner()
 ```
 
-**Layman's Explanation:**
+**Explanation:**
 Starts up the Matter service on your TV. Like pressing the power button - it wakes up all the smart home systems and gets ready to talk to other devices like Alexa.
 
 **Technical Details:**
@@ -317,7 +317,7 @@ Starts up the Matter service on your TV. Like pressing the power button - it wak
 Core::hresult CommissionDevice(const std::string passcode)
 ```
 
-**Layman's Explanation:**
+**    Explanation:**
 Pairs a casting device (like your phone running an app) with your TV using a code. Like entering a pairing code to connect Bluetooth headphones, but for Matter smart home devices.
 
 **Technical Details:**
@@ -481,7 +481,7 @@ result = bartonMatter->CommissionDevice("34970112332");
 Core::hresult ReadResource(std::string uri, std::string resourceType, std::string& result)
 ```
 
-**Layman's Explanation:**
+**    Explanation:**
 Asks a connected device for information, like checking if a light is on/off or reading the current temperature. You tell it which device (uri) and what info you want (resourceType), and it gives you the answer.
 
 **Technical Details:**
@@ -590,7 +590,7 @@ result = bartonMatter->ReadResource("90034FD9068DFF14", "featureMap", value);
 Core::hresult WriteResource(std::string uri, std::string resourceType, std::string value)
 ```
 
-**Layman's Explanation:**
+**    Explanation:**
 Sends a command to a device, like turning on a light or setting the volume. You tell it which device (uri), what to change (resourceType), and the new value.
 
 **Technical Details:**
@@ -696,7 +696,7 @@ result = bartonMatter->WriteResource("90034FD9068DFF14", "colorTemperatureMireds
 Core::hresult ListDevices(std::string& deviceList)
 ```
 
-**Layman's Explanation:**
+**    Explanation:**
 Shows you all the devices currently connected to your TV, like seeing a list of all Bluetooth devices paired with your phone. Returns device IDs in a simple list format.
 
 **Technical Details:**
@@ -818,7 +818,7 @@ result = bartonMatter->ListDevices(deviceList);
 Core::hresult GetCommissionedDeviceInfo(std::string& deviceInfo)
 ```
 
-**Layman's Explanation:**
+**    Explanation:**
 Shows detailed information about all devices that have been set up with your TV, including what type of device it is (like "TV-CASTING" for a casting app). Like viewing your device list in the Alexa app with names and types.
 
 **Technical Details:**
@@ -962,7 +962,7 @@ result = bartonMatter->GetCommissionedDeviceInfo(deviceInfo);
 Core::hresult RemoveDevice(const std::string deviceUuid)
 ```
 
-**Layman's Explanation:**
+**    Explanation:**
 Unpairs a device from your TV, like removing a Bluetooth device from your phone. The device forgets your TV and your TV forgets the device - you'll need to pair again to reconnect.
 
 **Technical Details:**
@@ -1061,7 +1061,7 @@ Unpairs a device from your TV, like removing a Bluetooth device from your phone.
 
 3. **Fabric Association:**
    - Device is removed from Matter fabric
-   - Device's operational certificate invalidated
+   - Device   operational certificate invalidated
    - Device reverts to uncommissioned state
 
 4. **In-Memory Cache:**
@@ -1081,7 +1081,7 @@ result = bartonMatter->RemoveDevice("90034FD9068DFF14");
 - Device cannot communicate with TV anymore
 - Device must be recommissioned to reconnect
 - Device shows as "unpaired" in its app
-- TV's device list no longer shows this device
+- TV   device list no longer shows this device
 
 **Error Codes:**
 - `Core::ERROR_NONE` (0): Device removed successfully
@@ -1105,7 +1105,7 @@ result = bartonMatter->RemoveDevice("90034FD9068DFF14");
 Core::hresult OpenCommissioningWindow(const uint16_t timeoutSeconds, std::string& commissioningInfo)
 ```
 
-**Layman's Explanation:**
+**    Explanation:**
 Makes your TV discoverable so Alexa or other smart home controllers can connect to it. Like putting your Bluetooth device in "pairing mode" - it generates codes that Alexa scans to connect. The window stays open for the time you specify, then automatically closes for security.
 
 **Technical Details:**
@@ -1309,7 +1309,7 @@ result = bartonMatter->OpenCommissioningWindow(timeout, commissioningInfo);
 
 ## Appendix: Complete Commissioning Flow
 
-Here's how all these APIs work together in a typical setup:
+Here   how all these APIs work together in a typical setup:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -1359,7 +1359,7 @@ Here's how all these APIs work together in a typical setup:
                 │
                 ▼
    ┌─────────────────────────┐
-   │ CommissionDevice()      │  TV scans app's QR
+   │ CommissionDevice()      │  TV scans app   QR
    └────────────┬────────────┘
                 │
                 ▼
@@ -1443,7 +1443,7 @@ Here's how all these APIs work together in a typical setup:
 
 ## Appendix: GLib Memory Management
 
-BartonMatter uses GLib's automatic memory management:
+BartonMatter uses GLib   automatic memory management:
 
 ```cpp
 // Automatic cleanup when variables go out of scope:
