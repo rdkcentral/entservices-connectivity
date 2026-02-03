@@ -10,7 +10,7 @@ All public APIs return `Core::hresult` status codes and follow Thunder framework
 
 ## Table of Contents
 
-1. [Layman's Explanation](#laymans-explanation)
+1. [  Explanation](#laymans-explanation)
 2. [API Categories](#api-categories)
 3. [Return Codes](#return-codes)
 4. [API Reference](#api-reference)
@@ -31,7 +31,7 @@ All public APIs return `Core::hresult` status codes and follow Thunder framework
 
 ---
 
-## Layman's Explanation
+##   Explanation
 
 ### What Are These APIs?
 
