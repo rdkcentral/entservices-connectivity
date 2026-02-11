@@ -24,6 +24,7 @@ find_package(${NAMESPACE}Plugins REQUIRED)
 
 add_library(${MODULE_NAME} SHARED
         Bluetooth.cpp
+        BluetoothDeviceManager.cpp
         Module.cpp
 )
 
