@@ -1910,7 +1910,7 @@ namespace WPEFramework
                     if (device.HasLabel("autoConnect") && !device["autoConnect"].Boolean()) {
                         // Only disconnect if autoConnect was explicitly set false, to preserve backward compatibility.
                         long long int deviceID = stoll(device["deviceID"].String());
-                        bool bSuccess = setDeviceConnection(deviceID, "DISCONNECT");
+                        bool bSuccess = setDeviceConnection(deviceID, "DISCONNECT", device["deviceType"].String());
                         printf("*** _DEBUG: Bluetooth::onPowerModeChanged: POWER OFF/STANDBY: Disconnecting deviceID=%llu, success=%s\n", deviceID, bSuccess ? "true" : "false");
                     }
                 }
