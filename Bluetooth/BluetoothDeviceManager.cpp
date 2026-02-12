@@ -147,7 +147,7 @@ namespace WPEFramework {
             updateBluetoothDeviceInfoPersistentStore();
         }
 
-        AutoConnectStatus BluetoothDeviceManager::getAutoConnectStatus(const std::string& bdAddr)
+        Core::hresult getAutoConnectStatus(const std::string& bdAddr, AutoConnectStatus& status)
         {
             printf("*** _DEBUG: BluetoothDeviceManager::getAutoConnectStatus: bdAddr=%s\n", bdAddr.c_str());
             BluetoothDeviceInfo deviceInfo;
