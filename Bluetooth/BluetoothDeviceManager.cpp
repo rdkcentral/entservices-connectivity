@@ -32,8 +32,6 @@ namespace WPEFramework {
                 return Core::ERROR_GENERAL;
             }
             
-            _adminLock.Lock();
-            
             string bluetoothDeviceInfoStr;
             Core::hresult result = pPersistentStore->GetValue(PERSISTENT_STORE_NAMESPACE, PERSISTENT_STORE_KEY_DEVICE_INFO, bluetoothDeviceInfoStr);
 
@@ -42,6 +40,9 @@ namespace WPEFramework {
                 _bluetoothDeviceInfoCache.clear();
                 JsonArray deviceInfoArray;
                 deviceInfoArray.FromString(bluetoothDeviceInfoStr);
+
+                _adminLock.Lock();
+
                 for (uint16_t i = 0; i < deviceInfoArray.Length(); i++) {
                     JsonObject deviceInfoObj = deviceInfoArray[i].Object();
                     std::string deviceID = deviceInfoObj["deviceID"].String();
@@ -52,19 +53,20 @@ namespace WPEFramework {
                     deviceInfo.autoConnectStatus = autoConnectStatus;
                     deviceInfo.lastConnectTimeUtc = lastConnectTimeUtc;
 
-                    _bluetoothDeviceInfoCache[deviceID] = deviceInfo;
+                    _bluetoothDeviceInfoCache[deviceID] = std::move(deviceInfo);
 
                     printf("*** _DEBUG: BluetoothDeviceManager::updateBluetoothDeviceInfoCache: Loaded device info for deviceID=%s, autoConnectStatus=%d, lastConnectTimeUtc=%s\n",
                             deviceID.c_str(), static_cast<int>(autoConnectStatus), lastConnectTimeUtc.c_str());
                 }
+
+                _adminLock.Unlock();
+                
             } else {
                 printf("*** _DEBUG: BluetoothDeviceManager::updateBluetoothDeviceInfoCache: No existing device info in PersistentStore or failed to load (hresult=%d)\n", result);
                 LOGERR("Failed to load device info from PersistentStore, hresult=%d\n", result);
             }
 
             pPersistentStore->Release();
-
-            _adminLock.Unlock();
 
             return result;
         }
@@ -148,7 +150,7 @@ namespace WPEFramework {
             deviceInfo.autoConnectStatus = autoConnectStatus;
 
             _adminLock.Lock();
-            _bluetoothDeviceInfoCache[deviceID] = deviceInfo;
+            _bluetoothDeviceInfoCache[deviceID] = std::move(deviceInfo);
             _adminLock.Unlock();
             
             updateBluetoothDeviceInfoPersistentStore();
@@ -183,10 +185,10 @@ namespace WPEFramework {
 
             BluetoothDeviceInfo deviceInfo;
             getBluetoothDeviceInfo(deviceID, deviceInfo);
-            deviceInfo.lastConnectTimeUtc = currentUtcTime;
+            deviceInfo.lastConnectTimeUtc = std::move(currentUtcTime);
 
             _adminLock.Lock();
-            _bluetoothDeviceInfoCache[deviceID] = deviceInfo;
+            _bluetoothDeviceInfoCache[deviceID] = std::move(deviceInfo);
             _adminLock.Unlock();
 
             updateBluetoothDeviceInfoPersistentStore();

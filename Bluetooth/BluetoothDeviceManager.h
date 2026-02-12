@@ -63,7 +63,7 @@ namespace WPEFramework {
             private:
 
                 mutable Core::CriticalSection _adminLock;
-                PluginHost::IShell* _service;
+                PluginHost::IShell* _service = nullptr;
                 std::unordered_map<std::string /* deviceID */, BluetoothDeviceInfo /* deviceInfo */> _bluetoothDeviceInfoCache;
 
                 Core::hresult updateBluetoothDeviceInfoCache();
