@@ -165,6 +165,16 @@ namespace WPEFramework
         , m_powerManagerNotification(*this)
         {
             Bluetooth::_instance = this;
+        }
+
+        Bluetooth::~Bluetooth()
+        {
+        }
+
+        const string Bluetooth::Initialize(PluginHost::IShell* service)
+        {
+            string status = "";
+
             Register(METHOD_GET_API_VERSION_NUMBER, &Bluetooth::getApiVersionNumber, this);
             Register(METHOD_START_SCAN, &Bluetooth::startScanWrapper, this);
             Register(METHOD_STOP_SCAN, &Bluetooth::stopScanWrapper, this);
@@ -196,43 +206,36 @@ namespace WPEFramework
             BTRMGR_Result_t rc = BTRMGR_RegisterForCallbacks(Utils::IARM::NAME);
             if (BTRMGR_RESULT_SUCCESS != rc)
             {
-                LOGWARN("Failed to Register BTRMgr...!");
+                status = "Failed to Register BTRMgr...!";
+                LOGERR("%s", status.c_str());
             }
             else {
                 BTRMGR_RegisterEventCallback(bluetoothSrv_EventCallback);
             }
-        }
 
-        Bluetooth::~Bluetooth()
-        {
-        }
-
-        const string Bluetooth::Initialize(PluginHost::IShell* service)
-        {
             Exchange::IPowerManager* pPowerManager = service->QueryInterfaceByCallsign<Exchange::IPowerManager>("org.rdk.PowerManager");
 
             if (pPowerManager != nullptr) {
                 uint32_t result = pPowerManager->Register(&m_powerManagerNotification);
-                printf("*** _DEBUG: Bluetooth::Initialize: PowerManager Register result=%d\n", result);
 
                 WPEFramework::Exchange::IPowerManager::PowerState currentState, prevState;
                 if (Core::ERROR_NONE == pPowerManager->GetPowerState(currentState, prevState)) {
                     onPowerModeChanged(prevState, currentState);
                 } else {
-                    printf("*** _DEBUG: Bluetooth::Initialize: PowerManager GetPowerState failed\n");
-                    LOGERR("Failed to get current power state");
+                    status = "Failed to get current power state";
+                    LOGERR("%s", status.c_str());
                 }
 
                 pPowerManager->Release();
             } else {
-                LOGERR("Failed to get PowerManager interface");
-                printf("*** _DEBUG: Bluetooth::Initialize: Failed to get PowerManager interface\n");
-                return "Failed to get PowerManager interface";
+                status = "Failed to get PowerManager interface";
+                LOGERR("%s", status.c_str());
+                return status;
             }
 
             m_bluetoothDeviceManager.init(service);
 
-            return {};
+            return status;
         }
 
         void Bluetooth::Deinitialize(PluginHost::IShell* /* service */)
