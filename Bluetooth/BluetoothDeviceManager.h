@@ -53,16 +53,16 @@ namespace WPEFramework {
                 void init(PluginHost::IShell* service);
                 void deinit();
 
-                Core::hresult getBluetoothDeviceInfo(const std::string& bdAddr, BluetoothDeviceInfo& deviceInfo);
-                void setAutoConnect(const std::string& bdAddr, bool enable);
-                Core::hresult getAutoConnectStatus(const std::string& bdAddr, AutoConnectStatus& status);
-                void setLastConnectTimeUtc(const std::string& bdAddr);
-                std::string getLastConnectTimeUtc(const std::string& bdAddr);
+                Core::hresult getBluetoothDeviceInfo(const std::string& deviceID, BluetoothDeviceInfo& deviceInfo);
+                void setAutoConnect(const std::string& deviceID, bool enable);
+                Core::hresult getAutoConnect(const std::string& deviceID, AutoConnectStatus& status);
+                void setLastConnectTimeUtc(const std::string& deviceID);
+                Core::hresult getLastConnectTimeUtc(const std::string& deviceID, std::string& lastConnectTimeUtc);
 
             private:
 
                 mutable Core::CriticalSection _adminLock;
-                std::unordered_map<std::string /* bdAddr */, BluetoothDeviceInfo /* deviceInfo */> _bluetoothDeviceInfoCache;
+                std::unordered_map<std::string /* deviceID */, BluetoothDeviceInfo /* deviceInfo */> _bluetoothDeviceInfoCache;
                 Exchange::IStore* _persistentStore = nullptr;
 
                 Core::hresult updateBluetoothDeviceInfoCache();

@@ -67,7 +67,7 @@ const string WPEFramework::Plugin::Bluetooth::METHOD_GET_API_VERSION_NUMBER = "g
 const string WPEFramework::Plugin::Bluetooth::METHOD_GET_DEVICE_VOLUME_MUTE_INFO = "getDeviceVolumeMuteInfo";
 const string WPEFramework::Plugin::Bluetooth::METHOD_SET_DEVICE_VOLUME_MUTE_INFO = "setDeviceVolumeMuteInfo";
 const string WPEFramework::Plugin::Bluetooth::METHOD_SET_AUTO_CONNECT = "setAutoConnect";
-const string WPEFramework::Plugin::Bluetooth::METHOD_GET_AUTO_CONNECT_STATUS = "getAutoConnectStatus";
+const string WPEFramework::Plugin::Bluetooth::METHOD_GET_AUTO_CONNECT_STATUS = "getAutoConnect";
 
 const string WPEFramework::Plugin::Bluetooth::EVT_STATUS_CHANGED = "onStatusChanged";
 const string WPEFramework::Plugin::Bluetooth::EVT_PAIRING_REQUEST = "onPairingRequest";
@@ -189,7 +189,7 @@ namespace WPEFramework
             Register(METHOD_GET_DEVICE_VOLUME_MUTE_INFO, &Bluetooth::getDeviceVolumeMuteInfoWrapper, this);
             Register(METHOD_SET_DEVICE_VOLUME_MUTE_INFO, &Bluetooth::setDeviceVolumeMuteInfoWrapper, this);
             Register(METHOD_SET_AUTO_CONNECT, &Bluetooth::setAutoConnectWrapper, this);
-            Register(METHOD_GET_AUTO_CONNECT_STATUS, &Bluetooth::getAutoConnectStatusWrapper, this);
+            Register(METHOD_GET_AUTO_CONNECT_STATUS, &Bluetooth::getAutoConnectWrapper, this);
 
             Utils::IARM::init();
 
@@ -493,8 +493,10 @@ namespace WPEFramework
                         deviceDetails["lastConnectTimeUtc"] = lastConnectTimeUtc;
                     }
 
-                    AutoConnectStatus autoConnectStatus = m_bluetoothDeviceManager.getAutoConnectStatus(deviceId);
-                    if  (AUTO_CONNECT_STATUS_UNSET != autoConnectStatus) {
+                    AutoConnectStatus autoConnectStatus;
+                    Core::hresult result = m_bluetoothDeviceManager.getAutoConnect(deviceId, autoConnectStatus);
+
+                    if (Core::ERROR_NONE == result) {
                         deviceDetails["autoconnect"] = (AUTO_CONNECT_STATUS_ENABLED == autoConnectStatus);
                     }
 
@@ -542,7 +544,8 @@ namespace WPEFramework
                         deviceDetails["lastConnectTimeUtc"] = lastConnectTimeUtc;
                     }
 
-                    AutoConnectStatus autoConnectStatus = m_bluetoothDeviceManager.getAutoConnectStatus(deviceId);
+                    AutoConnectStatus autoConnectStatus;
+                    Core::hresult result = m_bluetoothDeviceManager.getAutoConnect(deviceId, autoConnectStatus);
                     if  (AUTO_CONNECT_STATUS_UNSET != autoConnectStatus) {
                         deviceDetails["autoconnect"] = (AUTO_CONNECT_STATUS_ENABLED == autoConnectStatus);
                     }
@@ -1829,33 +1832,41 @@ namespace WPEFramework
         uint32_t Bluetooth::setAutoConnectWrapper(const JsonObject& parameters, JsonObject& response)
         {
             LOGINFOMETHOD();
-            string bdAddr;
+            string deviceID;
             bool enable;
             bool successFlag = true;
-            if (parameters.HasLabel("bdAddr") && parameters.HasLabel("enable"))
+            if (parameters.HasLabel("deviceID") && parameters.HasLabel("enable"))
             {
-                getStringParameter("bdAddr", bdAddr);
+                getStringParameter("deviceID", deviceID);
                 getBoolParameter("enable", enable);
-                m_bluetoothDeviceManager.setAutoConnect(bdAddr, enable);
-                notifyAutoConnectStatusChanged(bdAddr, enable);
+                m_bluetoothDeviceManager.setAutoConnect(deviceID, enable);
+                notifyAutoConnectStatusChanged(deviceID, enable);
             } else {
-                LOGERR("Please specify parameters. Example: \"params\": {\"bdAddr\": \"1234567890\", \"enable\": true}");
+                LOGERR("Please specify parameters. Example: \"params\": {\"deviceID\": \"1234567890\", \"enable\": true}");
                 successFlag = false;
             }
             returnResponse(successFlag);
         }
 
-        uint32_t Bluetooth::getAutoConnectStatusWrapper(const JsonObject& parameters, JsonObject& response)
+        uint32_t Bluetooth::getAutoConnectWrapper(const JsonObject& parameters, JsonObject& response)
         {
             LOGINFOMETHOD();
-            string bdAddr;
+            string deviceID;
             bool successFlag = true;
-            if (parameters.HasLabel("bdAddr"))
+            if (parameters.HasLabel("deviceID"))
             {
-                getStringParameter("bdAddr", bdAddr);
-                response["autoConnectStatus"] = (AUTO_CONNECT_STATUS_ENABLED == m_bluetoothDeviceManager.getAutoConnectStatus(bdAddr));
+                getStringParameter("deviceID", deviceID);
+                AutoConnectStatus status;
+                Core::hresult result = m_bluetoothDeviceManager.getAutoConnect(deviceID, status);
+
+                if (Core::ERROR_NONE == result) {
+                    response["autoConnectStatus"] = (AUTO_CONNECT_STATUS_ENABLED == status);
+                } else {
+                    successFlag = false;
+                    LOGWARN("Failed to get autoConnect status for deviceID=%s, result=0x%08X", deviceID.c_str(), result);
+                }
             } else {
-                LOGERR("Please specify parameters. Example: \"params\": {\"bdAddr\": \"1234567890\"}");
+                LOGERR("Please specify parameters. Example: \"params\": {\"deviceID\": \"1234567890\"}");
                 successFlag = false;
             }
             returnResponse(successFlag);
@@ -1930,11 +1941,11 @@ namespace WPEFramework
             }
         }
 
-        void Bluetooth::notifyAutoConnectStatusChanged(const string& bdAddr, const bool isEnabled)
+        void Bluetooth::notifyAutoConnectStatusChanged(const string& deviceID, const bool enable)
         {
             JsonObject params;
-            params["bdAddr"] = bdAddr;
-            params["autoconnect"] = isEnabled;
+            params["deviceID"] = deviceID;
+            params["autoconnect"] = enable;
             params["newStatus"] = STATUS_AUTOCONNECT_STATUS_CHANGE;
             sendNotify(C_STR(EVT_STATUS_CHANGED), params);
         }

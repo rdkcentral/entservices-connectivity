@@ -136,7 +136,7 @@ namespace WPEFramework {
             uint32_t getDeviceVolumeMuteInfoWrapper(const JsonObject& parameters, JsonObject& response);
             uint32_t setDeviceVolumeMuteInfoWrapper(const JsonObject& parameters, JsonObject& response);
             uint32_t setAutoConnectWrapper(const JsonObject& parameters, JsonObject& response);
-            uint32_t getAutoConnectStatusWrapper(const JsonObject& parameters, JsonObject& response);
+            uint32_t getAutoConnectWrapper(const JsonObject& parameters, JsonObject& response);
             // Registered methods end
 
         private: /*internal methods*/
@@ -164,7 +164,7 @@ namespace WPEFramework {
             bool setDeviceVolumeMuteProperties(long long int  deviceID, const string &deviceProfile, unsigned char ui8volume, unsigned char mute);
             JsonObject getDeviceVolumeMuteProperties(long long int  deviceID, const string &deviceProfile);
             BTRMGR_DeviceOperationType_t btmgrDeviceOperationTypeFromString(const string &deviceProfile);
-            void notifyAutoConnectStatusChanged(const string& bdAddr, const bool isEnabled);
+            void notifyAutoConnectStatusChanged(const string& deviceID, const bool enable);
 
         public:
             static const string SERVICE_NAME;

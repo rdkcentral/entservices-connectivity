@@ -32,11 +32,12 @@ namespace WPEFramework {
 
             if (Core::ERROR_NONE == result) {
                 printf("*** _DEBUG: BluetoothDeviceManager::updateBluetoothDeviceInfoCache: Loaded device info JSON: %s\n", bluetoothDeviceInfoStr.c_str());
+                _bluetoothDeviceInfoCache.clear();
                 JsonArray deviceInfoArray;
                 deviceInfoArray.FromString(bluetoothDeviceInfoStr);
                 for (uint16_t i = 0; i < deviceInfoArray.Length(); i++) {
                     JsonObject deviceInfoObj = deviceInfoArray[i].Object();
-                    std::string bdAddr = deviceInfoObj["bdAddr"].String();
+                    std::string deviceID = deviceInfoObj["deviceID"].String();
                     AutoConnectStatus autoConnectStatus = static_cast<AutoConnectStatus>(deviceInfoObj["autoConnectStatus"].Number());
                     std::string lastConnectTimeUtc = deviceInfoObj["lastConnectTimeUtc"].String();
 
@@ -44,10 +45,10 @@ namespace WPEFramework {
                     deviceInfo.autoConnectStatus = autoConnectStatus;
                     deviceInfo.lastConnectTimeUtc = lastConnectTimeUtc;
 
-                    _bluetoothDeviceInfoCache[bdAddr] = deviceInfo;
+                    _bluetoothDeviceInfoCache[deviceID] = deviceInfo;
 
-                    printf("*** _DEBUG: BluetoothDeviceManager::updateBluetoothDeviceInfoCache: Loaded device info for bdAddr=%s, autoConnectStatus=%d, lastConnectTimeUtc=%s\n",
-                            bdAddr.c_str(), static_cast<int>(autoConnectStatus), lastConnectTimeUtc.c_str());
+                    printf("*** _DEBUG: BluetoothDeviceManager::updateBluetoothDeviceInfoCache: Loaded device info for deviceID=%s, autoConnectStatus=%d, lastConnectTimeUtc=%s\n",
+                            deviceID.c_str(), static_cast<int>(autoConnectStatus), lastConnectTimeUtc.c_str());
                 }
             } else {
                 printf("*** _DEBUG: BluetoothDeviceManager::updateBluetoothDeviceInfoCache: No existing device info in PersistentStore or failed to load (hresult=%d)\n", result);
@@ -66,11 +67,11 @@ namespace WPEFramework {
             _adminLock.Lock();
 
             for (const auto& entry : _bluetoothDeviceInfoCache) {
-                const std::string& bdAddr = entry.first;
+                const std::string& deviceID = entry.first;
                 const BluetoothDeviceInfo& deviceInfo = entry.second;
 
                 JsonObject deviceInfoObj;
-                deviceInfoObj["bdAddr"] = bdAddr;
+                deviceInfoObj["deviceID"] = deviceID;
                 deviceInfoObj["autoConnectStatus"] = static_cast<int>(deviceInfo.autoConnectStatus);
                 deviceInfoObj["lastConnectTimeUtc"] = deviceInfo.lastConnectTimeUtc;
 
@@ -117,45 +118,52 @@ namespace WPEFramework {
             }
         }
 
-        Core::hresult BluetoothDeviceManager::getBluetoothDeviceInfo(const std::string& bdAddr, BluetoothDeviceInfo& deviceInfo)
+        Core::hresult BluetoothDeviceManager::getBluetoothDeviceInfo(const std::string& deviceID, BluetoothDeviceInfo& deviceInfo)
         {
             _adminLock.Lock();
             
-            auto it = _bluetoothDeviceInfoCache.find(bdAddr);
-            if (it != _bluetoothDeviceInfoCache.end()) {
+            auto it = _bluetoothDeviceInfoCache.find(deviceID);
+            const bool bFound = (it != _bluetoothDeviceInfoCache.end());
+
+            if (bFound) {
                 deviceInfo = it->second;
             }
 
             _adminLock.Unlock();
 
-            return (it != _bluetoothDeviceInfoCache.end()) ? Core::ERROR_NONE : Core::ERROR_GENERAL;
+            return bFound ? Core::ERROR_NONE : Core::ERROR_NOT_EXIST;
         }
 
-        void BluetoothDeviceManager::setAutoConnect(const std::string& bdAddr, bool enable)
+        void BluetoothDeviceManager::setAutoConnect(const std::string& deviceID, bool enable)
         {
-            printf("*** _DEBUG: BluetoothDeviceManager::setAutoConnect: bdAddr=%s, enable=%s\n", bdAddr.c_str(), enable ? "true" : "false");
+            printf("*** _DEBUG: BluetoothDeviceManager::setAutoConnect: deviceID=%s, enable=%s\n", deviceID.c_str(), enable ? "true" : "false");
 
             AutoConnectStatus autoConnectStatus = enable ? AUTO_CONNECT_STATUS_ENABLED : AUTO_CONNECT_STATUS_DISABLED;
             BluetoothDeviceInfo deviceInfo;
-            getBluetoothDeviceInfo(bdAddr, deviceInfo);
+            getBluetoothDeviceInfo(deviceID, deviceInfo);
             deviceInfo.autoConnectStatus = autoConnectStatus;
 
             _adminLock.Lock();
-            _bluetoothDeviceInfoCache[bdAddr] = deviceInfo;
+            _bluetoothDeviceInfoCache[deviceID] = deviceInfo;
             _adminLock.Unlock();
             
             updateBluetoothDeviceInfoPersistentStore();
         }
 
-        Core::hresult getAutoConnectStatus(const std::string& bdAddr, AutoConnectStatus& status)
+        Core::hresult BluetoothDeviceManager::getAutoConnect(const std::string& deviceID, AutoConnectStatus& status)
         {
-            printf("*** _DEBUG: BluetoothDeviceManager::getAutoConnectStatus: bdAddr=%s\n", bdAddr.c_str());
+            printf("*** _DEBUG: BluetoothDeviceManager::getAutoConnect: deviceID=%s\n", deviceID.c_str());
             BluetoothDeviceInfo deviceInfo;
-            getBluetoothDeviceInfo(bdAddr, deviceInfo);
-            return deviceInfo.autoConnectStatus;
+
+            Core::hresult result = getBluetoothDeviceInfo(deviceID, deviceInfo);
+            if (Core::ERROR_NONE == result) {
+                status = deviceInfo.autoConnectStatus;
+            }
+
+            return result;
         }
 
-        void BluetoothDeviceManager::setLastConnectTimeUtc(const std::string& bdAddr)
+        void BluetoothDeviceManager::setLastConnectTimeUtc(const std::string& deviceID)
         {
             // TODO: What resolution do we want for the timestamp?
             // For now, we use seconds precision in UTC formatted as ISO 8601 string.
@@ -167,21 +175,27 @@ namespace WPEFramework {
             std::strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%SZ", utc_tm);
             const std::string currentUtcTime = buffer;
 
-            printf("*** _DEBUG: BluetoothDeviceManager::setLastConnectTimeUtc: bdAddr=%s, time=%s\n", bdAddr.c_str(), currentUtcTime.c_str());
+            printf("*** _DEBUG: BluetoothDeviceManager::setLastConnectTimeUtc: deviceID=%s, time=%s\n", deviceID.c_str(), currentUtcTime.c_str());
 
             BluetoothDeviceInfo deviceInfo;
-            getBluetoothDeviceInfo(bdAddr, deviceInfo);
+            getBluetoothDeviceInfo(deviceID, deviceInfo);
             deviceInfo.lastConnectTimeUtc = currentUtcTime;
 
             updateBluetoothDeviceInfoPersistentStore();
         }
 
-        std::string BluetoothDeviceManager::getLastConnectTimeUtc(const std::string& bdAddr)
+        Core::hresult BluetoothDeviceManager::getLastConnectTimeUtc(const std::string& deviceID, std::string& lastConnectTimeUtc)
         {
-            printf("*** _DEBUG: BluetoothDeviceManager::getLastConnectTimeUtc: bdAddr=%s\n", bdAddr.c_str());
+            printf("*** _DEBUG: BluetoothDeviceManager::getLastConnectTimeUtc: deviceID=%s\n", deviceID.c_str());
             BluetoothDeviceInfo deviceInfo;
-            getBluetoothDeviceInfo(bdAddr, deviceInfo);
-            return deviceInfo.lastConnectTimeUtc;
+            
+            Core::hresult result = getBluetoothDeviceInfo(deviceID, deviceInfo);
+
+            if (Core::ERROR_NONE == result) {
+                lastConnectTimeUtc = deviceInfo.lastConnectTimeUtc;
+            }
+            
+            return result;
         }
 
     } // Plugin
