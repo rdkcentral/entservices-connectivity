@@ -25,10 +25,17 @@ namespace WPEFramework {
 
         Core::hresult BluetoothDeviceManager::updateBluetoothDeviceInfoCache()
         {
+            Exchange::IStore* pPersistentStore = service->QueryInterfaceByCallsign<Exchange::IStore>(PERSISTENT_STORE_CALLSIGN);
+            if (pPersistentStore == nullptr) {
+                printf("*** _DEBUG: BluetoothDeviceManager::updateBluetoothDeviceInfoCache: Failed to get PersistentStore interface\n");
+                LOGERR("Failed to get PersistentStore interface\n");
+                return Core::ERROR_GENERAL;
+            }
+            
             _adminLock.Lock();
             
             string bluetoothDeviceInfoStr;
-            Core::hresult result = _persistentStore->GetValue(PERSISTENT_STORE_NAMESPACE, PERSISTENT_STORE_KEY_DEVICE_INFO, bluetoothDeviceInfoStr);
+            Core::hresult result = pPersistentStore->GetValue(PERSISTENT_STORE_NAMESPACE, PERSISTENT_STORE_KEY_DEVICE_INFO, bluetoothDeviceInfoStr);
 
             if (Core::ERROR_NONE == result) {
                 printf("*** _DEBUG: BluetoothDeviceManager::updateBluetoothDeviceInfoCache: Loaded device info JSON: %s\n", bluetoothDeviceInfoStr.c_str());
@@ -55,6 +62,8 @@ namespace WPEFramework {
                 LOGERR("Failed to load device info from PersistentStore, hresult=%d\n", result);
             }
 
+            pPersistentStore->Release();
+
             _adminLock.Unlock();
 
             return result;
@@ -62,6 +71,14 @@ namespace WPEFramework {
 
         Core::hresult BluetoothDeviceManager::updateBluetoothDeviceInfoPersistentStore()
         {
+            Exchange::IStore* pPersistentStore = service->QueryInterfaceByCallsign<Exchange::IStore>(PERSISTENT_STORE_CALLSIGN);
+
+            if (pPersistentStore == nullptr) {
+                printf("*** _DEBUG: BluetoothDeviceManager::updateBluetoothDeviceInfoPersistentStore: Failed to get PersistentStore interface\n");
+                LOGERR("Failed to get PersistentStore interface\n");
+                return Core::ERROR_GENERAL;
+            }
+
             JsonArray deviceInfoArray;
 
             _adminLock.Lock();
@@ -83,7 +100,7 @@ namespace WPEFramework {
             
             printf("*** _DEBUG: BluetoothDeviceManager::updateBluetoothDeviceInfoPersistentStore: Saving device info JSON: %s\n", bluetoothDeviceInfoStr.c_str());
 
-            Core::hresult result = _persistentStore->SetValue(PERSISTENT_STORE_NAMESPACE, PERSISTENT_STORE_KEY_DEVICE_INFO, bluetoothDeviceInfoStr);
+            Core::hresult result = pPersistentStore->SetValue(PERSISTENT_STORE_NAMESPACE, PERSISTENT_STORE_KEY_DEVICE_INFO, bluetoothDeviceInfoStr);
 
             if (Core::ERROR_NONE != result) {
                 printf("*** _DEBUG: BluetoothDeviceManager::updateBluetoothDeviceInfoPersistentStore: Failed to save device info to PersistentStore (hresult=%d)\n", result);
@@ -92,29 +109,15 @@ namespace WPEFramework {
 
             _adminLock.Unlock();
 
+            pPersistentStore->Release();
+
             return result;
         }
 
         void BluetoothDeviceManager::init(PluginHost::IShell* service)
         {
-            _persistentStore = service->QueryInterfaceByCallsign<Exchange::IStore>(PERSISTENT_STORE_CALLSIGN);
-
-            if (_persistentStore != nullptr) {
-                printf("*** _DEBUG: BluetoothDeviceManager::init: Successfully got PersistentStore interface\n");
-                if (Core::ERROR_NONE != updateBluetoothDeviceInfoCache()) {
-                    LOGERR("Failed to update Bluetooth device info cache from PersistentStore\n");
-                }
-            } else {
-                printf("*** _DEBUG: BluetoothDeviceManager::init: Failed to get PersistentStore interface\n");
-                LOGERR("Failed to get PersistentStore interface\n");
-            }
-        }
-
-        void BluetoothDeviceManager::deinit()
-        {
-            if (_persistentStore != nullptr) {
-                _persistentStore->Release();
-                _persistentStore = nullptr;
+            if (Core::ERROR_NONE != updateBluetoothDeviceInfoCache()) {
+                LOGERR("Failed to update Bluetooth device info cache from PersistentStore\n");
             }
         }
 

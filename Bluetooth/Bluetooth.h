@@ -274,7 +274,6 @@ namespace WPEFramework {
             bool m_discoveryRunning;
             DiscoveryTimer m_discoveryTimer;
             friend class DiscoveryTimer;
-            Exchange::IPowerManager* m_powerManager;
             Core::Sink<PowerManagerNotification> m_powerManagerNotification;
             BluetoothDeviceManager m_bluetoothDeviceManager;
         };

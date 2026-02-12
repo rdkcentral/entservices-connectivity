@@ -209,19 +209,21 @@ namespace WPEFramework
 
         const string Bluetooth::Initialize(PluginHost::IShell* service)
         {
-            m_powerManager = service->QueryInterfaceByCallsign<Exchange::IPowerManager>("org.rdk.PowerManager");
+            Exchange::IPowerManager* pPowerManager = service->QueryInterfaceByCallsign<Exchange::IPowerManager>("org.rdk.PowerManager");
 
-            if (m_powerManager != nullptr) {
-                uint32_t result = m_powerManager->Register(&m_powerManagerNotification);
+            if (pPowerManager != nullptr) {
+                uint32_t result = pPowerManager->Register(&m_powerManagerNotification);
                 printf("*** _DEBUG: Bluetooth::Initialize: PowerManager Register result=%d\n", result);
 
                 WPEFramework::Exchange::IPowerManager::PowerState currentState, prevState;
-                if (Core::ERROR_NONE == m_powerManager->GetPowerState(currentState, prevState)) {
+                if (Core::ERROR_NONE == pPowerManager->GetPowerState(currentState, prevState)) {
                     onPowerModeChanged(prevState, currentState);
                 } else {
                     printf("*** _DEBUG: Bluetooth::Initialize: PowerManager GetPowerState failed\n");
                     LOGERR("Failed to get current power state");
                 }
+
+                pPowerManager->Release();
             } else {
                 LOGERR("Failed to get PowerManager interface");
                 printf("*** _DEBUG: Bluetooth::Initialize: Failed to get PowerManager interface\n");
@@ -235,9 +237,11 @@ namespace WPEFramework
 
         void Bluetooth::Deinitialize(PluginHost::IShell* /* service */)
         {
-            if (m_powerManager != nullptr) {
-                m_powerManager->Unregister(&m_powerManagerNotification);
-                m_powerManager->Release();
+            Exchange::IPowerManager* pPowerManager = service->QueryInterfaceByCallsign<Exchange::IPowerManager>("org.rdk.PowerManager");
+            
+            if (pPowerManager != nullptr) {
+                pPowerManager->Unregister(&m_powerManagerNotification);
+                pPowerManager->Release();
             }
 
             Bluetooth::_instance = nullptr;
@@ -247,8 +251,6 @@ namespace WPEFramework
             {
                 LOGWARN("Failed to UnRegister BTRMgr...!");
             }
-
-            m_bluetoothDeviceManager.deinit();
         }
 
         string Bluetooth::Information() const
@@ -488,8 +490,10 @@ namespace WPEFramework
 		            deviceDetails["rawDeviceType"] = std::to_string(pairedDevices->m_deviceProperty[i].m_ui32DevClassBtSpec);
 		            deviceDetails["rawBleDeviceType"] = std::to_string(pairedDevices->m_deviceProperty[i].m_ui16DevAppearanceBleSpec);
                     
-                    string lastConnectTimeUtc = m_bluetoothDeviceManager.getLastConnectTimeUtc(deviceId);
-                    if (!lastConnectTimeUtc.empty()) {
+                    string lastConnectTimeUtc;
+                    Core::hresult result = m_bluetoothDeviceManager.getLastConnectTimeUtc(deviceId, lastConnectTimeUtc);
+
+                    if (Core::ERROR_NONE == result) {
                         deviceDetails["lastConnectTimeUtc"] = lastConnectTimeUtc;
                     }
 
@@ -539,14 +543,17 @@ namespace WPEFramework
 		            deviceDetails["rawDeviceType"] = std::to_string(connectedDevices->m_deviceProperty[i].m_ui32DevClassBtSpec);
 		            deviceDetails["rawBleDeviceType"] = std::to_string(connectedDevices->m_deviceProperty[i].m_ui16DevAppearanceBleSpec);
                     
-                    string lastConnectTimeUtc = m_bluetoothDeviceManager.getLastConnectTimeUtc(deviceId);
-                    if (!lastConnectTimeUtc.empty()) {
+                    string lastConnectTimeUtc;
+                    Core::hresult result = m_bluetoothDeviceManager.getLastConnectTimeUtc(deviceId, lastConnectTimeUtc);
+
+                    if (Core::ERROR_NONE == result) {
                         deviceDetails["lastConnectTimeUtc"] = lastConnectTimeUtc;
                     }
 
                     AutoConnectStatus autoConnectStatus;
                     Core::hresult result = m_bluetoothDeviceManager.getAutoConnect(deviceId, autoConnectStatus);
-                    if  (AUTO_CONNECT_STATUS_UNSET != autoConnectStatus) {
+
+                    if (Core::ERROR_NONE == result) {
                         deviceDetails["autoconnect"] = (AUTO_CONNECT_STATUS_ENABLED == autoConnectStatus);
                     }
 

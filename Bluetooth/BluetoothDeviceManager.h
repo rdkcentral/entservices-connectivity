@@ -21,6 +21,8 @@
 
 #include "Module.h"
 #include <unordered_map>
+#include <chrono>
+#include <ctime>
 #include <interfaces/IStore.h>
 #include <core/core.h>
 #include "UtilsJsonRpc.h"
@@ -51,7 +53,6 @@ namespace WPEFramework {
                 ~BluetoothDeviceManager() = default;
 
                 void init(PluginHost::IShell* service);
-                void deinit();
 
                 Core::hresult getBluetoothDeviceInfo(const std::string& deviceID, BluetoothDeviceInfo& deviceInfo);
                 void setAutoConnect(const std::string& deviceID, bool enable);
@@ -63,7 +64,6 @@ namespace WPEFramework {
 
                 mutable Core::CriticalSection _adminLock;
                 std::unordered_map<std::string /* deviceID */, BluetoothDeviceInfo /* deviceInfo */> _bluetoothDeviceInfoCache;
-                Exchange::IStore* _persistentStore = nullptr;
 
                 Core::hresult updateBluetoothDeviceInfoCache();
                 Core::hresult updateBluetoothDeviceInfoPersistentStore();
