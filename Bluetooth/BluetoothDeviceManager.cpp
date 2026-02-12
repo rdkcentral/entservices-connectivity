@@ -181,6 +181,10 @@ namespace WPEFramework {
             getBluetoothDeviceInfo(deviceID, deviceInfo);
             deviceInfo.lastConnectTimeUtc = currentUtcTime;
 
+            _adminLock.Lock();
+            _bluetoothDeviceInfoCache[deviceID] = deviceInfo;
+            _adminLock.Unlock();
+
             updateBluetoothDeviceInfoPersistentStore();
         }
 
@@ -188,7 +192,7 @@ namespace WPEFramework {
         {
             printf("*** _DEBUG: BluetoothDeviceManager::getLastConnectTimeUtc: deviceID=%s\n", deviceID.c_str());
             BluetoothDeviceInfo deviceInfo;
-            
+
             Core::hresult result = getBluetoothDeviceInfo(deviceID, deviceInfo);
 
             if (Core::ERROR_NONE == result) {
