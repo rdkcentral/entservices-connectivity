@@ -25,7 +25,7 @@ namespace WPEFramework {
 
         Core::hresult BluetoothDeviceManager::updateBluetoothDeviceInfoCache()
         {
-            Exchange::IStore* pPersistentStore = service->QueryInterfaceByCallsign<Exchange::IStore>(PERSISTENT_STORE_CALLSIGN);
+            Exchange::IStore* pPersistentStore = _service->QueryInterfaceByCallsign<Exchange::IStore>(PERSISTENT_STORE_CALLSIGN);
             if (pPersistentStore == nullptr) {
                 printf("*** _DEBUG: BluetoothDeviceManager::updateBluetoothDeviceInfoCache: Failed to get PersistentStore interface\n");
                 LOGERR("Failed to get PersistentStore interface\n");
@@ -71,7 +71,7 @@ namespace WPEFramework {
 
         Core::hresult BluetoothDeviceManager::updateBluetoothDeviceInfoPersistentStore()
         {
-            Exchange::IStore* pPersistentStore = service->QueryInterfaceByCallsign<Exchange::IStore>(PERSISTENT_STORE_CALLSIGN);
+            Exchange::IStore* pPersistentStore = _service->QueryInterfaceByCallsign<Exchange::IStore>(PERSISTENT_STORE_CALLSIGN);
 
             if (pPersistentStore == nullptr) {
                 printf("*** _DEBUG: BluetoothDeviceManager::updateBluetoothDeviceInfoPersistentStore: Failed to get PersistentStore interface\n");
@@ -116,6 +116,7 @@ namespace WPEFramework {
 
         void BluetoothDeviceManager::init(PluginHost::IShell* service)
         {
+            _service = service;
             if (Core::ERROR_NONE != updateBluetoothDeviceInfoCache()) {
                 LOGERR("Failed to update Bluetooth device info cache from PersistentStore\n");
             }

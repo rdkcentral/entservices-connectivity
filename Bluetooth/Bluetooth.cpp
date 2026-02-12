@@ -1910,7 +1910,7 @@ namespace WPEFramework
                     string deviceStr;
                     device.ToString(deviceStr);
                     printf("*** _DEBUG: Bluetooth::onPowerModeChanged: connectedDevices[%d] = %s\n", i, deviceStr.c_str());
-                    if (device.HasLabel("autoConnect") && !device["autoConnect"].Boolean()) {
+                    if (device.HasLabel("autoconnect") && !device["autoconnect"].Boolean()) {
                         // Only disconnect if autoConnect was explicitly set false, to preserve backward compatibility.
                         long long int deviceID = stoll(device["deviceID"].String());
                         bool bSuccess = setDeviceConnection(deviceID, "DISCONNECT", device["deviceType"].String());
