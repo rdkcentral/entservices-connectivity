@@ -216,7 +216,7 @@ namespace WPEFramework
             Exchange::IPowerManager* pPowerManager = service->QueryInterfaceByCallsign<Exchange::IPowerManager>("org.rdk.PowerManager");
 
             if (pPowerManager != nullptr) {
-                uint32_t result = pPowerManager->Register(&m_powerManagerNotification);
+                pPowerManager->Register(&m_powerManagerNotification);
 
                 WPEFramework::Exchange::IPowerManager::PowerState currentState, prevState;
                 if (Core::ERROR_NONE == pPowerManager->GetPowerState(currentState, prevState)) {
@@ -238,7 +238,7 @@ namespace WPEFramework
             return status;
         }
 
-        void Bluetooth::Deinitialize(PluginHost::IShell* /* service */)
+        void Bluetooth::Deinitialize(PluginHost::IShell* service)
         {
             Exchange::IPowerManager* pPowerManager = service->QueryInterfaceByCallsign<Exchange::IPowerManager>("org.rdk.PowerManager");
             
@@ -501,7 +501,7 @@ namespace WPEFramework
                     }
 
                     AutoConnectStatus autoConnectStatus;
-                    Core::hresult result = m_bluetoothDeviceManager.getAutoConnect(deviceId, autoConnectStatus);
+                    result = m_bluetoothDeviceManager.getAutoConnect(deviceId, autoConnectStatus);
 
                     if (Core::ERROR_NONE == result) {
                         deviceDetails["autoconnect"] = (AUTO_CONNECT_STATUS_ENABLED == autoConnectStatus);
@@ -554,7 +554,7 @@ namespace WPEFramework
                     }
 
                     AutoConnectStatus autoConnectStatus;
-                    Core::hresult result = m_bluetoothDeviceManager.getAutoConnect(deviceId, autoConnectStatus);
+                    result = m_bluetoothDeviceManager.getAutoConnect(deviceId, autoConnectStatus);
 
                     if (Core::ERROR_NONE == result) {
                         deviceDetails["autoconnect"] = (AUTO_CONNECT_STATUS_ENABLED == autoConnectStatus);
