@@ -223,8 +223,7 @@ namespace WPEFramework
                 if (Core::ERROR_NONE == pPowerManager->GetPowerState(currentState, prevState)) {
                     onPowerModeChanged(prevState, currentState);
                 } else {
-                    message = "Failed to get current power state";
-                    LOGERR("%s", message.c_str());
+                    LOGERR("Failed to get current power state");
                 }
 
                 pPowerManager->Release();

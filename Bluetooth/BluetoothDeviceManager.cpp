@@ -37,11 +37,12 @@ namespace WPEFramework {
 
             if (Core::ERROR_NONE == result) {
                 printf("*** _DEBUG: BluetoothDeviceManager::updateBluetoothDeviceInfoCache: Loaded device info JSON: %s\n", bluetoothDeviceInfoStr.c_str());
-                _bluetoothDeviceInfoCache.clear();
                 JsonArray deviceInfoArray;
                 deviceInfoArray.FromString(bluetoothDeviceInfoStr);
 
                 _adminLock.Lock();
+
+                _bluetoothDeviceInfoCache.clear();
 
                 for (uint16_t i = 0; i < deviceInfoArray.Length(); i++) {
                     JsonObject deviceInfoObj = deviceInfoArray[i].Object();
