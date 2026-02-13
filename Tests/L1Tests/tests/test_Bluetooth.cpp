@@ -319,3 +319,33 @@ TEST_F(BluetoothTest, GetEventResponse_InvalidParameter)
     EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("getEventResponse"), _T("{}"), response));
 }
 
+TEST_F(BluetoothTest, SetAutoConnect_Success)
+{
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"), _T("{\"deviceID\":\"AA:BB:CC:DD:EE:FF\",\"enable\":true}"), response));
+}
+
+TEST_F(BluetoothTest, SetAutoConnect_InvalidParameter)
+{
+    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("setAutoConnect"), _T("{}"), response));
+}
+
+TEST_F(BluetoothTest, SetAutoConnect_MissingDeviceID)
+{
+    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("setAutoConnect"), _T("{\"enable\":true}"), response));
+}
+
+TEST_F(BluetoothTest, SetAutoConnect_MissingEnable)
+{
+    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("setAutoConnect"), _T("{\"deviceID\":\"AA:BB:CC:DD:EE:FF\"}"), response));
+}
+
+TEST_F(BluetoothTest, GetAutoConnect_Success)
+{
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getAutoConnect"), _T("{\"deviceID\":\"AA:BB:CC:DD:EE:FF\"}"), response));
+    EXPECT_TRUE(response.find(_T("enable")) != string::npos);
+}
+
+TEST_F(BluetoothTest, GetAutoConnect_InvalidParameter)
+{
+    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("getAutoConnect"), _T("{}"), response));
+}
