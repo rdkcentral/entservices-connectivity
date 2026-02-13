@@ -173,7 +173,7 @@ namespace WPEFramework
 
         const string Bluetooth::Initialize(PluginHost::IShell* service)
         {
-            string status = "";
+            string message = "";
 
             Register(METHOD_GET_API_VERSION_NUMBER, &Bluetooth::getApiVersionNumber, this);
             Register(METHOD_START_SCAN, &Bluetooth::startScanWrapper, this);
@@ -206,8 +206,9 @@ namespace WPEFramework
             BTRMGR_Result_t rc = BTRMGR_RegisterForCallbacks(Utils::IARM::NAME);
             if (BTRMGR_RESULT_SUCCESS != rc)
             {
-                status = "Failed to Register BTRMgr...!";
-                LOGERR("%s", status.c_str());
+                message = "Failed to Register BTRMgr...!";
+                LOGERR("%s", message.c_str());
+                return message;
             }
             else {
                 BTRMGR_RegisterEventCallback(bluetoothSrv_EventCallback);
@@ -222,24 +223,24 @@ namespace WPEFramework
                 if (Core::ERROR_NONE == pPowerManager->GetPowerState(currentState, prevState)) {
                     onPowerModeChanged(prevState, currentState);
                 } else {
-                    status = "Failed to get current power state";
-                    LOGERR("%s", status.c_str());
+                    message = "Failed to get current power state";
+                    LOGERR("%s", message.c_str());
                 }
 
                 pPowerManager->Release();
             } else {
-                status = "Failed to get PowerManager interface";
-                LOGERR("%s", status.c_str());
-                return status;
+                message = "Failed to get PowerManager interface";
+                LOGERR("%s", message.c_str());
+                return message;
             }
 
-            m_bluetoothDeviceManager.init(service);
-
-            return status;
+            return m_bluetoothDeviceManager.init(service);
         }
 
         void Bluetooth::Deinitialize(PluginHost::IShell* service)
         {
+            m_bluetoothDeviceManager.deinit();
+
             Exchange::IPowerManager* pPowerManager = service->QueryInterfaceByCallsign<Exchange::IPowerManager>("org.rdk.PowerManager");
             
             if (pPowerManager != nullptr) {

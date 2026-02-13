@@ -52,7 +52,8 @@ namespace WPEFramework {
                 BluetoothDeviceManager() = default;
                 ~BluetoothDeviceManager() = default;
 
-                void init(PluginHost::IShell* service);
+                const string init(PluginHost::IShell* service);
+                void deinit();
 
                 Core::hresult getBluetoothDeviceInfo(const std::string& deviceID, BluetoothDeviceInfo& deviceInfo);
                 void setAutoConnect(const std::string& deviceID, bool enable);

@@ -116,12 +116,22 @@ namespace WPEFramework {
             return result;
         }
 
-        void BluetoothDeviceManager::init(PluginHost::IShell* service)
+        const string BluetoothDeviceManager::init(PluginHost::IShell* service)
         {
+            string message = "";
             _service = service;
+            _service->AddRef();
             if (Core::ERROR_NONE != updateBluetoothDeviceInfoCache()) {
-                LOGERR("Failed to update Bluetooth device info cache from PersistentStore\n");
+                message = "Failed to load Bluetooth device info from PersistentStore";
+                LOGERR("%s\n", message.c_str());
             }
+            return message;
+        }
+
+        void BluetoothDeviceManager::deinit()
+        {
+            _service->Release();
+            _service = nullptr;
         }
 
         Core::hresult BluetoothDeviceManager::getBluetoothDeviceInfo(const std::string& deviceID, BluetoothDeviceInfo& deviceInfo)
