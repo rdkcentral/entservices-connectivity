@@ -228,9 +228,7 @@ namespace WPEFramework
 
                 pPowerManager->Release();
             } else {
-                message = "Failed to get PowerManager interface";
-                LOGERR("%s", message.c_str());
-                return message;
+                LOGERR("Failed to get PowerManager interface");
             }
 
             return m_bluetoothDeviceManager.init(service);
@@ -1911,7 +1909,7 @@ namespace WPEFramework
                     device.ToString(deviceStr);
                     printf("*** _DEBUG: Bluetooth::onPowerModeChanged: connectedDevices[%d] = %s\n", i, deviceStr.c_str());
                     if (device.HasLabel("autoconnect") && !device["autoconnect"].Boolean()) {
-                        // Only disconnect if autoConnect was explicitly set false, to preserve backward compatibility.
+                        // Only disconnect if autoConnect was explicitly set false (HasLabel), to preserve backward compatibility.
                         long long int deviceID = stoll(device["deviceID"].String());
                         bool bSuccess = setDeviceConnection(deviceID, "DISCONNECT", device["deviceType"].String());
                         printf("*** _DEBUG: Bluetooth::onPowerModeChanged: POWER OFF/STANDBY: Disconnecting deviceID=%llu, success=%s\n", deviceID, bSuccess ? "true" : "false");
@@ -1943,7 +1941,7 @@ namespace WPEFramework
                     device.ToString(deviceStr);
                     printf("*** _DEBUG: Bluetooth::onPowerModeChanged: connectedDevices[%d] = %s\n", i, deviceStr.c_str());
                     long long int deviceID = stoll(device["deviceID"].String());
-                    bool bSuccess = setDeviceConnection(deviceID, "DISCONNECT");
+                    bool bSuccess = setDeviceConnection(deviceID, "DISCONNECT", device["deviceType"].String());
                     printf("*** _DEBUG: Bluetooth::onPowerModeChanged: POWER_STATE_STANDBY_DEEP_SLEEP: Disconnecting deviceID=%llu, success=%s\n", deviceID, bSuccess ? "true" : "false");
                 }
             } else {

@@ -100,6 +100,8 @@ namespace WPEFramework {
 
             string bluetoothDeviceInfoStr;
             deviceInfoArray.ToString(bluetoothDeviceInfoStr);
+
+            _adminLock.Unlock();
             
             printf("*** _DEBUG: BluetoothDeviceManager::updateBluetoothDeviceInfoPersistentStore: Saving device info JSON: %s\n", bluetoothDeviceInfoStr.c_str());
 
@@ -110,8 +112,6 @@ namespace WPEFramework {
                 LOGERR("Failed to save device info to PersistentStore, hresult=%d\n", result);
             }
 
-            _adminLock.Unlock();
-
             pPersistentStore->Release();
 
             return result;
@@ -119,14 +119,10 @@ namespace WPEFramework {
 
         const string BluetoothDeviceManager::init(PluginHost::IShell* service)
         {
-            string message = "";
             _service = service;
             _service->AddRef();
-            if (Core::ERROR_NONE != updateBluetoothDeviceInfoCache()) {
-                message = "Failed to load Bluetooth device info from PersistentStore";
-                LOGERR("%s\n", message.c_str());
-            }
-            return message;
+            updateBluetoothDeviceInfoCache();
+            return {};
         }
 
         void BluetoothDeviceManager::deinit()
@@ -187,7 +183,8 @@ namespace WPEFramework {
 
             auto now = std::chrono::system_clock::now();
             std::time_t now_c = std::chrono::system_clock::to_time_t(now);
-            std::tm* utc_tm = std::gmtime(&now_c);
+            std::tm utc_tm;
+            gmtime_r(&now_c, &utc_tm);
             char buffer[32];
             std::strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%SZ", utc_tm);
             const std::string currentUtcTime = buffer;
