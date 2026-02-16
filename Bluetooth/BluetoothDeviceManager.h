@@ -55,7 +55,6 @@ namespace WPEFramework {
                 const string init(PluginHost::IShell* service);
                 void deinit();
 
-                Core::hresult getBluetoothDeviceInfo(const std::string& deviceID, BluetoothDeviceInfo& deviceInfo);
                 void setAutoConnect(const std::string& deviceID, bool enable);
                 Core::hresult getAutoConnect(const std::string& deviceID, AutoConnectStatus& status);
                 void setLastConnectTimeUtc(const std::string& deviceID);
@@ -67,6 +66,7 @@ namespace WPEFramework {
                 PluginHost::IShell* _service = nullptr;
                 std::unordered_map<std::string /* deviceID */, BluetoothDeviceInfo /* deviceInfo */> _bluetoothDeviceInfoCache;
 
+                Core::hresult getBluetoothDeviceInfo(const std::string& deviceID, BluetoothDeviceInfo& deviceInfo);
                 Core::hresult updateBluetoothDeviceInfoCache();
                 Core::hresult updateBluetoothDeviceInfoPersistentStore();
         };
