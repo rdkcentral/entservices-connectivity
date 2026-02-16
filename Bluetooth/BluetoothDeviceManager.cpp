@@ -25,6 +25,11 @@ namespace WPEFramework {
 
         Core::hresult BluetoothDeviceManager::updateBluetoothDeviceInfoCache()
         {
+            if (_service == nullptr) {
+                LOGERR("Service is null\n");
+                return Core::ERROR_GENERAL;
+            }
+
             Exchange::IStore* pPersistentStore = _service->QueryInterfaceByCallsign<Exchange::IStore>(PERSISTENT_STORE_CALLSIGN);
             if (pPersistentStore == nullptr) {
                 printf("*** _DEBUG: BluetoothDeviceManager::updateBluetoothDeviceInfoCache: Failed to get PersistentStore interface\n");
@@ -74,6 +79,11 @@ namespace WPEFramework {
 
         Core::hresult BluetoothDeviceManager::updateBluetoothDeviceInfoPersistentStore()
         {
+            if (_service == nullptr) {
+                LOGERR("Service is null\n");
+                return Core::ERROR_GENERAL;
+            }
+
             Exchange::IStore* pPersistentStore = _service->QueryInterfaceByCallsign<Exchange::IStore>(PERSISTENT_STORE_CALLSIGN);
 
             if (pPersistentStore == nullptr) {
@@ -127,22 +137,20 @@ namespace WPEFramework {
 
         void BluetoothDeviceManager::deinit()
         {
-            _service->Release();
-            _service = nullptr;
+            if (_service != nullptr) {
+                _service->Release();
+                _service = nullptr;
+            }
         }
 
         Core::hresult BluetoothDeviceManager::getBluetoothDeviceInfo(const std::string& deviceID, BluetoothDeviceInfo& deviceInfo)
         {
-            _adminLock.Lock();
-            
             auto it = _bluetoothDeviceInfoCache.find(deviceID);
             const bool bFound = (it != _bluetoothDeviceInfoCache.end());
 
             if (bFound) {
                 deviceInfo = it->second;
             }
-
-            _adminLock.Unlock();
 
             return bFound ? Core::ERROR_NONE : Core::ERROR_NOT_EXIST;
         }
@@ -153,11 +161,14 @@ namespace WPEFramework {
 
             AutoConnectStatus autoConnectStatus = enable ? AUTO_CONNECT_STATUS_ENABLED : AUTO_CONNECT_STATUS_DISABLED;
             BluetoothDeviceInfo deviceInfo;
+
+            _adminLock.Lock();
+
             getBluetoothDeviceInfo(deviceID, deviceInfo);
             deviceInfo.autoConnectStatus = autoConnectStatus;
 
-            _adminLock.Lock();
             _bluetoothDeviceInfoCache[deviceID] = std::move(deviceInfo);
+
             _adminLock.Unlock();
             
             updateBluetoothDeviceInfoPersistentStore();
@@ -168,11 +179,16 @@ namespace WPEFramework {
             printf("*** _DEBUG: BluetoothDeviceManager::getAutoConnect: deviceID=%s\n", deviceID.c_str());
             BluetoothDeviceInfo deviceInfo;
 
+            _adminLock.Lock();
+
             Core::hresult result = getBluetoothDeviceInfo(deviceID, deviceInfo);
+
+            _adminLock.Unlock();
+
             if (Core::ERROR_NONE == result) {
                 status = deviceInfo.autoConnectStatus;
             }
-
+            
             return result;
         }
 
@@ -192,11 +208,13 @@ namespace WPEFramework {
             printf("*** _DEBUG: BluetoothDeviceManager::setLastConnectTimeUtc: deviceID=%s, time=%s\n", deviceID.c_str(), currentUtcTime.c_str());
 
             BluetoothDeviceInfo deviceInfo;
-            getBluetoothDeviceInfo(deviceID, deviceInfo);
-            deviceInfo.lastConnectTimeUtc = std::move(currentUtcTime);
 
             _adminLock.Lock();
+
+            getBluetoothDeviceInfo(deviceID, deviceInfo);
+            deviceInfo.lastConnectTimeUtc = std::move(currentUtcTime);
             _bluetoothDeviceInfoCache[deviceID] = std::move(deviceInfo);
+
             _adminLock.Unlock();
 
             updateBluetoothDeviceInfoPersistentStore();
@@ -207,7 +225,11 @@ namespace WPEFramework {
             printf("*** _DEBUG: BluetoothDeviceManager::getLastConnectTimeUtc: deviceID=%s\n", deviceID.c_str());
             BluetoothDeviceInfo deviceInfo;
 
+            _adminLock.Lock();
+        
             Core::hresult result = getBluetoothDeviceInfo(deviceID, deviceInfo);
+
+            _adminLock.Unlock();
 
             if (Core::ERROR_NONE == result) {
                 lastConnectTimeUtc = deviceInfo.lastConnectTimeUtc;
