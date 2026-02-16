@@ -1887,46 +1887,21 @@ namespace WPEFramework
 
         void Bluetooth::onPowerModeChanged(const WPEFramework::Exchange::IPowerManager::PowerState currentState, const WPEFramework::Exchange::IPowerManager::PowerState newState)
         {
-            static const char* powerStateNames[] = {
-                "POWER_STATE_UNKNOWN",
-                "POWER_STATE_OFF",
-                "POWER_STATE_STANDBY",
-                "POWER_STATE_ON",
-                "POWER_STATE_STANDBY_LIGHT_SLEEP",
-                "POWER_STATE_STANDBY_DEEP_SLEEP"
-            };
-
-            printf("*** _DEBUG: Bluetooth::onPowerModeChanged: %s --> %s\n", powerStateNames[currentState], powerStateNames[newState]);
-
             if ((WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_ON == currentState || WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_UNKNOWN == currentState) &&
                 (WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_OFF == newState || WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_STANDBY == newState || WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_STANDBY_LIGHT_SLEEP == newState)) {
 
                 JsonArray connectedDevices = getConnectedDevices();
 
-                printf("*** _DEBUG: Bluetooth::onPowerModeChanged: connectedDevices.Length()=%d\n", connectedDevices.Length());
-
                 for (uint16_t i = 0; i < connectedDevices.Length(); i++) {
                     JsonObject device = connectedDevices[i].Object();
-                    string deviceStr;
-                    device.ToString(deviceStr);
-                    printf("*** _DEBUG: Bluetooth::onPowerModeChanged: connectedDevices[%d] = %s\n", i, deviceStr.c_str());
                     if (device.HasLabel("autoconnect") && !device["autoconnect"].Boolean()) {
                         // Only disconnect if autoConnect was explicitly set false, to preserve backward compatibility.
                         long long int deviceID = stoll(device["deviceID"].String());
-                        bool bSuccess = setDeviceConnection(deviceID, "DISCONNECT", device["deviceType"].String());
-                        printf("*** _DEBUG: Bluetooth::onPowerModeChanged: POWER OFF/STANDBY: Disconnecting deviceID=%llu, success=%s\n", deviceID, bSuccess ? "true" : "false");
+                        setDeviceConnection(deviceID, "DISCONNECT", device["deviceType"].String());
                     }
                 }
             } else if (WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_ON == newState ) {
                 JsonArray pairedDevices = getPairedDevices();
-
-                printf("*** _DEBUG: Bluetooth::onPowerModeChanged: pairedDevices.Length()=%d\n", pairedDevices.Length());
-                for (uint16_t i = 0; i < pairedDevices.Length(); i++) {
-                    JsonObject device = pairedDevices[i].Object();
-                    string deviceStr;
-                    device.ToString(deviceStr);
-                    printf("*** _DEBUG: Bluetooth::onPowerModeChanged: pairedDevices[%d] = %s\n", i, deviceStr.c_str());
-                }
 
                 if (pairedDevices.Length() > 0) {
                     setBluetoothEnabled(ENABLE_BLUETOOTH_ENABLED);
@@ -1935,19 +1910,11 @@ namespace WPEFramework
 
                 JsonArray connectedDevices = getConnectedDevices();
 
-                printf("*** _DEBUG: Bluetooth::onPowerModeChanged: connectedDevices.Length()=%d\n", connectedDevices.Length());
-
                 for (uint16_t i = 0; i < connectedDevices.Length(); i++) {
                     JsonObject device = connectedDevices[i].Object();
-                    string deviceStr;
-                    device.ToString(deviceStr);
-                    printf("*** _DEBUG: Bluetooth::onPowerModeChanged: connectedDevices[%d] = %s\n", i, deviceStr.c_str());
                     long long int deviceID = stoll(device["deviceID"].String());
-                    bool bSuccess = setDeviceConnection(deviceID, "DISCONNECT");
-                    printf("*** _DEBUG: Bluetooth::onPowerModeChanged: POWER_STATE_STANDBY_DEEP_SLEEP: Disconnecting deviceID=%llu, success=%s\n", deviceID, bSuccess ? "true" : "false");
+                    setDeviceConnection(deviceID, "DISCONNECT");
                 }
-            } else {
-                printf("*** _DEBUG: Bluetooth::onPowerModeChanged: Unhandled transition\n");
             }
         }
 
