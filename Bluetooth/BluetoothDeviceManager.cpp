@@ -202,7 +202,7 @@ namespace WPEFramework {
             std::tm utc_tm;
             gmtime_r(&now_c, &utc_tm);
             char buffer[32];
-            std::strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%SZ", utc_tm);
+            std::strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%SZ", &utc_tm);
             const std::string currentUtcTime = buffer;
 
             printf("*** _DEBUG: BluetoothDeviceManager::setLastConnectTimeUtc: deviceID=%s, time=%s\n", deviceID.c_str(), currentUtcTime.c_str());
