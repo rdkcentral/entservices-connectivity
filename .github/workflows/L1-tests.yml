@@ -1,10 +1,10 @@
 name: L1-tests
 
 on:
-
-  pull_request:
-    branches: [main, develop]
-
+  push:
+    branches: [ main, develop, 'sprint/**', 'release/**', 'topic/**' ]
+  pull_request:
+    branches: [ main, develop, 'sprint/**', 'release/**', 'topic/**' ]
   workflow_call:
     inputs:
       caller_source:
