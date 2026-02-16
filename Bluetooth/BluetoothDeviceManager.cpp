@@ -27,7 +27,6 @@ namespace WPEFramework {
         {
             Exchange::IStore* pPersistentStore = _service->QueryInterfaceByCallsign<Exchange::IStore>(PERSISTENT_STORE_CALLSIGN);
             if (pPersistentStore == nullptr) {
-                printf("*** _DEBUG: BluetoothDeviceManager::updateBluetoothDeviceInfoCache: Failed to get PersistentStore interface\n");
                 LOGERR("Failed to get PersistentStore interface\n");
                 return Core::ERROR_GENERAL;
             }
@@ -36,7 +35,6 @@ namespace WPEFramework {
             Core::hresult result = pPersistentStore->GetValue(PERSISTENT_STORE_NAMESPACE, PERSISTENT_STORE_KEY_DEVICE_INFO, bluetoothDeviceInfoStr);
 
             if (Core::ERROR_NONE == result) {
-                printf("*** _DEBUG: BluetoothDeviceManager::updateBluetoothDeviceInfoCache: Loaded device info JSON: %s\n", bluetoothDeviceInfoStr.c_str());
                 JsonArray deviceInfoArray;
                 deviceInfoArray.FromString(bluetoothDeviceInfoStr);
 
@@ -55,15 +53,11 @@ namespace WPEFramework {
                     deviceInfo.lastConnectTimeUtc = lastConnectTimeUtc;
 
                     _bluetoothDeviceInfoCache[deviceID] = std::move(deviceInfo);
-
-                    printf("*** _DEBUG: BluetoothDeviceManager::updateBluetoothDeviceInfoCache: Loaded device info for deviceID=%s, autoConnectStatus=%d, lastConnectTimeUtc=%s\n",
-                            deviceID.c_str(), static_cast<int>(autoConnectStatus), lastConnectTimeUtc.c_str());
                 }
 
                 _adminLock.Unlock();
                 
             } else {
-                printf("*** _DEBUG: BluetoothDeviceManager::updateBluetoothDeviceInfoCache: No existing device info in PersistentStore or failed to load (hresult=%d)\n", result);
                 LOGERR("Failed to load device info from PersistentStore, hresult=%d\n", result);
             }
 
@@ -77,7 +71,6 @@ namespace WPEFramework {
             Exchange::IStore* pPersistentStore = _service->QueryInterfaceByCallsign<Exchange::IStore>(PERSISTENT_STORE_CALLSIGN);
 
             if (pPersistentStore == nullptr) {
-                printf("*** _DEBUG: BluetoothDeviceManager::updateBluetoothDeviceInfoPersistentStore: Failed to get PersistentStore interface\n");
                 LOGERR("Failed to get PersistentStore interface\n");
                 return Core::ERROR_GENERAL;
             }
@@ -100,13 +93,10 @@ namespace WPEFramework {
 
             string bluetoothDeviceInfoStr;
             deviceInfoArray.ToString(bluetoothDeviceInfoStr);
-            
-            printf("*** _DEBUG: BluetoothDeviceManager::updateBluetoothDeviceInfoPersistentStore: Saving device info JSON: %s\n", bluetoothDeviceInfoStr.c_str());
 
             Core::hresult result = pPersistentStore->SetValue(PERSISTENT_STORE_NAMESPACE, PERSISTENT_STORE_KEY_DEVICE_INFO, bluetoothDeviceInfoStr);
 
             if (Core::ERROR_NONE != result) {
-                printf("*** _DEBUG: BluetoothDeviceManager::updateBluetoothDeviceInfoPersistentStore: Failed to save device info to PersistentStore (hresult=%d)\n", result);
                 LOGERR("Failed to save device info to PersistentStore, hresult=%d\n", result);
             }
 
@@ -153,8 +143,6 @@ namespace WPEFramework {
 
         void BluetoothDeviceManager::setAutoConnect(const std::string& deviceID, bool enable)
         {
-            printf("*** _DEBUG: BluetoothDeviceManager::setAutoConnect: deviceID=%s, enable=%s\n", deviceID.c_str(), enable ? "true" : "false");
-
             AutoConnectStatus autoConnectStatus = enable ? AUTO_CONNECT_STATUS_ENABLED : AUTO_CONNECT_STATUS_DISABLED;
             BluetoothDeviceInfo deviceInfo;
             getBluetoothDeviceInfo(deviceID, deviceInfo);
@@ -169,7 +157,6 @@ namespace WPEFramework {
 
         Core::hresult BluetoothDeviceManager::getAutoConnect(const std::string& deviceID, AutoConnectStatus& status)
         {
-            printf("*** _DEBUG: BluetoothDeviceManager::getAutoConnect: deviceID=%s\n", deviceID.c_str());
             BluetoothDeviceInfo deviceInfo;
 
             Core::hresult result = getBluetoothDeviceInfo(deviceID, deviceInfo);
@@ -192,8 +179,6 @@ namespace WPEFramework {
             std::strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%SZ", utc_tm);
             const std::string currentUtcTime = buffer;
 
-            printf("*** _DEBUG: BluetoothDeviceManager::setLastConnectTimeUtc: deviceID=%s, time=%s\n", deviceID.c_str(), currentUtcTime.c_str());
-
             BluetoothDeviceInfo deviceInfo;
             getBluetoothDeviceInfo(deviceID, deviceInfo);
             deviceInfo.lastConnectTimeUtc = std::move(currentUtcTime);
@@ -207,7 +192,6 @@ namespace WPEFramework {
 
         Core::hresult BluetoothDeviceManager::getLastConnectTimeUtc(const std::string& deviceID, std::string& lastConnectTimeUtc)
         {
-            printf("*** _DEBUG: BluetoothDeviceManager::getLastConnectTimeUtc: deviceID=%s\n", deviceID.c_str());
             BluetoothDeviceInfo deviceInfo;
 
             Core::hresult result = getBluetoothDeviceInfo(deviceID, deviceInfo);
