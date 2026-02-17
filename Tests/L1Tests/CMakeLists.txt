@@ -16,7 +16,7 @@
 # limitations under the License.
 
 cmake_minimum_required(VERSION 3.8)
-set(PLUGIN_NAME L1TestsCA)
+set(PLUGIN_NAME L1TestsIO)
 set(MODULE_NAME ${NAMESPACE}${PLUGIN_NAME})
 
 set(CMAKE_CXX_STANDARD 14)
@@ -108,6 +108,10 @@ add_plugin_test_ex(PLUGIN_BLUETOOTH tests/test_Bluetooth.cpp "${BLUETOOTH_INC}" 
 
 add_library(${MODULE_NAME} SHARED ${TEST_SRC})
 
+set_source_files_properties(
+        tests/test_Bluetooth.cpp
+        PROPERTIES COMPILE_FLAGS "-fexceptions")
+
 include_directories(${TEST_INC})
 
 target_link_directories(${MODULE_NAME} PUBLIC ${CMAKE_INSTALL_PREFIX}/lib ${CMAKE_INSTALL_PREFIX}/lib/wpeframework/plugins)
@@ -122,8 +126,9 @@ target_include_directories(${MODULE_NAME}
         ${CMAKE_SOURCE_DIR}/../entservices-testframework/Tests/mocks/devicesettings
         ${CMAKE_SOURCE_DIR}/../entservices-testframework/Tests/mocks/thunder
         ${CMAKE_SOURCE_DIR}/../Thunder/Source/plugins
-        ${BLUETOOTH_INC}
         )
 
 install(TARGETS ${MODULE_NAME} DESTINATION lib)
 write_config(${PLUGIN_NAME})
+
+
