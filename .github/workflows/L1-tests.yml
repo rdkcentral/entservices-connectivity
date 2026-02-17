@@ -8,7 +8,7 @@ on:
   workflow_call:
     inputs:
       caller_source:
-        description: "Specifies the source type (e.g., local or testframework) for the workflow."
+        description: "Specifies the source type (e.g., local or test framework) for the workflow."
         required: true
         type: string
     secrets:
@@ -19,6 +19,8 @@ env:
   BUILD_TYPE: Debug
   THUNDER_REF: "R4.4.1"
   INTERFACES_REF: "develop"
+  AUTOMATICS_UNAME: ${{ secrets.AUTOMATICS_UNAME}}
+  AUTOMATICS_PASSCODE: ${{ secrets. AUTOMATICS_PASSCODE}}
 
 jobs:
   L1-tests:
@@ -87,7 +89,7 @@ jobs:
         run: >
           sudo apt update
           &&
-          sudo apt install -y libsqlite3-dev libcurl4-openssl-dev valgrind lcov clang libsystemd-dev libboost-all-dev libwebsocketpp-dev meson libcunit1 libcunit1-dev curl protobuf-compiler-grpc libgrpc-dev libgrpc++-dev libjsoncpp-dev
+          sudo apt install -y libsqlite3-dev libcurl4-openssl-dev valgrind lcov clang libsystemd-dev libboost-all-dev libwebsocketpp-dev meson libcunit1 libcunit1-dev curl protobuf-compiler-grpc libgrpc-dev libgrpc++-dev
 
       - name: Install GStreamer
         run: |
@@ -125,7 +127,7 @@ jobs:
         with:
           repository: rdkcentral/entservices-testframework
           path: entservices-testframework
-          ref: feature/RDKEMW-13334
+          ref: develop
           token: ${{ secrets.RDKCM_RDKE }}
 
       - name: Checkout entservices-connectivity
@@ -140,7 +142,7 @@ jobs:
         with:
           repository: rdkcentral/entservices-connectivity
           path: entservices-connectivity
-          ref: feature/RDKEMW-13334
+          ref: develop
 
       - name: Checkout googletest
         if: steps.cache.outputs.cache-hit != 'true'
@@ -178,7 +180,6 @@ jobs:
           patch -p1 < $GITHUB_WORKSPACE/entservices-testframework/patches/error_code_R4_4.patch
           patch -p1 < $GITHUB_WORKSPACE/entservices-testframework/patches/1004-Add-support-for-project-dir.patch
           patch -p1 < $GITHUB_WORKSPACE/entservices-testframework/patches/RDKEMW-733-Add-ENTOS-IDS.patch
-          patch -p1 < $GITHUB_WORKSPACE/entservices-testframework/patches/Jsonrpc_dynamic_error_handling.patch
           cd -
 
       - name: Build Thunder
@@ -208,16 +209,8 @@ jobs:
           path: entservices-apis
           ref: ${{env.INTERFACES_REF}}
           #token : ${{ secrets.RDKCM_RDKE }}
+          run: rm -rf $GITHUB_WORKSPACE/entservices-apis/jsonrpc/DTV.json
 
-      - name: Remove DTV.json from entservices-apis
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: rm -rf "$GITHUB_WORKSPACE/entservices-apis/jsonrpc/DTV.json"
-
-      - name: Apply patches entservices-apis
-        run: |
-          cd $GITHUB_WORKSPACE/entservices-apis
-          patch -p1 < $GITHUB_WORKSPACE/entservices-testframework/patches/RDKEMW-1007.patch
-          cd -
 
       - name: Build entservices-apis
         run: >
@@ -246,18 +239,25 @@ jobs:
           headers/rdk/halif/
           headers/rdk/halif/deepsleep-manager
           headers/ccec/drivers
+          headers/ccec/host
           headers/network
           headers/proc
-          headers/libusb
-          headers/Dobby
-          headers/Dobby/Public/Dobby
-          headers/Dobby/IpcService
           &&
           cd headers
           &&
           touch
           audiocapturemgr/audiocapturemgr_iarm.h
           ccec/drivers/CecIARMBusMgr.h
+          ccec/FrameListener.hpp
+          ccec/Connection.hpp
+          ccec/Assert.hpp
+          ccec/Messages.hpp
+          ccec/MessageDecoder.hpp
+          ccec/MessageProcessor.hpp
+          ccec/CECFrame.hpp
+          ccec/MessageEncoder.hpp
+          ccec/CCEC.hpp
+          ccec/host/RDK.hpp
           rdk/ds/audioOutputPort.hpp
           rdk/ds/compositeIn.hpp
           rdk/ds/dsDisplay.h
@@ -287,14 +287,13 @@ jobs:
           rdk/iarmbus/libIBusDaemon.h
           rdk/halif/deepsleep-manager/deepSleepMgr.h
           rdk/iarmmgrs-hal/mfrMgr.h
-          rdk/iarmmgrs-hal/pwrMgr.h
           rdk/iarmmgrs-hal/sysMgr.h
           network/wifiSrvMgrIarmIf.h
           network/netsrvmgrIarm.h
           libudev.h
-          libusb/libusb.h
           rfcapi.h
           rbus.h
+          dsRpc.h
           motionDetector.h
           telemetry_busmessage_sender.h
           maintenanceMGR.h
@@ -306,12 +305,8 @@ jobs:
           systemaudioplatform.h
           gdialservice.h
           gdialservicecommon.h
-          Dobby/DobbyProtocol.h
-          Dobby/DobbyProxy.h
-          Dobby/Public/Dobby/IDobbyProxy.h
-          Dobby/IpcService/IpcFactory.h
           &&
-          cp -r /usr/include/gstreamer-1.0/gst /usr/include/glib-2.0/* /usr/lib/x86_64-linux-gnu/glib-2.0/include/* /usr/local/include/trower-base64/base64.h /usr/include/libdrm/drm.h /usr/include/libdrm/drm_mode.h /usr/include/xf86drm.h .
+          cp -r /usr/include/gstreamer-1.0/gst /usr/include/glib-2.0/* /usr/lib/x86_64-linux-gnu/glib-2.0/include/* /usr/local/include/trower-base64/base64.h  /usr/include/libdrm/drm.h /usr/include/libdrm/drm_mode.h /usr/include/xf86drm.h .
 
       - name: Set clang toolchain
         if: ${{ matrix.compiler == 'clang' }}
@@ -350,8 +345,10 @@ jobs:
           -DCMAKE_TOOLCHAIN_FILE="${{ env.TOOLCHAIN_FILE }}"
           -DCMAKE_INSTALL_PREFIX="$GITHUB_WORKSPACE/install/usr"
           -DCMAKE_MODULE_PATH="$GITHUB_WORKSPACE/install/tools/cmake"
-          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
+          -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
           -DCMAKE_CXX_FLAGS="
+          -fprofile-arcs
+          -ftest-coverage
           -DEXCEPTIONS_ENABLE=ON
           -DUSE_THUNDER_R4=ON
           -DTHUNDER_VERSION=4
@@ -398,7 +395,7 @@ jobs:
           -DHAS_RBUS
           -DENABLE_DEVICE_MANUFACTURER_INFO"
           &&
-          cmake --build build/mocks -j8 -v
+          cmake --build build/mocks -j8
           &&
           cmake --install build/mocks
 
@@ -425,18 +422,13 @@ jobs:
           -I $GITHUB_WORKSPACE/entservices-testframework/Tests/headers/rdk/iarmmgrs-hal
           -I $GITHUB_WORKSPACE/entservices-testframework/Tests/headers/ccec/drivers
           -I $GITHUB_WORKSPACE/entservices-testframework/Tests/headers/network
-          -I $GITHUB_WORKSPACE/entservices-testframework/Tests/headers/libusb
           -I $GITHUB_WORKSPACE/entservices-testframework/Tests
-          -I $GITHUB_WORKSPACE/entservices-testframework/Tests/headers/Dobby
-          -I $GITHUB_WORKSPACE/entservices-testframework/Tests/headers/Dobby/Public/Dobby
-          -I $GITHUB_WORKSPACE/entservices-testframework/Tests/headers/Dobby/IpcService
           -I $GITHUB_WORKSPACE/Thunder/Source
           -I $GITHUB_WORKSPACE/Thunder/Source/core
           -I $GITHUB_WORKSPACE/install/usr/include
           -I $GITHUB_WORKSPACE/install/usr/include/WPEFramework
           -include $GITHUB_WORKSPACE/entservices-testframework/Tests/mocks/devicesettings.h
           -include $GITHUB_WORKSPACE/entservices-testframework/Tests/mocks/Iarm.h
-          -include $GITHUB_WORKSPACE/entservices-testframework/Tests/mocks/libusb/libusb.h
           -include $GITHUB_WORKSPACE/entservices-testframework/Tests/mocks/Rfc.h
           -include $GITHUB_WORKSPACE/entservices-testframework/Tests/mocks/RBus.h
           -include $GITHUB_WORKSPACE/entservices-testframework/Tests/mocks/Telemetry.h
@@ -447,11 +439,7 @@ jobs:
           -include $GITHUB_WORKSPACE/entservices-testframework/Tests/mocks/wpa_ctrl_mock.h
           -include $GITHUB_WORKSPACE/entservices-testframework/Tests/mocks/readprocMockInterface.h
           -include $GITHUB_WORKSPACE/entservices-testframework/Tests/mocks/gdialservice.h
-          -include $GITHUB_WORKSPACE/entservices-testframework/Tests/mocks/Dobby.h
-          -include $GITHUB_WORKSPACE/entservices-testframework/Tests/headers/Dobby/DobbyProtocol.h
-          -include $GITHUB_WORKSPACE/entservices-testframework/Tests/headers/Dobby/DobbyProxy.h
-          -include $GITHUB_WORKSPACE/entservices-testframework/Tests/headers/Dobby/Public/Dobby/IDobbyProxy.h
-          -include $GITHUB_WORKSPACE/entservices-testframework/Tests/headers/Dobby/IpcService/IpcFactory.h
+          -include $GITHUB_WORKSPACE/entservices-testframework/Tests/mocks/HdmiCec.h
           --coverage
           -Wall -Wno-unused-result -Wno-deprecated-declarations -Wno-error=format=
           -Wl,-wrap,system -Wl,-wrap,popen -Wl,-wrap,syslog -Wl,-wrap,v_secure_system -Wl,-wrap,v_secure_popen -Wl,-wrap,v_secure_pclose -Wl,-wrap,unlink
@@ -461,7 +449,6 @@ jobs:
           -DENABLE_DEEP_SLEEP
           -DENABLE_SET_WAKEUP_SRC_CONFIG
           -DENABLE_THERMAL_PROTECTION
-          -DDISABLE_SECURITY_TOKEN
           -DUSE_DRM_SCREENCAPTURE
           -DHAS_API_SYSTEM
           -DHAS_API_POWERSTATE
@@ -473,30 +460,19 @@ jobs:
           -DCMAKE_DISABLE_FIND_PACKAGE_Udev=ON
           -DCMAKE_DISABLE_FIND_PACKAGE_RFC=ON
           -DCMAKE_DISABLE_FIND_PACKAGE_RBus=ON
+          -DCMAKE_DISABLE_FIND_PACKAGE_CEC=ON
           -DCMAKE_BUILD_TYPE=Debug
           -DDS_FOUND=ON
           -DHAS_FRONT_PANEL=ON
           -DRDK_SERVICES_L1_TEST=ON
+          -DPLUGIN_AVINPUT=ON
+          -DPLUGIN_HDCPPROFILE=ON
+          -DPLUGIN_HDMICECSOURCE=ON
+          -DPLUGIN_HDMICECSINK=ON
           -DUSE_THUNDER_R4=ON
           -DHIDE_NON_EXTERNAL_SYMBOLS=OFF
-          -DPLUGIN_TELEMETRY=ON
-          -DPLUGIN_USBDEVICE=ON
-          -DPLUGIN_USB_MASS_STORAGE=ON
-          -DPLUGIN_OCICONTAINER=ON
-          -DPLUGIN_USERSETTINGS=ON
-          -DPLUGIN_RESOURCEMANAGER=ON
-          -DPLUGIN_APPMANAGER=ON
-          -DPLUGIN_STORAGE_MANAGER=ON
-          -DPLUGIN_RUNTIME_MANAGER=ON
-          -DPLUGIN_LIFECYCLE_MANAGER=ON
-          -DPLUGIN_MESSAGECONTROL=ON
-          -DPLUGIN_MIGRATION=ON
-          -DPLUGIN_DOWNLOADMANAGER=ON
-          -DPLUGIN_PREINSTALL_MANAGER=ON
-          -DPLUGIN_PACKAGE_MANAGER=ON
-          -DENABLE_UNIT_TESTS=ON
           &&
-          cmake --build build/entservices-connectivity -j8 -v
+          cmake --build build/entservices-connectivity -j8
           &&
           cmake --install build/entservices-connectivity
 
@@ -528,8 +504,8 @@ jobs:
           -I $GITHUB_WORKSPACE/Thunder/Source
           -I $GITHUB_WORKSPACE/Thunder/Source/core
           -I $GITHUB_WORKSPACE/install/usr/include
-          -I ./usr/include/libdrm
           -I $GITHUB_WORKSPACE/install/usr/include/WPEFramework
+          -I ./usr/include/libdrm
           -include $GITHUB_WORKSPACE/entservices-testframework/Tests/mocks/devicesettings.h
           -include $GITHUB_WORKSPACE/entservices-testframework/Tests/mocks/Iarm.h
           -include $GITHUB_WORKSPACE/entservices-testframework/Tests/mocks/Rfc.h
@@ -542,6 +518,8 @@ jobs:
           -include $GITHUB_WORKSPACE/entservices-testframework/Tests/mocks/wpa_ctrl_mock.h
           -include $GITHUB_WORKSPACE/entservices-testframework/Tests/mocks/readprocMockInterface.h
           -include $GITHUB_WORKSPACE/entservices-testframework/Tests/mocks/gdialservice.h
+          -include $GITHUB_WORKSPACE/entservices-testframework/Tests/mocks/HdmiCec.h
+          -include $GITHUB_WORKSPACE/entservices-testframework/Tests/mocks/thunder/Communicator.h
           --coverage
           -Wall -Wno-unused-result -Wno-deprecated-declarations -Wno-error=format=
           -Wl,-wrap,system -Wl,-wrap,popen -Wl,-wrap,syslog -Wl,--no-as-needed
@@ -562,29 +540,18 @@ jobs:
           -DCMAKE_DISABLE_FIND_PACKAGE_Udev=ON
           -DCMAKE_DISABLE_FIND_PACKAGE_RFC=ON
           -DCMAKE_DISABLE_FIND_PACKAGE_RBus=ON
+          -DCMAKE_DISABLE_FIND_PACKAGE_CEC=ON
           -DCMAKE_BUILD_TYPE=Debug
           -DDS_FOUND=ON
-          -DPLUGIN_TELEMETRY=ON
-          -DPLUGIN_USBDEVICE=ON
-          -DPLUGIN_USB_MASS_STORAGE=ON
+          -DPLUGIN_AVINPUT=ON
+          -DPLUGIN_HDCPPROFILE=ON
+          -DPLUGIN_HDMICECSOURCE=ON
+          -DPLUGIN_HDMICECSINK=OFF
           -DRDK_SERVICES_L1_TEST=ON
           -DUSE_THUNDER_R4=ON
           -DHIDE_NON_EXTERNAL_SYMBOLS=OFF
-          -DPLUGIN_OCICONTAINER=ON
-          -DPLUGIN_USERSETTINGS=ON
-          -DPLUGIN_RESOURCEMANAGER=ON
-          -DPLUGIN_APPMANAGER=ON
-          -DPLUGIN_STORAGE_MANAGER=ON
-          -DPLUGIN_RUNTIME_MANAGER=ON
-          -DPLUGIN_LIFECYCLE_MANAGER=ON
-          -DPLUGIN_MESSAGECONTROL=ON
-          -DPLUGIN_MIGRATION=ON
-          -DPLUGIN_DOWNLOADMANAGER=ON
-          -DPLUGIN_PREINSTALL_MANAGER=ON
-          -DPLUGIN_PACKAGE_MANAGER=ON
-          -DENABLE_UNIT_TESTS=ON
           &&
-          cmake --build build/entservices-testframework -j8 -v
+          cmake --build build/entservices-testframework -j8
           &&
           cmake --install build/entservices-testframework
 
@@ -597,8 +564,6 @@ jobs:
           /opt/secure/reboot
           /opt/secure/persistent
           /opt/secure/persistent/System
-          /opt/persistent/storageManager
-          /opt/preinstall
           /opt/logs
           /lib/rdk
           /run/media/sda1/logs/PreviousLogs
@@ -737,3 +702,4 @@ jobs:
             rdkL1TestResultsWithoutValgrind.json
             rdkL1TestResultsWithValgrind.json
           if-no-files-found: warn
+          
