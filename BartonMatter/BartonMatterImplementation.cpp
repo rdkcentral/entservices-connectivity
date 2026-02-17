@@ -1264,6 +1264,66 @@ void BartonMatterImplementation::OnSessionFailure(const chip::ScopedNodeId & pee
             return Core::ERROR_NONE;
         }
 
+        void BartonMatterImplementation::HandleVoiceCommand(const std::string& transcription)
+        {
+            LOGWARN("[BartonMatter Implementation] Processing voice command: %s", transcription.c_str());
+            
+            // Convert to lowercase for easier matching
+            std::string lowerTranscription = transcription;
+            std::transform(lowerTranscription.begin(), lowerTranscription.end(), 
+                         lowerTranscription.begin(), ::tolower);
+            
+            // Process voice commands and control actual Matter devices
+            if (lowerTranscription.find("light") != std::string::npos) {
+                if (lowerTranscription.find("turn on") != std::string::npos ||
+                    lowerTranscription.find("turn off") != std::string::npos) {
+                    
+                    bool turnOn = (lowerTranscription.find("turn on") != std::string::npos);
+                    LOGWARN("[BartonMatter] %s light command - executing", 
+                           turnOn ? "Turn ON" : "Turn OFF");
+                    
+                    // TODO: Replace with your actual Matter light control
+                    // Example approach:
+                    // 1. Get light device URI from your device list
+                    // 2. Call WriteResource to control the OnOff cluster
+                    /*
+                    std::string lightUri = "your-light-device-uri";
+                    std::string value = turnOn ? "true" : "false";
+                    std::string result;
+                    WriteResource(lightUri, "OnOff", value);
+                    */
+                    
+                    LOGINFO("[BartonMatter] Light control: %s (implement actual control here)", 
+                           turnOn ? "ON" : "OFF");
+                }
+            }
+            else if (lowerTranscription.find("plug") != std::string::npos) {
+                if (lowerTranscription.find("turn on") != std::string::npos ||
+                    lowerTranscription.find("turn off") != std::string::npos) {
+                    
+                    bool turnOn = (lowerTranscription.find("turn on") != std::string::npos);
+                    LOGWARN("[BartonMatter] %s plug command - executing", 
+                           turnOn ? "Turn ON" : "Turn OFF");
+                    
+                    // TODO: Replace with your actual Matter plug control
+                    LOGINFO("[BartonMatter] Plug control: %s (implement actual control here)", 
+                           turnOn ? "ON" : "OFF");
+                }
+            }
+            else if (lowerTranscription.find("thermostat") != std::string::npos ||
+                     lowerTranscription.find("temperature") != std::string::npos) {
+                LOGWARN("[BartonMatter] Thermostat/temperature command detected");
+                
+                // TODO: Parse temperature value and control thermostat
+                // Example: Extract number from transcription, set thermostat setpoint
+                LOGINFO("[BartonMatter] Thermostat control (implement actual control here)");
+            }
+            else {
+                LOGINFO("[BartonMatter] Unrecognized smart home command: %s", 
+                       transcription.c_str());
+            }
+        }
+
     } // namespace Plugin
 } // namespace WPEFramework
 

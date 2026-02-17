@@ -78,6 +78,9 @@ namespace WPEFramework
             virtual Core::hresult RemoveDevice(const std::string deviceUuid /* @in */) override;
             virtual Core::hresult OpenCommissioningWindow(const uint16_t timeoutSeconds /* @in */, std::string& commissioningInfo /* @out */) override;
 
+            // Voice control integration
+            void HandleVoiceCommand(const std::string& transcription);
+
             void InitializeClient(gchar *confDir);
             static void SetDefaultParameters(BCoreInitializeParamsContainer *params);
             bool Commission(BCoreClient *client, gchar *setupPayload, guint16 timeoutSeconds);

@@ -18,6 +18,7 @@
 **/
 
 #include "BartonMatterPlugin.h"
+#include <algorithm>
 
 const string WPEFramework::Plugin::BartonMatter::SERVICE_NAME = "org.rdk.BartonMatter";
 
@@ -34,6 +35,10 @@ namespace WPEFramework {
             : PluginHost::IPlugin(), PluginHost::JSONRPC(), mService(nullptr), mBartonMatter(nullptr)
         {
             BartonMatter::_instance = this;
+            
+            // Register voice event handler
+            Register("onSmartHomeCommand", &BartonMatter::onSmartHomeCommand, this);
+            LOGINFO("BartonMatter: Registered voice event handler");
         }
 
         BartonMatter::~BartonMatter()
@@ -60,6 +65,24 @@ namespace WPEFramework {
             }
             mConfig.FromString(service->ConfigLine());
 	    Exchange::JBartonMatter::Register(*this, mBartonMatter);
+            
+            // Subscribe to VoiceControl smart home commands
+            LOGWARN("BartonMatter: Subscribing to VoiceControl smart home events");
+            string event = "onSmartHomeCommand";
+            string voiceCallsign = "org.rdk.VoiceControl";
+            
+            string subscribeResult;
+            Core::JSON::String params;
+            params = voiceCallsign;
+            
+            // Subscribe to the filtered smart home commands from VoiceControl
+            auto ret = Subscribe<JsonObject>(1000, event, event, voiceCallsign);
+            if (ret == Core::ERROR_NONE) {
+                LOGWARN("BartonMatter: Successfully subscribed to VoiceControl.onSmartHomeCommand");
+            } else {
+                LOGERR("BartonMatter: Failed to subscribe to VoiceControl events, error: %u", ret);
+            }
+            
             return "";
         }
 
@@ -82,6 +105,34 @@ namespace WPEFramework {
         string BartonMatter::Information() const
         {
             return(string("{\"service\": \"") + SERVICE_NAME + string("\"}"));
+        }
+        
+        void BartonMatter::onSmartHomeCommand(const JsonObject& parameters)
+        {
+            LOGWARN("[BartonMatter Plugin] Received smart home voice command!");
+            
+            // Extract the transcription from VoiceControl
+            if (parameters.HasLabel("transcription")) {
+                std::string transcription = parameters["transcription"].String();
+                LOGWARN("[BartonMatter Plugin] Voice transcription: %s", transcription.c_str());
+                
+                // Forward to Implementation for processing
+                if (mBartonMatter) {
+                    // Cast to access the implementation method
+                    auto* impl = dynamic_cast<BartonMatterImplementation*>(mBartonMatter);
+                    if (impl) {
+                        impl->HandleVoiceCommand(transcription);
+                    } else {
+                        LOGERR("[BartonMatter Plugin] Failed to forward to Implementation");
+                    }
+                } else {
+                    LOGERR("[BartonMatter Plugin] Implementation not available");
+                }
+                return;
+            }
+            
+            LOGWARN("[BartonMatter Plugin] No transcription in parameters");
+
         }
         
     } // namespace Plugin
