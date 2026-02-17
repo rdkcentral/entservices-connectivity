@@ -398,7 +398,7 @@ jobs:
           -DHAS_RBUS
           -DENABLE_DEVICE_MANUFACTURER_INFO"
           &&
-          cmake --build build/mocks -j8 -- -v
+          cmake --build build/mocks -j8 -v
           &&
           cmake --install build/mocks
 
@@ -496,7 +496,7 @@ jobs:
           -DPLUGIN_PACKAGE_MANAGER=ON
           -DENABLE_UNIT_TESTS=ON
           &&
-          cmake --build build/entservices-connectivity -j8 -- -v
+          cmake --build build/entservices-connectivity -j8 -v
           &&
           cmake --install build/entservices-connectivity
 
@@ -584,7 +584,7 @@ jobs:
           -DPLUGIN_PACKAGE_MANAGER=ON
           -DENABLE_UNIT_TESTS=ON
           &&
-          cmake --build build/entservices-testframework -j8 -- -v
+          cmake --build build/entservices-testframework -j8 -v
           &&
           cmake --install build/entservices-testframework
 
