@@ -40,18 +40,6 @@
 using ::testing::NiceMock;
 using namespace WPEFramework;
 
-#define MOCK_USB_DEVICE_BUS_NUMBER_1    100
-#define MOCK_USB_DEVICE_ADDRESS_1       001
-#define MOCK_USB_DEVICE_PORT_1          123
-
-#define MOCK_USB_DEVICE_BUS_NUMBER_2    101
-#define MOCK_USB_DEVICE_ADDRESS_2       002
-#define MOCK_USB_DEVICE_PORT_2          124
-
-#define MOCK_USB_DEVICE_SERIAL_NO "0401805e4532973503374df52a239c898397d348"
-#define MOCK_USB_DEVICE_MANUFACTURER "USB"
-#define MOCK_USB_DEVICE_PRODUCT "SanDisk 3.2Gen1"
-#define LIBUSB_CONFIG_ATT_BUS_POWERED 0x80
 namespace {
 const string callSign = _T("Bluetooth");
 }
@@ -67,8 +55,6 @@ protected:
     NiceMock<COMLinkMock> comLinkMock;
     NiceMock<ServiceMock> service;
     PLUGINHOST_DISPATCHER* dispatcher;
-    libusb_hotplug_callback_fn libUSBHotPlugCbDeviceAttached = nullptr;
-    libusb_hotplug_callback_fn libUSBHotPlugCbDeviceDetached = nullptr;
     Core::ProxyType<WorkerPoolImplementation> workerPool;
     NiceMock<FactoriesImplementation> factoriesImplementation;
 
@@ -115,13 +101,10 @@ protected:
         workerPool.Release();
 
         PluginHost::IFactories::Assign(nullptr);
-
-        libusbApi::setImpl(nullptr);
     }
 
     virtual void SetUp()
     {
-        ASSERT_TRUE(libUSBHotPlugCbDeviceAttached != nullptr);
     }
 };
 
