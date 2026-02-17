@@ -127,7 +127,7 @@ jobs:
         with:
           repository: rdkcentral/entservices-testframework
           path: entservices-testframework
-          ref: develop
+          ref: feature/RDKEMW-13334
           token: ${{ secrets.RDKCM_RDKE }}
 
       - name: Checkout entservices-connectivity
@@ -142,7 +142,7 @@ jobs:
         with:
           repository: rdkcentral/entservices-connectivity
           path: entservices-connectivity
-          ref: develop
+          ref: feature/RDKEMW-13334
 
       - name: Checkout googletest
         if: steps.cache.outputs.cache-hit != 'true'
@@ -169,7 +169,7 @@ jobs:
           -DCMAKE_MODULE_PATH="$GITHUB_WORKSPACE/install/tools/cmake"
           -DGENERIC_CMAKE_MODULE_PATH="$GITHUB_WORKSPACE/install/tools/cmake"
           &&
-          cmake --build build/ThunderTools -j8
+          cmake --build build/ThunderTools -j8 -v
           &&
           cmake --install build/ThunderTools
 
@@ -197,7 +197,7 @@ jobs:
           -DPORT=55555
           -DEXCEPTIONS_ENABLE=ON
           &&
-          cmake --build build/Thunder -j8
+          cmake --build build/Thunder -j8 -v
           &&
           cmake --install build/Thunder
 
@@ -221,7 +221,7 @@ jobs:
           -DCMAKE_INSTALL_PREFIX="$GITHUB_WORKSPACE/install/usr"
           -DCMAKE_MODULE_PATH="$GITHUB_WORKSPACE/install/tools/cmake"
           &&
-          cmake --build build/entservices-apis -j8
+          cmake --build build/entservices-apis -j8 -v
           &&
           cmake --install build/entservices-apis
 
@@ -330,7 +330,7 @@ jobs:
           -DBUILD_SHARED_LIBS=OFF
           -DCMAKE_POSITION_INDEPENDENT_CODE=ON
           &&
-          cmake --build build/googletest -j8
+          cmake --build build/googletest -j8 -v
           &&
           cmake --install build/googletest
 
@@ -395,7 +395,7 @@ jobs:
           -DHAS_RBUS
           -DENABLE_DEVICE_MANUFACTURER_INFO"
           &&
-          cmake --build build/mocks -j8
+          cmake --build build/mocks -j8 -v
           &&
           cmake --install build/mocks
 
@@ -472,7 +472,7 @@ jobs:
           -DUSE_THUNDER_R4=ON
           -DHIDE_NON_EXTERNAL_SYMBOLS=OFF
           &&
-          cmake --build build/entservices-connectivity -j8
+          cmake --build build/entservices-connectivity -j8 -v
           &&
           cmake --install build/entservices-connectivity
 
@@ -551,7 +551,7 @@ jobs:
           -DUSE_THUNDER_R4=ON
           -DHIDE_NON_EXTERNAL_SYMBOLS=OFF
           &&
-          cmake --build build/entservices-testframework -j8
+          cmake --build build/entservices-testframework -j8 -v
           &&
           cmake --install build/entservices-testframework
 
