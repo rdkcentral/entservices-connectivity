@@ -1,3 +1,4 @@
+
 # If not stated otherwise in this file or this component's license file the
 # following copyright and licenses apply:
 #
@@ -38,3 +39,10 @@ set_target_properties(${MODULE_NAME} PROPERTIES
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
+
+# Install the plugin library to the correct plugins directory
+install(TARGETS ${MODULE_NAME}
+        DESTINATION lib/${STORAGE_DIRECTORY}/plugins)
+
+# Write the config file for the plugin
+write_config(${PLUGIN_NAME})
