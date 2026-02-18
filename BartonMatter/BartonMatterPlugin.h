@@ -75,8 +75,8 @@ namespace WPEFramework {
             static const string SERVICE_NAME;
 
         private/*registered methods (wrappers)*/:
-            // Voice event handler
-            void onSmartHomeCommand(const JsonObject& parameters);
+            // Voice command handler - callable via JSON-RPC from VoiceControl
+            uint32_t onSmartHomeCommand(const JsonObject& parameters);
 
             BartonMatter(const BartonMatter&) = delete;
             BartonMatter& operator=(const BartonMatter&) = delete;

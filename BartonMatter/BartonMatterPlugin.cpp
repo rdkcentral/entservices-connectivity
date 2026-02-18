@@ -37,9 +37,9 @@ namespace WPEFramework {
         {
             BartonMatter::_instance = this;
             
-            // Register voice event handler
-            Register("onSmartHomeCommand", &BartonMatter::onSmartHomeCommand, this);
-            LOGINFO("BartonMatter: Registered voice event handler");
+            // Register JSON-RPC method to receive voice commands from VoiceControl
+            Register<JsonObject, void>("onSmartHomeCommand", &BartonMatter::onSmartHomeCommand, this);
+            LOGINFO("BartonMatter: Registered onSmartHomeCommand JSON-RPC method");
         }
 
         BartonMatter::~BartonMatter()
@@ -67,22 +67,7 @@ namespace WPEFramework {
             mConfig.FromString(service->ConfigLine());
 	    Exchange::JBartonMatter::Register(*this, mBartonMatter);
             
-            // Subscribe to VoiceControl smart home commands
-            LOGWARN("BartonMatter: Subscribing to VoiceControl smart home events");
-            string event = "onSmartHomeCommand";
-            string voiceCallsign = "org.rdk.VoiceControl";
-            
-            string subscribeResult;
-            Core::JSON::String params;
-            params = voiceCallsign;
-            
-            // Subscribe to the filtered smart home commands from VoiceControl
-            auto ret = this->template Subscribe<JsonObject>(1000, event, event, voiceCallsign);
-            if (ret == Core::ERROR_NONE) {
-                LOGWARN("BartonMatter: Successfully subscribed to VoiceControl.onSmartHomeCommand");
-            } else {
-                LOGERR("BartonMatter: Failed to subscribe to VoiceControl events, error: %u", ret);
-            }
+            LOGWARN("BartonMatter: Ready to receive VoiceControl smart home events via onSmartHomeCommand");
             
             return "";
         }
@@ -108,7 +93,7 @@ namespace WPEFramework {
             return(string("{\"service\": \"") + SERVICE_NAME + string("\"}"));
         }
         
-        void BartonMatter::onSmartHomeCommand(const JsonObject& parameters)
+        uint32_t BartonMatter::onSmartHomeCommand(const JsonObject& parameters)
         {
             LOGWARN("[BartonMatter Plugin] Received smart home voice command!");
             
@@ -129,11 +114,11 @@ namespace WPEFramework {
                 } else {
                     LOGERR("[BartonMatter Plugin] Implementation not available");
                 }
-                return;
+                return Core::ERROR_NONE;
             }
             
             LOGWARN("[BartonMatter Plugin] No transcription in parameters");
-
+            return Core::ERROR_GENERAL;
         }
         
     } // namespace Plugin
