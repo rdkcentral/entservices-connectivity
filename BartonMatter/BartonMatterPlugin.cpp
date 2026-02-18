@@ -18,6 +18,7 @@
 **/
 
 #include "BartonMatterPlugin.h"
+#include "BartonMatterImplementation.h"
 #include <algorithm>
 
 const string WPEFramework::Plugin::BartonMatter::SERVICE_NAME = "org.rdk.BartonMatter";
@@ -76,7 +77,7 @@ namespace WPEFramework {
             params = voiceCallsign;
             
             // Subscribe to the filtered smart home commands from VoiceControl
-            auto ret = Subscribe<JsonObject>(1000, event, event, voiceCallsign);
+            auto ret = this->template Subscribe<JsonObject>(1000, event, event, voiceCallsign);
             if (ret == Core::ERROR_NONE) {
                 LOGWARN("BartonMatter: Successfully subscribed to VoiceControl.onSmartHomeCommand");
             } else {
