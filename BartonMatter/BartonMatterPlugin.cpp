@@ -18,8 +18,6 @@
 **/
 
 #include "BartonMatterPlugin.h"
-#include "BartonMatterImplementation.h"
-#include <algorithm>
 
 const string WPEFramework::Plugin::BartonMatter::SERVICE_NAME = "org.rdk.BartonMatter";
 
@@ -36,10 +34,6 @@ namespace WPEFramework {
             : PluginHost::IPlugin(), PluginHost::JSONRPC(), mService(nullptr), mBartonMatter(nullptr)
         {
             BartonMatter::_instance = this;
-            
-            // Register JSON-RPC method to receive voice commands from VoiceControl
-            Register<JsonObject, void>("onSmartHomeCommand", &BartonMatter::onSmartHomeCommand, this);
-            LOGINFO("BartonMatter: Registered onSmartHomeCommand JSON-RPC method");
         }
 
         BartonMatter::~BartonMatter()
@@ -66,9 +60,6 @@ namespace WPEFramework {
             }
             mConfig.FromString(service->ConfigLine());
 	    Exchange::JBartonMatter::Register(*this, mBartonMatter);
-            
-            LOGWARN("BartonMatter: Ready to receive VoiceControl smart home events via onSmartHomeCommand");
-            
             return "";
         }
 
@@ -91,34 +82,6 @@ namespace WPEFramework {
         string BartonMatter::Information() const
         {
             return(string("{\"service\": \"") + SERVICE_NAME + string("\"}"));
-        }
-        
-        uint32_t BartonMatter::onSmartHomeCommand(const JsonObject& parameters)
-        {
-            LOGWARN("[BartonMatter Plugin] Received smart home voice command!");
-            
-            // Extract the transcription from VoiceControl
-            if (parameters.HasLabel("transcription")) {
-                std::string transcription = parameters["transcription"].String();
-                LOGWARN("[BartonMatter Plugin] Voice transcription: %s", transcription.c_str());
-                
-                // Forward to Implementation for processing
-                if (mBartonMatter) {
-                    // Cast to access the implementation method
-                    auto* impl = dynamic_cast<BartonMatterImplementation*>(mBartonMatter);
-                    if (impl) {
-                        impl->HandleVoiceCommand(transcription);
-                    } else {
-                        LOGERR("[BartonMatter Plugin] Failed to forward to Implementation");
-                    }
-                } else {
-                    LOGERR("[BartonMatter Plugin] Implementation not available");
-                }
-                return Core::ERROR_NONE;
-            }
-            
-            LOGWARN("[BartonMatter Plugin] No transcription in parameters");
-            return Core::ERROR_GENERAL;
         }
         
     } // namespace Plugin
