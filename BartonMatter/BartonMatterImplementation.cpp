@@ -1263,6 +1263,13 @@ void BartonMatterImplementation::OnSessionFailure(const chip::ScopedNodeId & pee
 
             return Core::ERROR_NONE;
         }
+	Core::hresult BartonMatterImplementation OnVoiceCommandReceived(const JsonObject& payload /* @in */)
+	{
+		LOGWARN("[BartonMatter Plugin] Received smart home voice command!");
+		std::string jsonStr = payload.ToString();
+		std::cout<<"[TTT] BartonMatter: "<<jsonStr<<"\n";
+		return Core::ERROR_NONE;
+	}
 
     } // namespace Plugin
 } // namespace WPEFramework
