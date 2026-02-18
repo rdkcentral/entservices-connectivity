@@ -517,7 +517,7 @@ jobs:
           -include $GITHUB_WORKSPACE/entservices-testframework/Tests/mocks/gdialservice.h
           -include $GITHUB_WORKSPACE/entservices-testframework/Tests/mocks/HdmiCec.h
           -include $GITHUB_WORKSPACE/entservices-testframework/Tests/mocks/thunder/Communicator.h
-          -include $GITHUB_WORKSPACE/entservices-testframework/Tests/mocks/thunder/btmgr.h
+          -include $GITHUB_WORKSPACE/entservices-testframework/Tests/mocks/btmgr.h
           --coverage
           -Wall -Wno-unused-result -Wno-deprecated-declarations -Wno-error=format=
           -Wl,-wrap,system -Wl,-wrap,popen -Wl,-wrap,syslog -Wl,--no-as-needed
