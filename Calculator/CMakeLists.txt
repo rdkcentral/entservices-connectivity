@@ -17,6 +17,7 @@
 
 set(PLUGIN_NAME Calculator)
 set(MODULE_NAME ${NAMESPACE}${PLUGIN_NAME})
+include_directories(SYSTEM $ENV{SDKTARGETSYSROOT}/usr/include/WPEFramework)
 
 # Find Thunder / WPEFramework Plugins
 find_package(${NAMESPACE}Plugins REQUIRED)
