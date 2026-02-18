@@ -1,4 +1,3 @@
-
 # If not stated otherwise in this file or this component's license file the
 # following copyright and licenses apply:
 #
@@ -19,8 +18,10 @@
 set(PLUGIN_NAME Calculator)
 set(MODULE_NAME ${NAMESPACE}${PLUGIN_NAME})
 
+# Find Thunder / WPEFramework Plugins
 find_package(${NAMESPACE}Plugins REQUIRED)
 
+# Build the Calculator plugin as a shared library
 add_library(${MODULE_NAME} SHARED
         Calculator.cpp
         Module.cpp
@@ -31,18 +32,28 @@ add_library(${MODULE_NAME} SHARED
         src/mod.cpp
 )
 
+# C++ standard
 set_target_properties(${MODULE_NAME} PROPERTIES
         CXX_STANDARD 11
-        CXX_STANDARD_REQUIRED YES)
-
-# Include directories
-include_directories(
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
+        CXX_STANDARD_REQUIRED YES
 )
 
-# Install the plugin library to the correct plugins directory
-install(TARGETS ${MODULE_NAME}
-        DESTINATION lib/${STORAGE_DIRECTORY}/plugins)
+# Calculator local headers
+target_include_directories(${MODULE_NAME}
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
 
-# Write the config file for the plugin
+# Link against Thunder Plugins (required for plugins/plugins.h)
+target_link_libraries(${MODULE_NAME}
+    PRIVATE
+        ${NAMESPACE}Plugins::${NAMESPACE}Plugins
+)
+
+# Install the plugin into Thunder plugins directory
+install(TARGETS ${MODULE_NAME}
+        DESTINATION lib/${STORAGE_DIRECTORY}/plugins
+)
+
+# Generate plugin configuration
 write_config(${PLUGIN_NAME})
