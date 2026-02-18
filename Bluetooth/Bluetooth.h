@@ -23,6 +23,7 @@
 
 #include "Module.h"
 #include <interfaces/IPowerManager.h>
+#include "PowerManagerInterface.h"
 #include "UtilsThreadRAII.h"
 #include "BluetoothDeviceManager.h"
 
