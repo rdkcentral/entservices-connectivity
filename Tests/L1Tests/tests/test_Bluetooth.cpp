@@ -816,8 +816,8 @@ TEST_F(BluetoothTest, setAutoConnectWrapper_MissingParameters_Failure)
 
 TEST_F(BluetoothTest, getAutoConnectWrapper_Enabled_Success)
 {
-    EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Invoke([](const string&, const string&, const string&, string& value) {
+    EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
+        .WillOnce(::testing::Invoke([](const string&, const string&, string& value) {
             value = "{\"123\":{\"autoConnectStatus\":1}}";
             return Core::ERROR_NONE;
         }));
@@ -828,8 +828,8 @@ TEST_F(BluetoothTest, getAutoConnectWrapper_Enabled_Success)
 
 TEST_F(BluetoothTest, getAutoConnectWrapper_Disabled_Success)
 {
-    EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Invoke([](const string&, const string&, const string&, string& value) {
+    EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
+        .WillOnce(::testing::Invoke([](const string&, const string&, string& value) {
             value = "{\"123\":{\"autoConnectStatus\":0}}";
             return Core::ERROR_NONE;
         }));
@@ -845,7 +845,7 @@ TEST_F(BluetoothTest, getAutoConnectWrapper_MissingDeviceID_Failure)
 
 TEST_F(BluetoothTest, getAutoConnectWrapper_NotFound_Failure)
 {
-    EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_, ::testing::_))
+    EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
         .WillOnce(::testing::Return(Core::ERROR_GENERAL));
     
     EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("getAutoConnect"), _T("{\"deviceID\":\"999\"}"), response));
