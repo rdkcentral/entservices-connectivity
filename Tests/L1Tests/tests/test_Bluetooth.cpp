@@ -680,7 +680,7 @@ TEST_F(BluetoothTest, getDeviceInfoWrapper_Success)
     deviceProperty.m_vendorID = 9999;
     strcpy(deviceProperty.m_deviceAddress, "00:11:22:33:44:55");
     deviceProperty.m_signalLevel = -50;
-    deviceProperty.m_rssi = -60;
+    deviceProperty.m_rssi = BTRMGR_RSSI_GOOD;
     deviceProperty.m_batteryLevel = 80;
     strcpy(deviceProperty.m_modalias, "usb:v1234p5678");
     strcpy(deviceProperty.m_firmwareRevision, "1.0.0");
