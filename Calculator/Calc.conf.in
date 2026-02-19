@@ -1,4 +1,0 @@
-precondition = ["Platform"]
-callsign = "org.rdk.Calculator"
-autostart = "false"
-startuporder = "@PLUGIN_CALC_STARTUPORDER@"
