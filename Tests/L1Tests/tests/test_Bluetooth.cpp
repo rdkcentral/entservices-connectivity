@@ -293,7 +293,7 @@ TEST_F(BluetoothTest, getConnectedDevicesWrapper_Success)
     connectedDevices.m_deviceProperty[0].m_deviceHandle = 789;
     strcpy(connectedDevices.m_deviceProperty[0].m_name, "ConnectedDevice");
     connectedDevices.m_deviceProperty[0].m_deviceType = BTRMGR_DEVICE_TYPE_HEADPHONES;
-    connectedDevices.m_deviceProperty[0].m_powerStatus = 1;
+    connectedDevices.m_deviceProperty[0].m_powerStatus = BTRMGR_DEVICE_POWER_ACTIVE;
     
     EXPECT_CALL(*p_btmgrMock, BTRMGR_GetConnectedDevices(::testing::_, ::testing::_))
         .WillOnce(::testing::DoAll(::testing::SetArgPointee<1>(connectedDevices), ::testing::Return(BTRMGR_RESULT_SUCCESS)));
@@ -315,7 +315,7 @@ TEST_F(BluetoothTest, connectWrapper_Smartphone_Success)
 {
     EXPECT_CALL(*p_btmgrMock, BTRMGR_StartAudioStreamingIn(::testing::_, ::testing::_, BTRMGR_DEVICE_OP_TYPE_AUDIO_INPUT))
         .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-    EXPECT_CALL(*p_persistentStoreMock, SetValue(::testing::_, ::testing::_, ::testing::_, ::testing::_, ::testing::_))
+    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, ::testing::_, ::testing::_, ::testing::_, ::testing::_))
         .WillOnce(::testing::Return(Core::ERROR_NONE));
     
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("connect"), _T("{\"deviceID\":\"123\",\"deviceType\":\"SMARTPHONE\"}"), response));
@@ -325,7 +325,7 @@ TEST_F(BluetoothTest, connectWrapper_AudioDevice_Success)
 {
     EXPECT_CALL(*p_btmgrMock, BTRMGR_StartAudioStreamingOut(::testing::_, ::testing::_, BTRMGR_DEVICE_OP_TYPE_AUDIO_OUTPUT))
         .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-    EXPECT_CALL(*p_persistentStoreMock, SetValue(::testing::_, ::testing::_, ::testing::_, ::testing::_, ::testing::_))
+    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, ::testing::_, ::testing::_, ::testing::_, ::testing::_))
         .WillOnce(::testing::Return(Core::ERROR_NONE));
     
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("connect"), _T("{\"deviceID\":\"456\",\"deviceType\":\"HEADPHONES\"}"), response));
@@ -335,7 +335,7 @@ TEST_F(BluetoothTest, connectWrapper_HIDDevice_Success)
 {
     EXPECT_CALL(*p_btmgrMock, BTRMGR_ConnectToDevice(::testing::_, ::testing::_, BTRMGR_DEVICE_OP_TYPE_HID))
         .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-    EXPECT_CALL(*p_persistentStoreMock, SetValue(::testing::_, ::testing::_, ::testing::_, ::testing::_, ::testing::_))
+    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, ::testing::_, ::testing::_, ::testing::_, ::testing::_))
         .WillOnce(::testing::Return(Core::ERROR_NONE));
     
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("connect"), _T("{\"deviceID\":\"789\",\"deviceType\":\"KEYBOARD\"}"), response));
@@ -345,7 +345,7 @@ TEST_F(BluetoothTest, connectWrapper_LEDevice_Success)
 {
     EXPECT_CALL(*p_btmgrMock, BTRMGR_ConnectToDevice(::testing::_, ::testing::_, BTRMGR_DEVICE_OP_TYPE_LE))
         .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-    EXPECT_CALL(*p_persistentStoreMock, SetValue(::testing::_, ::testing::_, ::testing::_, ::testing::_, ::testing::_))
+    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, ::testing::_, ::testing::_, ::testing::_, ::testing::_))
         .WillOnce(::testing::Return(Core::ERROR_NONE));
     
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("connect"), _T("{\"deviceID\":\"101\",\"deviceType\":\"LE TILE\"}"), response));
@@ -542,7 +542,7 @@ TEST_F(BluetoothTest, sendAudioPlaybackCommandWrapper_Play_Success)
 {
     EXPECT_CALL(*p_btmgrMock, BTRMGR_StartAudioStreamingIn(::testing::_, ::testing::_, BTRMGR_DEVICE_OP_TYPE_AUDIO_INPUT))
         .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-    EXPECT_CALL(*p_persistentStoreMock, SetValue(::testing::_, ::testing::_, ::testing::_, ::testing::_, ::testing::_))
+    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, ::testing::_, ::testing::_, ::testing::_, ::testing::_))
         .WillOnce(::testing::Return(Core::ERROR_NONE));
     
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("sendAudioPlaybackCommand"), _T("{\"deviceID\":\"123\",\"command\":\"PLAY\"}"), response));
@@ -795,7 +795,7 @@ TEST_F(BluetoothTest, setDeviceVolumeMuteInfoWrapper_Failed)
 
 TEST_F(BluetoothTest, setAutoConnectWrapper_Enable_Success)
 {
-    EXPECT_CALL(*p_persistentStoreMock, SetValue(::testing::_, ::testing::_, ::testing::_, ::testing::_, ::testing::_))
+    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, ::testing::_, ::testing::_, ::testing::_, ::testing::_))
         .WillOnce(::testing::Return(Core::ERROR_NONE));
     
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"), _T("{\"deviceID\":\"123\",\"enable\":true}"), response));
@@ -803,7 +803,7 @@ TEST_F(BluetoothTest, setAutoConnectWrapper_Enable_Success)
 
 TEST_F(BluetoothTest, setAutoConnectWrapper_Disable_Success)
 {
-    EXPECT_CALL(*p_persistentStoreMock, SetValue(::testing::_, ::testing::_, ::testing::_, ::testing::_, ::testing::_))
+    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, ::testing::_, ::testing::_, ::testing::_, ::testing::_))
         .WillOnce(::testing::Return(Core::ERROR_NONE));
     
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"), _T("{\"deviceID\":\"123\",\"enable\":false}"), response));
@@ -816,7 +816,7 @@ TEST_F(BluetoothTest, setAutoConnectWrapper_MissingParameters_Failure)
 
 TEST_F(BluetoothTest, getAutoConnectWrapper_Enabled_Success)
 {
-    EXPECT_CALL(*p_persistentStoreMock, GetValue(::testing::_, ::testing::_, ::testing::_, ::testing::_))
+    EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_, ::testing::_))
         .WillOnce(::testing::Invoke([](const string&, const string&, const string&, string& value) {
             value = "{\"123\":{\"autoConnectStatus\":1}}";
             return Core::ERROR_NONE;
@@ -828,7 +828,7 @@ TEST_F(BluetoothTest, getAutoConnectWrapper_Enabled_Success)
 
 TEST_F(BluetoothTest, getAutoConnectWrapper_Disabled_Success)
 {
-    EXPECT_CALL(*p_persistentStoreMock, GetValue(::testing::_, ::testing::_, ::testing::_, ::testing::_))
+    EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_, ::testing::_))
         .WillOnce(::testing::Invoke([](const string&, const string&, const string&, string& value) {
             value = "{\"123\":{\"autoConnectStatus\":0}}";
             return Core::ERROR_NONE;
@@ -845,7 +845,7 @@ TEST_F(BluetoothTest, getAutoConnectWrapper_MissingDeviceID_Failure)
 
 TEST_F(BluetoothTest, getAutoConnectWrapper_NotFound_Failure)
 {
-    EXPECT_CALL(*p_persistentStoreMock, GetValue(::testing::_, ::testing::_, ::testing::_, ::testing::_))
+    EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_, ::testing::_))
         .WillOnce(::testing::Return(Core::ERROR_GENERAL));
     
     EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("getAutoConnect"), _T("{\"deviceID\":\"999\"}"), response));
