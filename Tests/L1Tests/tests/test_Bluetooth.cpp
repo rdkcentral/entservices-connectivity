@@ -239,7 +239,7 @@ TEST_F(BluetoothTest, getDiscoveredDevicesWrapper_Success)
     discoveredDevices.m_numOfDevices = 1;
     discoveredDevices.m_deviceProperty[0].m_deviceHandle = 123;
     strcpy(discoveredDevices.m_deviceProperty[0].m_name, "TestDevice");
-    discoveredDevices.m_deviceProperty[0].m_deviceType = BTRMGR_DEVICE_TYPE_HEADSET;
+    discoveredDevices.m_deviceProperty[0].m_deviceType = BTRMGR_DEVICE_TYPE_WEARABLE_HEADSET;
     discoveredDevices.m_deviceProperty[0].m_isConnected = 0;
     discoveredDevices.m_deviceProperty[0].m_isPairedDevice = 0;
     
@@ -676,7 +676,7 @@ TEST_F(BluetoothTest, getDeviceInfoWrapper_Success)
     memset(&deviceProperty, 0, sizeof(deviceProperty));
     deviceProperty.m_deviceHandle = 123;
     strcpy(deviceProperty.m_name, "TestDevice");
-    deviceProperty.m_deviceType = BTRMGR_DEVICE_TYPE_HEADSET;
+    deviceProperty.m_deviceType = BTRMGR_DEVICE_TYPE_WEARABLE_HEADSET;
     deviceProperty.m_vendorID = 9999;
     strcpy(deviceProperty.m_deviceAddress, "00:11:22:33:44:55");
     deviceProperty.m_signalLevel = -50;
