@@ -113,90 +113,126 @@ double Calculator::sqrtValue(double a) {
  
 uint32_t Calculator::getApiVersionNumber(const JsonObject& parameters, JsonObject& response)
 {
-    UNUSED(parameters);
+    if (!parameters.IsSet()) {
+        response["success"] = false;
+        response["message"] = "No parameters provided";
+        return Core::ERROR_BAD_REQUEST;
+    }
     response["version"] = m_apiVersionNumber;
-    returnResponse(true);
+    response["success"] = true;
+    return Core::ERROR_NONE;
 }
  
 uint32_t Calculator::addWrapper(const JsonObject& parameters, JsonObject& response)
 {
-    double a, b;
-    getNumberParameterObject(parameters, "a", a);
-    getNumberParameterObject(parameters, "b", b);
- 
+    if (!parameters.HasLabel("a") || !parameters.HasLabel("b")) {
+        response["success"] = false;
+        response["message"] = "Missing parameters a or b";
+        return Core::ERROR_BAD_REQUEST;
+    }
+    double a = parameters["a"].Number();
+    double b = parameters["b"].Number();
     response["result"] = add(a, b);
-    returnResponse(true);
+    response["success"] = true;
+    return Core::ERROR_NONE;
 }
  
 uint32_t Calculator::subtractWrapper(const JsonObject& parameters, JsonObject& response)
 {
-    double a, b;
-    getNumberParameterObject(parameters, "a", a);
-    getNumberParameterObject(parameters, "b", b);
- 
+    if (!parameters.HasLabel("a") || !parameters.HasLabel("b")) {
+        response["success"] = false;
+        response["message"] = "Missing parameters a or b";
+        return Core::ERROR_BAD_REQUEST;
+    }
+    double a = parameters["a"].Number();
+    double b = parameters["b"].Number();
     response["result"] = subtract(a, b);
-    returnResponse(true);
+    response["success"] = true;
+    return Core::ERROR_NONE;
 }
  
 uint32_t Calculator::multiplyWrapper(const JsonObject& parameters, JsonObject& response)
 {
-    double a, b;
-    getNumberParameterObject(parameters, "a", a);
-    getNumberParameterObject(parameters, "b", b);
- 
+    if (!parameters.HasLabel("a") || !parameters.HasLabel("b")) {
+        response["success"] = false;
+        response["message"] = "Missing parameters a or b";
+        return Core::ERROR_BAD_REQUEST;
+    }
+    double a = parameters["a"].Number();
+    double b = parameters["b"].Number();
     response["result"] = multiply(a, b);
-    returnResponse(true);
+    response["success"] = true;
+    return Core::ERROR_NONE;
 }
  
 uint32_t Calculator::divideWrapper(const JsonObject& parameters, JsonObject& response)
 {
-    double a, b;
-    getNumberParameterObject(parameters, "a", a);
-    getNumberParameterObject(parameters, "b", b);
- 
-    if (b == 0) {
-        returnResponse(false);
+    if (!parameters.HasLabel("a") || !parameters.HasLabel("b")) {
+        response["success"] = false;
+        response["message"] = "Missing parameters a or b";
+        return Core::ERROR_BAD_REQUEST;
     }
- 
+    double a = parameters["a"].Number();
+    double b = parameters["b"].Number();
+    if (b == 0) {
+        response["success"] = false;
+        response["message"] = "Division by zero";
+        return Core::ERROR_BAD_REQUEST;
+    }
     response["result"] = divide(a, b);
-    returnResponse(true);
+    response["success"] = true;
+    return Core::ERROR_NONE;
 }
  
 uint32_t Calculator::modulusWrapper(const JsonObject& parameters, JsonObject& response)
 {
-    int a, b;
-    getNumberParameterObject(parameters, "a", a);
-    getNumberParameterObject(parameters, "b", b);
- 
-    if (b == 0) {
-        returnResponse(false);
+    if (!parameters.HasLabel("a") || !parameters.HasLabel("b")) {
+        response["success"] = false;
+        response["message"] = "Missing parameters a or b";
+        return Core::ERROR_BAD_REQUEST;
     }
- 
+    int a = parameters["a"].Number();
+    int b = parameters["b"].Number();
+    if (b == 0) {
+        response["success"] = false;
+        response["message"] = "Modulo by zero";
+        return Core::ERROR_BAD_REQUEST;
+    }
     response["result"] = modulus(a, b);
-    returnResponse(true);
+    response["success"] = true;
+    return Core::ERROR_NONE;
 }
  
 uint32_t Calculator::powerWrapper(const JsonObject& parameters, JsonObject& response)
 {
-    double a, b;
-    getNumberParameterObject(parameters, "a", a);
-    getNumberParameterObject(parameters, "b", b);
- 
+    if (!parameters.HasLabel("a") || !parameters.HasLabel("b")) {
+        response["success"] = false;
+        response["message"] = "Missing parameters a or b";
+        return Core::ERROR_BAD_REQUEST;
+    }
+    double a = parameters["a"].Number();
+    double b = parameters["b"].Number();
     response["result"] = power(a, b);
-    returnResponse(true);
+    response["success"] = true;
+    return Core::ERROR_NONE;
 }
  
 uint32_t Calculator::sqrtWrapper(const JsonObject& parameters, JsonObject& response)
 {
-    double a;
-    getNumberParameterObject(parameters, "a", a);
- 
-    if (a < 0) {
-        returnResponse(false);
+    if (!parameters.HasLabel("a")) {
+        response["success"] = false;
+        response["message"] = "Missing parameter a";
+        return Core::ERROR_BAD_REQUEST;
     }
- 
+    double a = parameters["a"].Number();
+    if (a < 0) {
+        response["success"] = false;
+        response["message"] = "Square root of negative number";
+        return Core::ERROR_BAD_REQUEST;
+    }
     response["result"] = sqrtValue(a);
-    returnResponse(true);
+    response["success"] = true;
+    return Core::ERROR_NONE;
 }
  
 } // Plugin
