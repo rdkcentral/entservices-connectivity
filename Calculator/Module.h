@@ -10,7 +10,7 @@
 #pragma once
 
 #ifndef MODULE_NAME
-#define MODULE_NAME Plugin_Calc
+#define MODULE_NAME Plugin_Calculator
 #endif
 
 #include <plugins/plugins.h>
