@@ -3,12 +3,12 @@
 set(PLUGIN_NAME Calculator)
 set(MODULE_NAME ${NAMESPACE}${PLUGIN_NAME})
 
-set(PLUGIN_CALC_STARTUPORDER "" CACHE STRING "To configure startup order of Calculator plugin")
+set(PLUGIN_CALCULATOR_STARTUPORDER "" CACHE STRING "To configure startup order of Calculator plugin")
 
 find_package(${NAMESPACE}Plugins REQUIRED)
 
 add_library(${MODULE_NAME} SHARED
-        Calc.cpp
+        Calculator.cpp
         Module.cpp
 )
 

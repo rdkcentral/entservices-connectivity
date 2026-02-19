@@ -1,3 +1,5 @@
+// This file was renamed from Calc.h to Calculator.h for naming consistency.
+// The content is identical to the updated Calc.h.
 /**
  * Calculator Plugin
  */
@@ -10,12 +12,12 @@
 namespace WPEFramework {
 namespace Plugin {
 
-class Calc : public PluginHost::IPlugin, public PluginHost::JSONRPC {
+class Calculator : public PluginHost::IPlugin, public PluginHost::JSONRPC {
 
 private:
     // Prevent copy
-    Calc(const Calc&) = delete;
-    Calc& operator=(const Calc&) = delete;
+    Calculator(const Calculator&) = delete;
+    Calculator& operator=(const Calculator&) = delete;
 
     // JSONRPC Registered Methods
     uint32_t getApiVersionNumber(const JsonObject& parameters, JsonObject& response);
@@ -50,14 +52,14 @@ public:
     static const string METHOD_SQRT;
     static const string METHOD_GET_API_VERSION_NUMBER;
 
-    Calc();
-    virtual ~Calc();
+    Calculator();
+    virtual ~Calculator();
 
     virtual const string Initialize(PluginHost::IShell* shell) override { return {}; }
     virtual void Deinitialize(PluginHost::IShell* service) override;
     virtual string Information() const override;
 
-    BEGIN_INTERFACE_MAP(Calc)
+    BEGIN_INTERFACE_MAP(Calculator)
         INTERFACE_ENTRY(PluginHost::IPlugin)
         INTERFACE_ENTRY(PluginHost::IDispatcher)
     END_INTERFACE_MAP
