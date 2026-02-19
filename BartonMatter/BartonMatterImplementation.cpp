@@ -1263,7 +1263,7 @@ void BartonMatterImplementation::OnSessionFailure(const chip::ScopedNodeId & pee
 
             return Core::ERROR_NONE;
         }
-	Core::hresult BartonMatterImplementation OnVoiceCommandReceived(const std::string& payload /* @in */)
+	Core::hresult BartonMatterImplementation::OnVoiceCommandReceived(const std::string& payload /* @in */)
 	{
 		LOGWARN("[BartonMatter Plugin] Received smart home voice command!");
 		std::cout<<"[TTT] BartonMatter: "<<payload<<"\n";
