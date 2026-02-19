@@ -51,7 +51,8 @@ protected:
     DECL_CORE_JSONRPC_CONX connection;
     Core::JSONRPC::Message message;
     string response;
-    StoreMock  *p_storeMock = nullptr;
+    StoreMock *p_storeMock = nullptr;
+    BtmgrImplMock *p_btmgrMock = nullptr;
     NiceMock<COMLinkMock> comLinkMock;
     NiceMock<ServiceMock> service;
     PLUGINHOST_DISPATCHER* dispatcher;
@@ -68,6 +69,7 @@ protected:
         TEST_LOG("BluetoothTest ctor");
 
         p_storeMock  = new NiceMock <StoreMock>;
+        p_btmgrMock = new NiceMock<BtmgrImplMock>;
 
         ON_CALL(service, COMLink())
             .WillByDefault(::testing::Invoke(
