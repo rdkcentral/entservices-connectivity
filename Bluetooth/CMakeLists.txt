@@ -28,9 +28,11 @@ add_library(${MODULE_NAME} SHARED
         Module.cpp
 )
 
-set_target_properties(${MODULE_NAME} PROPERTIES
-        CXX_STANDARD 11
-        CXX_STANDARD_REQUIRED YES)
+# set_target_properties(${MODULE_NAME} PROPERTIES
+#         CXX_STANDARD 11
+#         CXX_STANDARD_REQUIRED YES)
+set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 list(APPEND CMAKE_MODULE_PATH
         "${CMAKE_CURRENT_SOURCE_DIR}/cmake/")
