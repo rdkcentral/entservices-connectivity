@@ -67,10 +67,10 @@ Calculator::~Calculator() {}
  
 void Calculator::Deinitialize(PluginHost::IShell* service)
 {
-    UNUSED(service);
+    //nothing to deinitialize
+{
+    // Nothing to do here
 }
- 
-string Calculator::Information() const
 {
     return string("{\"service\": \"") + SERVICE_NAME + "\"}";
 }
