@@ -292,7 +292,7 @@ TEST_F(BluetoothTest, getConnectedDevicesWrapper_Success)
     connectedDevices.m_numOfDevices = 1;
     connectedDevices.m_deviceProperty[0].m_deviceHandle = 789;
     strcpy(connectedDevices.m_deviceProperty[0].m_name, "ConnectedDevice");
-    connectedDevices.m_deviceProperty[0].m_deviceType = BTRMGR_DEVICE_TYPE_KEYBOARD;
+    connectedDevices.m_deviceProperty[0].m_deviceType = BTRMGR_DEVICE_TYPE_HEADPHONES;
     connectedDevices.m_deviceProperty[0].m_powerStatus = 1;
     
     EXPECT_CALL(*p_btmgrMock, BTRMGR_GetConnectedDevices(::testing::_, ::testing::_))
