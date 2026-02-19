@@ -1,2 +1,6 @@
 # Renamed from Calc.conf.in for naming consistency.
 # ...existing configuration content...
+precondition = ["Platform"]
+callsign = "org.rdk.Calculator"
+autostart = "true"
+startuporder = "@PLUGIN_CALCULATOR_STARTUPORDER@"
