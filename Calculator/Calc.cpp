@@ -31,10 +31,8 @@ SERVICE_REGISTRATION(Calc,
                      API_VERSION_NUMBER_MINOR,
                      API_VERSION_NUMBER_PATCH);
 
-// Service Name
 const string Calc::SERVICE_NAME = "org.rdk.Calculator";
 
-// Method Names
 const string Calc::METHOD_ADD = "add";
 const string Calc::METHOD_SUBTRACT = "subtract";
 const string Calc::METHOD_MULTIPLY = "multiply";
@@ -62,8 +60,6 @@ Calc::Calc()
 
 Calc::~Calc() {}
 
-////////////////////////////////////////////////////////////
-
 void Calc::Deinitialize(PluginHost::IShell* service)
 {
     UNUSED(service);
@@ -75,138 +71,118 @@ string Calc::Information() const
 }
 
 ////////////////////////////////////////////////////////////
-//////////////////// INTERNAL LOGIC ////////////////////////
+// INTERNAL LOGIC
 ////////////////////////////////////////////////////////////
 
-double Calc::add(double a, double b) {
-    return a + b;
-}
-
-double Calc::subtract(double a, double b) {
-    return a - b;
-}
-
-double Calc::multiply(double a, double b) {
-    return a * b;
-}
-
-double Calc::divide(double a, double b) {
-    return (b != 0) ? a / b : 0;
-}
-
-int Calc::modulus(int a, int b) {
-    return (b != 0) ? a % b : 0;
-}
-
-double Calc::power(double a, double b) {
-    return std::pow(a, b);
-}
-
-double Calc::sqrtValue(double a) {
-    return std::sqrt(a);
-}
+double Calc::add(double a, double b) { return a + b; }
+double Calc::subtract(double a, double b) { return a - b; }
+double Calc::multiply(double a, double b) { return a * b; }
+double Calc::divide(double a, double b) { return a / b; }
+int Calc::modulus(int a, int b) { return a % b; }
+double Calc::power(double a, double b) { return std::pow(a, b); }
+double Calc::sqrtValue(double a) { return std::sqrt(a); }
 
 ////////////////////////////////////////////////////////////
-//////////////////// WRAPPER METHODS ///////////////////////
+// WRAPPERS (CORRECT THUNDER STYLE)
 ////////////////////////////////////////////////////////////
 
 uint32_t Calc::getApiVersionNumber(const JsonObject& parameters, JsonObject& response)
 {
     UNUSED(parameters);
     response["version"] = m_apiVersionNumber;
-    returnResponse(true);
+    return Core::ERROR_NONE;
 }
 
 uint32_t Calc::addWrapper(const JsonObject& parameters, JsonObject& response)
 {
     if (!parameters.HasLabel("a") || !parameters.HasLabel("b"))
-        returnResponse(false);
+        return Core::ERROR_GENERAL;
 
     double a = parameters["a"].Number();
     double b = parameters["b"].Number();
 
     response["result"] = add(a, b);
-    returnResponse(true);
+    return Core::ERROR_NONE;
 }
 
 uint32_t Calc::subtractWrapper(const JsonObject& parameters, JsonObject& response)
 {
     if (!parameters.HasLabel("a") || !parameters.HasLabel("b"))
-        returnResponse(false);
+        return Core::ERROR_GENERAL;
 
     double a = parameters["a"].Number();
     double b = parameters["b"].Number();
 
     response["result"] = subtract(a, b);
-    returnResponse(true);
+    return Core::ERROR_NONE;
 }
 
 uint32_t Calc::multiplyWrapper(const JsonObject& parameters, JsonObject& response)
 {
     if (!parameters.HasLabel("a") || !parameters.HasLabel("b"))
-        returnResponse(false);
+        return Core::ERROR_GENERAL;
 
     double a = parameters["a"].Number();
     double b = parameters["b"].Number();
 
     response["result"] = multiply(a, b);
-    returnResponse(true);
+    return Core::ERROR_NONE;
 }
 
 uint32_t Calc::divideWrapper(const JsonObject& parameters, JsonObject& response)
 {
     if (!parameters.HasLabel("a") || !parameters.HasLabel("b"))
-        returnResponse(false);
+        return Core::ERROR_GENERAL;
 
     double a = parameters["a"].Number();
     double b = parameters["b"].Number();
 
     if (b == 0)
-        returnResponse(false);
+        return Core::ERROR_GENERAL;
 
     response["result"] = divide(a, b);
-    returnResponse(true);
+    return Core::ERROR_NONE;
 }
 
 uint32_t Calc::modulusWrapper(const JsonObject& parameters, JsonObject& response)
 {
     if (!parameters.HasLabel("a") || !parameters.HasLabel("b"))
-        returnResponse(false);
+        return Core::ERROR_GENERAL;
 
     int a = static_cast<int>(parameters["a"].Number());
     int b = static_cast<int>(parameters["b"].Number());
 
     if (b == 0)
-        returnResponse(false);
+        return Core::ERROR_GENERAL;
 
     response["result"] = modulus(a, b);
-    returnResponse(true);
+    return Core::ERROR_NONE;
 }
 
 uint32_t Calc::powerWrapper(const JsonObject& parameters, JsonObject& response)
 {
     if (!parameters.HasLabel("a") || !parameters.HasLabel("b"))
-        returnResponse(false);
+        return Core::ERROR_GENERAL;
 
     double a = parameters["a"].Number();
     double b = parameters["b"].Number();
 
     response["result"] = power(a, b);
-    returnResponse(true);
+    return Core::ERROR_NONE;
 }
 
 uint32_t Calc::sqrtWrapper(const JsonObject& parameters, JsonObject& response)
 {
     if (!parameters.HasLabel("a"))
-        returnResponse(false);
+        return Core::ERROR_GENERAL;
 
     double a = parameters["a"].Number();
 
     if (a < 0)
-        returnResponse(false);
+        return Core::ERROR_GENERAL;
 
     response["result"] = sqrtValue(a);
-    returnResponse(true);
+    return Core::ERROR_NONE;
 }
 
 } // Plugin
