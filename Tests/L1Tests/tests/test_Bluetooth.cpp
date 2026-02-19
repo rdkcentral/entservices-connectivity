@@ -22,6 +22,7 @@
 #include <fstream>
 #include "Bluetooth.h"
 #include "StoreMock.h"
+#include "btmgrMock.h"
 #include "PowerManagerMock.h"
 
 #include "ServiceMock.h"
