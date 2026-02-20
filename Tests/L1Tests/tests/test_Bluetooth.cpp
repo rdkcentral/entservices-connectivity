@@ -68,6 +68,7 @@ protected:
             2, Core::Thread::DefaultStackSize(), 16))
     {
         TEST_LOG("BluetoothTest ctor");
+        TEST_LOG("*** DEBUG: BluetoothTest ctor");
 
         p_storeMock  = new NiceMock <StoreMock>;
         p_btmgrMock = new NiceMock<BtmgrImplMock>;
@@ -89,11 +90,14 @@ protected:
         dispatcher->Activate(&service);
 
         EXPECT_EQ(string(""), plugin->Initialize(&service));
+
+        TEST_LOG("*** DEBUG: BluetoothTest ctor: exit");
     }
 
     virtual ~BluetoothTest() override
     {
         TEST_LOG("BluetoothTest xtor");
+        TEST_LOG("*** DEBUG: BluetoothTest xtor");
 
         plugin->Deinitialize(&service);
 
@@ -104,6 +108,8 @@ protected:
         workerPool.Release();
 
         PluginHost::IFactories::Assign(nullptr);
+
+        TEST_LOG("*** DEBUG: BluetoothTest xtor: exit");
     }
 
     virtual void SetUp()
