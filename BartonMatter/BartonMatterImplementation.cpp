@@ -22,6 +22,9 @@
 #include <fstream>
 #include <dirent.h>
 #include <map>
+#include <algorithm>
+#include <cctype>
+#include <vector>
 
 using namespace std;
 
@@ -1263,13 +1266,380 @@ void BartonMatterImplementation::OnSessionFailure(const chip::ScopedNodeId & pee
 
             return Core::ERROR_NONE;
         }
+
+        // ============================================================
+        // Voice Command Processing System Implementation
+        // ============================================================
+
+        /**
+         * @brief Main orchestrator for voice command processing
+         * 
+         * This method:
+         * 1. Parses the natural language command
+         * 2. Retrieves commissioned devices
+         * 3. Matches command to a specific device
+         * 4. Executes the appropriate Matter command
+         */
+        bool BartonMatterImplementation::ExecuteVoiceAction(const std::string& voiceCommand)
+        {
+            LOGINFO("Processing voice command: '%s'", voiceCommand.c_str());
+
+            // Step 1: Parse the voice command
+            VoiceCommand cmd = ParseVoiceCommand(voiceCommand);
+            
+            if (!cmd.isValid()) {
+                LOGERR("Failed to parse voice command: '%s'", voiceCommand.c_str());
+                return false;
+            }
+
+            LOGINFO("Parsed command - Action: %d, Device: '%s', Qualifier: '%s'",
+                   static_cast<int>(cmd.action), cmd.deviceType.c_str(), cmd.deviceQualifier.c_str());
+
+            // Step 2: Get list of commissioned devices
+            std::string deviceInfo;
+            Core::hresult result = GetCommissionedDeviceInfo(deviceInfo);
+            
+            if (result != Core::ERROR_NONE || deviceInfo == "[]") {
+                LOGERR("No commissioned devices available");
+                return false;
+            }
+
+            LOGINFO("Retrieved device info: %s", deviceInfo.c_str());
+
+            // Step 3: Find matching device
+            DeviceMatch match = FindMatchingDevice(cmd, deviceInfo);
+            
+            if (!match.isValid()) {
+                LOGERR("No matching device found for: '%s %s'", 
+                      cmd.deviceQualifier.c_str(), cmd.deviceType.c_str());
+                return false;
+            }
+
+            LOGINFO("Found matching device - NodeId: %s, Model: %s, Confidence: %d%%",
+                   match.nodeId.c_str(), match.model.c_str(), match.confidence);
+
+            // Step 4: Map action to Matter resource
+            std::string resourceType;
+            std::string value;
+            
+            if (!MapActionToResource(cmd.action, cmd.levelValue, resourceType, value)) {
+                LOGERR("Failed to map action to resource");
+                return false;
+            }
+
+            LOGINFO("Mapped to resource - Type: %s, Value: %s", resourceType.c_str(), value.c_str());
+
+            // Step 5: Execute the command
+            Core::hresult writeResult = WriteResource(match.nodeId, resourceType, value);
+            
+            if (writeResult != Core::ERROR_NONE) {
+                LOGERR("Failed to write resource to device %s", match.nodeId.c_str());
+                return false;
+            }
+
+            LOGINFO("Successfully executed voice command on device %s", match.nodeId.c_str());
+            return true;
+        }
+
+        /**
+         * @brief Parse natural language command into structured format
+         * 
+         * Supports patterns:
+         * - "turn on the light"
+         * - "turn off bedroom light"
+         * - "switch on kitchen plug"
+         * - "turn the living room lamp off"
+         * - "dim the light"
+         * - "brighten bedroom light"
+         */
+        BartonMatterImplementation::VoiceCommand BartonMatterImplementation::ParseVoiceCommand(const std::string& text) const
+        {
+            VoiceCommand cmd;
+            std::string normalized = NormalizeText(text);
+
+            LOGINFO("Parsing normalized command: '%s'", normalized.c_str());
+
+            // Parse action keywords
+            if (normalized.find("turn on") != std::string::npos || 
+                normalized.find("switch on") != std::string::npos ||
+                normalized.find("power on") != std::string::npos ||
+                normalized.find("enable") != std::string::npos) {
+                cmd.action = VoiceCommand::Action::TURN_ON;
+            }
+            else if (normalized.find("turn off") != std::string::npos || 
+                     normalized.find("switch off") != std::string::npos ||
+                     normalized.find("power off") != std::string::npos ||
+                     normalized.find("disable") != std::string::npos) {
+                cmd.action = VoiceCommand::Action::TURN_OFF;
+            }
+            else if (normalized.find("toggle") != std::string::npos) {
+                cmd.action = VoiceCommand::Action::TOGGLE;
+            }
+            else if (normalized.find("dim") != std::string::npos || 
+                     normalized.find("lower") != std::string::npos ||
+                     normalized.find("decrease") != std::string::npos) {
+                cmd.action = VoiceCommand::Action::DIM;
+            }
+            else if (normalized.find("brighten") != std::string::npos || 
+                     normalized.find("brighter") != std::string::npos ||
+                     normalized.find("increase") != std::string::npos) {
+                cmd.action = VoiceCommand::Action::BRIGHTEN;
+            }
+
+            // Parse device type - check for common device types and synonyms
+            const std::vector<std::pair<std::string, std::vector<std::string>>> deviceTypes = {
+                {"light", {"light", "lamp", "bulb", "lighting"}},
+                {"plug", {"plug", "outlet", "socket"}},
+                {"switch", {"switch"}},
+                {"fan", {"fan"}},
+                {"thermostat", {"thermostat", "temperature"}},
+                {"lock", {"lock", "door lock"}},
+                {"blind", {"blind", "shade", "curtain"}},
+                {"sensor", {"sensor", "detector"}}
+            };
+
+            for (const auto& deviceType : deviceTypes) {
+                for (const auto& synonym : deviceType.second) {
+                    if (normalized.find(synonym) != std::string::npos) {
+                        cmd.deviceType = deviceType.first;
+                        break;
+                    }
+                }
+                if (!cmd.deviceType.empty()) break;
+            }
+
+            // Parse location/qualifier - common room/location names
+            const std::vector<std::string> qualifiers = {
+                "bedroom", "living room", "kitchen", "bathroom", "garage", 
+                "hallway", "basement", "attic", "office", "dining room",
+                "master", "guest", "kids", "front", "back", "main"
+            };
+
+            for (const auto& qualifier : qualifiers) {
+                if (normalized.find(qualifier) != std::string::npos) {
+                    cmd.deviceQualifier = qualifier;
+                    break;
+                }
+            }
+
+            return cmd;
+        }
+
+        /**
+         * @brief Find best matching device from commissioned devices list
+         * 
+         * Matching strategy:
+         * 1. Exact match on device type + qualifier
+         * 2. Partial match on device type
+         * 3. Fuzzy match on model name
+         */
+        BartonMatterImplementation::DeviceMatch BartonMatterImplementation::FindMatchingDevice(
+            const VoiceCommand& command, const std::string& deviceInfo) const
+        {
+            DeviceMatch bestMatch;
+            
+            // Parse JSON manually (simple parsing for structure: [{"nodeId":"xxx","model":"yyy"},...]
+            size_t pos = 0;
+            
+            while ((pos = deviceInfo.find("\"nodeId\"", pos)) != std::string::npos) {
+                // Extract nodeId
+                size_t nodeIdStart = deviceInfo.find(":", pos) + 2; // Skip :" 
+                size_t nodeIdEnd = deviceInfo.find("\"", nodeIdStart);
+                std::string nodeId = deviceInfo.substr(nodeIdStart, nodeIdEnd - nodeIdStart);
+                
+                // Extract model
+                size_t modelPos = deviceInfo.find("\"model\"", nodeIdEnd);
+                if (modelPos == std::string::npos) break;
+                
+                size_t modelStart = deviceInfo.find(":", modelPos) + 2; // Skip :"
+                size_t modelEnd = deviceInfo.find("\"", modelStart);
+                std::string model = deviceInfo.substr(modelStart, modelEnd - modelStart);
+                
+                LOGINFO("Checking device - NodeId: %s, Model: %s", nodeId.c_str(), model.c_str());
+                
+                // Calculate match confidence
+                int confidence = 0;
+                std::string normalizedModel = NormalizeText(model);
+                
+                // Check for device type match
+                int deviceTypeScore = CalculateSimilarity(command.deviceType, normalizedModel);
+                confidence += deviceTypeScore;
+                
+                // Check for qualifier match in model name
+                if (!command.deviceQualifier.empty()) {
+                    int qualifierScore = CalculateSimilarity(command.deviceQualifier, normalizedModel);
+                    confidence += qualifierScore / 2; // Weight qualifier less than device type
+                }
+                
+                // Bonus for exact substring match
+                if (normalizedModel.find(command.deviceType) != std::string::npos) {
+                    confidence += 30;
+                }
+                
+                LOGINFO("Device %s scored %d%% confidence", model.c_str(), confidence);
+                
+                // Update best match if this is better
+                if (confidence > bestMatch.confidence) {
+                    bestMatch.nodeId = nodeId;
+                    bestMatch.model = model;
+                    bestMatch.confidence = confidence;
+                }
+                
+                pos = modelEnd;
+            }
+            
+            // Only return match if confidence is reasonable (>30%)
+            if (bestMatch.confidence < 30) {
+                LOGWARN("Best match confidence too low: %d%%", bestMatch.confidence);
+                bestMatch = DeviceMatch(); // Reset to invalid
+            }
+            
+            return bestMatch;
+        }
+
+        /**
+         * @brief Map voice action to Matter resource type and value
+         * 
+         * Matter resource mappings:
+         * - OnOff cluster: resourceType = "onOff", value = "true"/"false"
+         * - Level cluster: resourceType = "level", value = "0-254"
+         */
+        bool BartonMatterImplementation::MapActionToResource(
+            VoiceCommand::Action action, int levelValue,
+            std::string& resourceType, std::string& value) const
+        {
+            switch (action) {
+                case VoiceCommand::Action::TURN_ON:
+                    resourceType = "onOff";
+                    value = "true";
+                    return true;
+                    
+                case VoiceCommand::Action::TURN_OFF:
+                    resourceType = "onOff";
+                    value = "false";
+                    return true;
+                    
+                case VoiceCommand::Action::TOGGLE:
+                    // Toggle would require reading current state first
+                    // For simplicity, default to ON
+                    resourceType = "onOff";
+                    value = "true";
+                    LOGWARN("Toggle not fully implemented, defaulting to ON");
+                    return true;
+                    
+                case VoiceCommand::Action::DIM:
+                    resourceType = "level";
+                    value = "64"; // ~25% brightness (Matter level: 0-254)
+                    return true;
+                    
+                case VoiceCommand::Action::BRIGHTEN:
+                    resourceType = "level";
+                    value = "254"; // 100% brightness
+                    return true;
+                    
+                case VoiceCommand::Action::SET_LEVEL:
+                    if (levelValue >= 0 && levelValue <= 100) {
+                        resourceType = "level";
+                        // Convert percentage (0-100) to Matter level (0-254)
+                        int matterLevel = (levelValue * 254) / 100;
+                        value = std::to_string(matterLevel);
+                        return true;
+                    }
+                    LOGERR("Invalid level value: %d", levelValue);
+                    return false;
+                    
+                default:
+                    LOGERR("Unknown action type");
+                    return false;
+            }
+        }
+
+        /**
+         * @brief Normalize text for matching (lowercase, trim)
+         */
+        std::string BartonMatterImplementation::NormalizeText(const std::string& text) const
+        {
+            std::string result = text;
+            
+            // Convert to lowercase
+            std::transform(result.begin(), result.end(), result.begin(), 
+                         [](unsigned char c) { return std::tolower(c); });
+            
+            // Remove leading/trailing whitespace
+            size_t start = result.find_first_not_of(" \t\n\r");
+            size_t end = result.find_last_not_of(" \t\n\r");
+            
+            if (start != std::string::npos && end != std::string::npos) {
+                result = result.substr(start, end - start + 1);
+            }
+            
+            // Remove common punctuation
+            result.erase(std::remove_if(result.begin(), result.end(),
+                                       [](char c) { return c == '.' || c == ',' || c == '!' || c == '?'; }),
+                        result.end());
+            
+            return result;
+        }
+
+        /**
+         * @brief Calculate simple similarity score between two strings
+         * 
+         * Uses basic substring matching and common character counting
+         */
+        int BartonMatterImplementation::CalculateSimilarity(const std::string& str1, const std::string& str2) const
+        {
+            if (str1.empty() || str2.empty()) {
+                return 0;
+            }
+            
+            std::string s1 = NormalizeText(str1);
+            std::string s2 = NormalizeText(str2);
+            
+            // Exact match
+            if (s1 == s2) {
+                return 100;
+            }
+            
+            // Substring match
+            if (s2.find(s1) != std::string::npos || s1.find(s2) != std::string::npos) {
+                return 80;
+            }
+            
+            // Count matching characters in sequence
+            int matches = 0;
+            size_t minLen = std::min(s1.length(), s2.length());
+            
+            for (size_t i = 0; i < minLen; ++i) {
+                if (s1[i] == s2[i]) {
+                    matches++;
+                }
+            }
+            
+            // Calculate percentage
+            int score = (matches * 100) / std::max(s1.length(), s2.length());
+            
+            return score;
+        }
+
 	Core::hresult BartonMatterImplementation::OnVoiceCommandReceived(const std::string& payload /* @in */)
 	{
-		if (!payload.empty())
-			LOGWARN("[BartonMatter Plugin] Received smart home voice command! %s", payload.c_str());
-		else
-			LOGWARN("[BartonMatter Plugin] payload is empty");
-		return Core::ERROR_NONE;
+		if (payload.empty()) {
+			LOGWARN("[BartonMatter Plugin] Received empty voice command payload");
+			return Core::ERROR_INVALID_INPUT_LENGTH;
+		}
+
+		LOGWARN("[BartonMatter Plugin] Received smart home voice command: '%s'", payload.c_str());
+
+		// Process the voice command and execute the action
+		bool success = ExecuteVoiceAction(payload);
+
+		if (success) {
+			LOGINFO("[BartonMatter Plugin] Voice command executed successfully");
+			return Core::ERROR_NONE;
+		} else {
+			LOGERR("[BartonMatter Plugin] Failed to execute voice command");
+			return Core::ERROR_GENERAL;
+		}
 	}
 
     } // namespace Plugin

@@ -137,6 +137,94 @@ namespace WPEFramework
                                     const chip::SessionHandle & sessionHandle,
                                     chip::NodeId localNodeId,
                                     const std::vector<chip::EndpointId> & endpoints);
+
+            // ============================================================
+            // Voice Command Processing System
+            // ============================================================
+            
+            /**
+             * @brief Structure representing a parsed voice command
+             */
+            struct VoiceCommand {
+                enum class Action {
+                    UNKNOWN,
+                    TURN_ON,
+                    TURN_OFF,
+                    TOGGLE,
+                    DIM,
+                    BRIGHTEN,
+                    SET_LEVEL
+                };
+                
+                Action action = Action::UNKNOWN;
+                std::string deviceType;        // e.g., "light", "plug", "outlet"
+                std::string deviceQualifier;   // e.g., "bedroom", "kitchen"
+                int levelValue = -1;           // For SET_LEVEL actions (0-100)
+                
+                bool isValid() const {
+                    return action != Action::UNKNOWN && !deviceType.empty();
+                }
+            };
+            
+            /**
+             * @brief Structure representing a matched device from commissioned list
+             */
+            struct DeviceMatch {
+                std::string nodeId;
+                std::string model;
+                int confidence = 0;  // Match confidence score (0-100)
+                
+                bool isValid() const {
+                    return !nodeId.empty() && confidence > 0;
+                }
+            };
+            
+            /**
+             * @brief Main handler that orchestrates voice command to device action
+             * @param voiceCommand The natural language command from user
+             * @return true if command was successfully processed and executed
+             */
+            bool ExecuteVoiceAction(const std::string& voiceCommand);
+            
+            /**
+             * @brief Parse natural language command into structured VoiceCommand
+             * @param text The voice command text
+             * @return Parsed VoiceCommand structure
+             */
+            VoiceCommand ParseVoiceCommand(const std::string& text) const;
+            
+            /**
+             * @brief Find best matching device from commissioned devices
+             * @param command The parsed voice command
+             * @param deviceInfo JSON string from GetCommissionedDeviceInfo()
+             * @return DeviceMatch with nodeId and confidence score
+             */
+            DeviceMatch FindMatchingDevice(const VoiceCommand& command, const std::string& deviceInfo) const;
+            
+            /**
+             * @brief Map voice action to Matter resource type and value
+             * @param action The voice command action
+             * @param resourceType Output parameter for Matter resource type
+             * @param value Output parameter for resource value
+             * @return true if mapping succeeded
+             */
+            bool MapActionToResource(VoiceCommand::Action action, int levelValue,
+                                   std::string& resourceType, std::string& value) const;
+            
+            /**
+             * @brief Normalize text for matching (lowercase, trim, remove punctuation)
+             * @param text Input text
+             * @return Normalized text
+             */
+            std::string NormalizeText(const std::string& text) const;
+            
+            /**
+             * @brief Calculate similarity score between two strings
+             * @param str1 First string
+             * @param str2 Second string
+             * @return Similarity score (0-100)
+             */
+            int CalculateSimilarity(const std::string& str1, const std::string& str2) const;
         };
     } // namespace Plugin
 } // namespace WPEFramework
