@@ -1,0 +1,95 @@
+diff --git a/0001-Update-Calculator.cpp.patch b/0001-Update-Calculator.cpp.patch
+new file mode 100644
+index 0000000..c80c481
+--- /dev/null
++++ b/0001-Update-Calculator.cpp.patch
+@@ -0,0 +1,51 @@
++From 9235a4edb3d88ed73f2c6f41673a8a6f9832acf1 Mon Sep 17 00:00:00 2001
++From: rganga607 <RevanthReddy_Gangadasari@comcast.com>
++Date: Fri, 20 Feb 2026 15:54:50 +0530
++Subject: [PATCH] Update Calculator.cpp
++
++Added array as Parameter to the addition functionality.
++---
++ Calculator/Calculator.cpp | 26 +++++++++++++++++++-------
++ 1 file changed, 19 insertions(+), 7 deletions(-)
++
++diff --git a/Calculator/Calculator.cpp b/Calculator/Calculator.cpp
++index 7d5db81..ec47232 100644
++--- a/Calculator/Calculator.cpp
+++++ b/Calculator/Calculator.cpp
++@@ -125,14 +125,26 @@ uint32_t Calculator::getApiVersionNumber(const JsonObject& parameters, JsonObjec
++  
++ uint32_t Calculator::addWrapper(const JsonObject& parameters, JsonObject& response)
++ {
++-    if (!parameters.HasLabel("a") || !parameters.HasLabel("b")) {
++-        response["success"] = false;
++-        response["message"] = "Missing parameters a or b";
++-        return Core::ERROR_BAD_REQUEST;
+++    if (!parameters.HasLabel("numbers") || !parameters["numbers"].IsArray()){
+++     response["success"] = false;
+++     response["message"] = "MIssing or Invalid 'numbers' array";
+++     return Core::ERROR_BAD_REQUEST;
++     }
++-    double a = parameters["a"].Number();
++-    double b = parameters["b"].Number();
++-    response["result"] = add(a, b);
+++
+++    const JsonArray& numbers = parameters["numbers"].Array();
+++
+++    if (numbers.Length() == 0){
+++      response["success"] = false;
+++      response["message"] = "array is empty";
+++      return Core::ERROR_BAD_REQUEST;
+++    }
+++
+++    double sum=0;
+++    for(uint32_t i=0;i<numbers.Length();i++) {
+++     sum+=numbers[i].Number();
+++    }
+++
+++    response["result"] = sum;
++     response["success"] = true;
++     return Core::ERROR_NONE;
++ }
++-- 
++2.52.0.windows.1
++
+diff --git a/Calculator/Calculator.cpp b/Calculator/Calculator.cpp
+index 7d5db81..49cfbe3 100644
+--- a/Calculator/Calculator.cpp
++++ b/Calculator/Calculator.cpp
+@@ -125,14 +125,26 @@ uint32_t Calculator::getApiVersionNumber(const JsonObject& parameters, JsonObjec
+  
+ uint32_t Calculator::addWrapper(const JsonObject& parameters, JsonObject& response)
+ {
+-    if (!parameters.HasLabel("a") || !parameters.HasLabel("b")) {
+-        response["success"] = false;
+-        response["message"] = "Missing parameters a or b";
+-        return Core::ERROR_BAD_REQUEST;
++    if (!parameters.HasLabel("numbers")){
++     response["success"] = false;
++     response["message"] = "MIssing or Invalid 'numbers' array";
++     return Core::ERROR_BAD_REQUEST;
+     }
+-    double a = parameters["a"].Number();
+-    double b = parameters["b"].Number();
+-    response["result"] = add(a, b);
++
++    const JsonArray& numbers = parameters["numbers"].Array();
++
++    if (numbers.Length() == 0){
++      response["success"] = false;
++      response["message"] = "array is empty";
++      return Core::ERROR_BAD_REQUEST;
++    }
++
++    double sum=0;
++    for(uint32_t i=0;i<numbers.Length();i++) {
++     sum+=numbers[i].Number();
++    }
++
++    response["result"] = sum;
+     response["success"] = true;
+     return Core::ERROR_NONE;
+ }
