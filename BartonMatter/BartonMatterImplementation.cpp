@@ -1501,7 +1501,7 @@ void BartonMatterImplementation::OnSessionFailure(const chip::ScopedNodeId & pee
          * @brief Map voice action to Matter resource type and value
          * 
          * Matter resource mappings:
-         * - OnOff cluster: resourceType = "onOff", value = "true"/"false"
+         * - OnOff cluster: resourceType = "isOn", value = "true"/"false"
          * - Level cluster: resourceType = "level", value = "0-254"
          */
         bool BartonMatterImplementation::MapActionToResource(
@@ -1510,19 +1510,19 @@ void BartonMatterImplementation::OnSessionFailure(const chip::ScopedNodeId & pee
         {
             switch (action) {
                 case VoiceCommand::Action::TURN_ON:
-                    resourceType = "onOff";
+                    resourceType = "isOn";
                     value = "true";
                     return true;
                     
                 case VoiceCommand::Action::TURN_OFF:
-                    resourceType = "onOff";
+                    resourceType = "isOn";
                     value = "false";
                     return true;
                     
                 case VoiceCommand::Action::TOGGLE:
                     // Toggle would require reading current state first
                     // For simplicity, default to ON
-                    resourceType = "onOff";
+                    resourceType = "isOn";
                     value = "true";
                     LOGWARN("Toggle not fully implemented, defaulting to ON");
                     return true;
