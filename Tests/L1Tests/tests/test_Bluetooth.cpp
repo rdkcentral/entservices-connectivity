@@ -24,6 +24,7 @@
 #include "StoreMock.h"
 #include "btmgrMock.h"
 #include "PowerManagerMock.h"
+#include "IarmBusMock.h"
 
 #include "ServiceMock.h"
 #include "FactoriesImplementation.h"
@@ -54,6 +55,7 @@ protected:
     string response;
     StoreMock *p_storeMock = nullptr;
     BtmgrImplMock *p_btmgrMock = nullptr;
+    IarmBusImplMock   *p_iarmBusImplMock = nullptr ;
     NiceMock<COMLinkMock> comLinkMock;
     NiceMock<ServiceMock> service;
     PLUGINHOST_DISPATCHER* dispatcher;
@@ -72,6 +74,9 @@ protected:
 
         p_storeMock  = new NiceMock <StoreMock>;
         p_btmgrMock = new NiceMock<BtmgrImplMock>;
+
+        p_iarmBusImplMock  = new NiceMock <IarmBusImplMock>;
+        IarmBus::setImpl(p_iarmBusImplMock);
 
         TEST_LOG("*** DEBUG: BluetoothTest ctor: Mark 1");
 
@@ -124,6 +129,13 @@ protected:
         workerPool.Release();
 
         PluginHost::IFactories::Assign(nullptr);
+
+        IarmBus::setImpl(nullptr);
+        if (p_iarmBusImplMock != nullptr)
+        {
+            delete p_iarmBusImplMock;
+            p_iarmBusImplMock = nullptr;
+        }
 
         TEST_LOG("*** DEBUG: BluetoothTest xtor: exit");
     }
