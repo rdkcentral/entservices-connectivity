@@ -73,6 +73,8 @@ protected:
         p_storeMock  = new NiceMock <StoreMock>;
         p_btmgrMock = new NiceMock<BtmgrImplMock>;
 
+        TEST_LOG("*** DEBUG: BluetoothTest ctor: Mark 1");
+
         ON_CALL(service, COMLink())
             .WillByDefault(::testing::Invoke(
                   [this]() {
@@ -80,14 +82,28 @@ protected:
                         return &comLinkMock;
                     }));
 
+        TEST_LOG("*** DEBUG: BluetoothTest ctor: Mark 2");
+
         PluginHost::IFactories::Assign(&factoriesImplementation);
 
+        TEST_LOG("*** DEBUG: BluetoothTest ctor: Mark 3");
+
         Core::IWorkerPool::Assign(&(*workerPool));
+
+        TEST_LOG("*** DEBUG: BluetoothTest ctor: Mark 4");
+
         workerPool->Run();
+
+        TEST_LOG("*** DEBUG: BluetoothTest ctor: Mark 5");
 
         dispatcher = static_cast<PLUGINHOST_DISPATCHER*>(
            plugin->QueryInterface(PLUGINHOST_DISPATCHER_ID));
+
+        TEST_LOG("*** DEBUG: BluetoothTest ctor: Mark 6");
+
         dispatcher->Activate(&service);
+
+        TEST_LOG("*** DEBUG: BluetoothTest ctor: Mark 7");
 
         EXPECT_EQ(string(""), plugin->Initialize(&service));
 
