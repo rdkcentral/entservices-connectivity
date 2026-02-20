@@ -125,14 +125,26 @@ uint32_t Calculator::getApiVersionNumber(const JsonObject& parameters, JsonObjec
  
 uint32_t Calculator::addWrapper(const JsonObject& parameters, JsonObject& response)
 {
-    if (!parameters.HasLabel("a") || !parameters.HasLabel("b")) {
-        response["success"] = false;
-        response["message"] = "Missing parameters a or b";
-        return Core::ERROR_BAD_REQUEST;
+    if (!parameters.HasLabel("numbers") || !parameters["numbers"].IsArray()){
+     response["success"] = false;
+     response["message"] = "MIssing or Invalid 'numbers' array";
+     return Core::ERROR_BAD_REQUEST;
     }
-    double a = parameters["a"].Number();
-    double b = parameters["b"].Number();
-    response["result"] = add(a, b);
+
+    const JsonArray& numbers = parameters["numbers"].Array();
+
+    if (numbers.Length() == 0){
+      response["success"] = false;
+      response["message"] = "array is empty";
+      return Core::ERROR_BAD_REQUEST;
+    }
+
+    double sum=0;
+    for(uint32_t i=0;i<numbers.Length();i++) {
+     sum+=numbers[i].Number();
+    }
+
+    response["result"] = sum;
     response["success"] = true;
     return Core::ERROR_NONE;
 }
