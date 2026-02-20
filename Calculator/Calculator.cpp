@@ -125,7 +125,7 @@ uint32_t Calculator::getApiVersionNumber(const JsonObject& parameters, JsonObjec
  
 uint32_t Calculator::addWrapper(const JsonObject& parameters, JsonObject& response)
 {
-    if (!parameters.HasLabel("numbers") || !parameters["numbers"].Array()){
+    if (!parameters.HasLabel("numbers")){
      response["success"] = false;
      response["message"] = "MIssing or Invalid 'numbers' array";
      return Core::ERROR_BAD_REQUEST;
