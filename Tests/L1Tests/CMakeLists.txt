@@ -16,7 +16,7 @@
 # limitations under the License.
 
 cmake_minimum_required(VERSION 3.8)
-set(PLUGIN_NAME L1TestsIO)
+set(PLUGIN_NAME L1TestsBT)
 set(MODULE_NAME ${NAMESPACE}${PLUGIN_NAME})
 
 set(CMAKE_CXX_STANDARD 14)
