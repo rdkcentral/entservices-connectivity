@@ -201,7 +201,11 @@ namespace WPEFramework
             Register(METHOD_SET_AUTO_CONNECT, &Bluetooth::setAutoConnectWrapper, this);
             Register(METHOD_GET_AUTO_CONNECT_STATUS, &Bluetooth::getAutoConnectWrapper, this);
 
+            printf("*** _DEBUG: Bluetooth::Initialize: Mark 1\n");
+
             Utils::IARM::init();
+
+            printf("*** _DEBUG: Bluetooth::Initialize: Mark 2\n");
 
             BTRMGR_Result_t rc = BTRMGR_RegisterForCallbacks(Utils::IARM::NAME);
             if (BTRMGR_RESULT_SUCCESS != rc)
