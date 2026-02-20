@@ -128,6 +128,7 @@ target_include_directories(${MODULE_NAME}
         ${CMAKE_SOURCE_DIR}/../Thunder/Source/plugins
         )
 
+message("*** _DEBUG: MODULE_NAME=${MODULE_NAME} TEST_LIB=${TEST_LIB}")        
 install(TARGETS ${MODULE_NAME} DESTINATION lib)
 write_config(${PLUGIN_NAME})
 
