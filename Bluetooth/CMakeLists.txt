@@ -47,18 +47,6 @@ if (RDK_SERVICE_L2_TEST)
     endif (TESTMOCKLIB_LIBRARIES)
 endif (RDK_SERVICE_L2_TEST)
 
-# <pca> debug
-if (RDK_SERVICES_L1_TEST)
-    find_library(TESTMOCKLIB_LIBRARIES NAMES TestMocklib)
-    if (TESTMOCKLIB_LIBRARIES)
-        message ("*** _DEBUG: linking mock libraries ${TESTMOCKLIB_LIBRARIES} library")
-        target_link_libraries(${MODULE_NAME} PRIVATE ${TESTMOCKLIB_LIBRARIES})
-    else (TESTMOCKLIB_LIBRARIES)
-        message ("*** _DEBUG: Require ${TESTMOCKLIB_LIBRARIES} library")
-    endif (TESTMOCKLIB_LIBRARIES)
-endif (RDK_SERVICES_L1_TEST)
-# </pca>
-
 find_package(BTMGR)
 message("*** _DEBUG: BTMGR_FOUND=${BTMGR_FOUND} BTMGR_INCLUDE_DIRS=${BTMGR_INCLUDE_DIRS} BTMGR_LIBRARIES=${BTMGR_LIBRARIES}")
 if(BTMGR_FOUND)
