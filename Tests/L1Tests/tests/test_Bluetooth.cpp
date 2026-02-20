@@ -73,7 +73,9 @@ protected:
         TEST_LOG("*** DEBUG: BluetoothTest ctor");
 
         p_storeMock  = new NiceMock <StoreMock>;
+        
         p_btmgrMock = new NiceMock<BtmgrImplMock>;
+        Btmgr::setImpl(p_btmgrMock);
 
         p_iarmBusImplMock  = new NiceMock <IarmBusImplMock>;
         IarmBus::setImpl(p_iarmBusImplMock);
@@ -135,6 +137,13 @@ protected:
         {
             delete p_iarmBusImplMock;
             p_iarmBusImplMock = nullptr;
+        }
+
+        Btmgr::setImpl(nullptr);
+        if (p_btmgrMock != nullptr)
+        {
+            delete p_btmgrMock;
+            p_btmgrMock = nullptr;
         }
 
         TEST_LOG("*** DEBUG: BluetoothTest xtor: exit");
