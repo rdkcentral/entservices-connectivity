@@ -156,6 +156,12 @@ protected:
             p_btmgrMock = nullptr;
         }
 
+        if (p_storeMock != nullptr)
+        {
+            delete p_storeMock;
+            p_storeMock = nullptr;
+        }
+
         TEST_LOG("*** DEBUG: BluetoothTest xtor: exit");
     }
 
