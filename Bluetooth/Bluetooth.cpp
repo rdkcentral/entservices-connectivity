@@ -665,7 +665,7 @@ namespace WPEFramework
             response["name"] = string(adapterName);
             LOGWARN ("Name set as %s", adapterName);
             if (rp) {
-                *rp = response;
+                *rp = std::move(response);
             }
             return BTRMGR_RESULT_SUCCESS == rc;
         }
