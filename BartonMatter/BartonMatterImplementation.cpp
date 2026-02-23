@@ -1101,6 +1101,38 @@ void BartonMatterImplementation::OnSessionFailure(const chip::ScopedNodeId & pee
             }
         }
 
+        /**
+         * @brief Helper function to extract field value from device database file content
+         * @param content The device file JSON content
+         * @param fieldName The field name to extract (e.g., "model", "label")
+         * @return The field value, or empty string if not found
+         */
+        static std::string ExtractFieldValue(const std::string& content, const std::string& fieldName)
+        {
+            size_t fieldPos = content.find("\"" + fieldName + "\"");
+            if (fieldPos == std::string::npos) {
+                return "";
+            }
+            
+            size_t valuePos = content.find("\"value\"", fieldPos);
+            if (valuePos == std::string::npos || (valuePos - fieldPos) > 300) {
+                return "";
+            }
+            
+            size_t valueStart = content.find('"', valuePos + 7);
+            if (valueStart == std::string::npos) {
+                return "";
+            }
+            valueStart++;
+            
+            size_t valueEnd = content.find('"', valueStart);
+            if (valueEnd == std::string::npos) {
+                return "";
+            }
+            
+            return content.substr(valueStart, valueEnd - valueStart);
+        }
+
         void BartonMatterImplementation::ScanDeviceDatabase()
         {
             const std::string dbPath = "/opt/.brtn-ds/storage/devicedb";
@@ -1152,35 +1184,6 @@ void BartonMatterImplementation::OnSessionFailure(const chip::ScopedNodeId & pee
 
             closedir(dir);
             LOGINFO("Device database scan complete. Found %zu devices", commissionedDevicesCache.size());
-        }
-
-        /**
-         * @brief Extract label field value from device file content
-         */
-        std::string ExtractFieldValue(const std::string& content, const std::string& fieldName)
-        {
-            size_t fieldPos = content.find("\"" + fieldName + "\"");
-            if (fieldPos == std::string::npos) {
-                return "";
-            }
-            
-            size_t valuePos = content.find("\"value\"", fieldPos);
-            if (valuePos == std::string::npos || (valuePos - fieldPos) > 300) {
-                return "";
-            }
-            
-            size_t valueStart = content.find('"', valuePos + 7);
-            if (valueStart == std::string::npos) {
-                return "";
-            }
-            valueStart++;
-            
-            size_t valueEnd = content.find('"', valueStart);
-            if (valueEnd == std::string::npos) {
-                return "";
-            }
-            
-            return content.substr(valueStart, valueEnd - valueStart);
         }
 
         std::string BartonMatterImplementation::ExtractModelFromDeviceFile(const std::string& filePath)
