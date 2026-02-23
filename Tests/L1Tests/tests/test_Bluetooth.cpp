@@ -225,6 +225,14 @@ TEST_F(BluetoothTest, startScanWrapper_MissingParameters_Failure)
 
 TEST_F(BluetoothTest, stopScanWrapper_Success)
 {
+    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetNumberOfAdapters(::testing::_))
+        .WillOnce(::testing::DoAll(::testing::SetArgPointee<0>(1), ::testing::Return(BTRMGR_RESULT_SUCCESS)));
+    EXPECT_CALL(*p_btmgrMock, BTRMGR_StartDeviceDiscovery(::testing::_, ::testing::_))
+        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
+    
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("startScan"), _T("{\"timeout\":5}"), response));
+    EXPECT_TRUE(response.find("\"status\":\"AVAILABLE\"") != string::npos);
+    
     EXPECT_CALL(*p_btmgrMock, BTRMGR_StopDeviceDiscovery(::testing::_, ::testing::_))
         .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
     
