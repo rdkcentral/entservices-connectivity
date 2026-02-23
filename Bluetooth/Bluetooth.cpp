@@ -218,19 +218,21 @@ namespace WPEFramework
                 BTRMGR_RegisterEventCallback(bluetoothSrv_EventCallback);
             }
 
-            Exchange::IPowerManager* pPowerManager = service->QueryInterfaceByCallsign<Exchange::IPowerManager>("org.rdk.PowerManager");
+            m_powerManagerPlugin = PowerManagerInterfaceBuilder(_T("org.rdk.PowerManager"))
+                .withIShell(service)
+                .withRetryIntervalMS(200)
+                .withRetryCount(25)
+                .createInterface();
 
-            if (pPowerManager != nullptr) {
-                pPowerManager->Register(&m_powerManagerNotification);
+            if (m_powerManagerPlugin != nullptr) {
+                m_powerManagerPlugin->Register(&m_powerManagerNotification);
 
                 WPEFramework::Exchange::IPowerManager::PowerState currentState, prevState;
-                if (Core::ERROR_NONE == pPowerManager->GetPowerState(currentState, prevState)) {
+                if (Core::ERROR_NONE == m_powerManagerPlugin->GetPowerState(currentState, prevState)) {
                     onPowerModeChanged(prevState, currentState);
                 } else {
                     LOGERR("Failed to get current power state");
                 }
-
-                pPowerManager->Release();
             } else {
                 LOGERR("Failed to get PowerManager interface");
             }
@@ -242,11 +244,9 @@ namespace WPEFramework
         {
             m_bluetoothDeviceManager.deinit();
 
-            Exchange::IPowerManager* pPowerManager = service->QueryInterfaceByCallsign<Exchange::IPowerManager>("org.rdk.PowerManager");
-            
-            if (pPowerManager != nullptr) {
-                pPowerManager->Unregister(&m_powerManagerNotification);
-                pPowerManager->Release();
+            if (m_powerManagerPlugin != nullptr) {
+                m_powerManagerPlugin->Unregister(&m_powerManagerNotification);
+                _powerManagerPlugin.Reset();
             }
 
             Bluetooth::_instance = nullptr;
