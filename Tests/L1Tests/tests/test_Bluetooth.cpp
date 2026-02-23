@@ -56,7 +56,6 @@ protected:
     StoreMock *p_storeMock = nullptr;
     BtmgrImplMock *p_btmgrMock = nullptr;
     IarmBusImplMock   *p_iarmBusImplMock = nullptr ;
-    PowerManagerMock *p_powerManagerMock = nullptr;
     NiceMock<COMLinkMock> comLinkMock;
     NiceMock<ServiceMock> service;
     PLUGINHOST_DISPATCHER* dispatcher;
@@ -74,16 +73,12 @@ protected:
         TEST_LOG("*** DEBUG: BluetoothTest ctor");
 
         p_storeMock  = new NiceMock <StoreMock>;
-        Store::setImpl(p_storeMock);
         
         p_btmgrMock = new NiceMock<BtmgrImplMock>;
         Btmgr::setImpl(p_btmgrMock);
 
         p_iarmBusImplMock  = new NiceMock <IarmBusImplMock>;
         IarmBus::setImpl(p_iarmBusImplMock);
-
-        p_powerManagerMock = new NiceMock<PowerManagerMock>;
-        PowerManager::setImpl(p_powerManagerMock);
 
         TEST_LOG("*** DEBUG: BluetoothTest ctor: Mark 1");
 
@@ -137,7 +132,6 @@ protected:
 
         PluginHost::IFactories::Assign(nullptr);
 
-        Store::setImpl(nullptr);
         if(p_storeMock != nullptr)        {
             delete p_storeMock;
             p_storeMock = nullptr;
@@ -155,13 +149,6 @@ protected:
         {
             delete p_btmgrMock;
             p_btmgrMock = nullptr;
-        }
-
-        PowerManager::setImpl(nullptr);
-        if (p_powerManagerMock != nullptr)
-        {
-            delete p_powerManagerMock;
-            p_powerManagerMock = nullptr;
         }
 
         TEST_LOG("*** DEBUG: BluetoothTest xtor: exit");
