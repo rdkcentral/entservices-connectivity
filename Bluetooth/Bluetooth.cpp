@@ -224,7 +224,7 @@ namespace WPEFramework
                 .withRetryCount(25)
                 .createInterface();
 
-            if (m_powerManagerPlugin != nullptr) {
+            if (m_powerManagerPlugin) {
                 m_powerManagerPlugin->Register(&m_powerManagerNotification);
 
                 WPEFramework::Exchange::IPowerManager::PowerState currentState, prevState;
@@ -244,9 +244,9 @@ namespace WPEFramework
         {
             m_bluetoothDeviceManager.deinit();
 
-            if (m_powerManagerPlugin != nullptr) {
+            if (m_powerManagerPlugin) {
                 m_powerManagerPlugin->Unregister(&m_powerManagerNotification);
-                _powerManagerPlugin.Reset();
+                m_powerManagerPlugin.Reset();
             }
 
             Bluetooth::_instance = nullptr;

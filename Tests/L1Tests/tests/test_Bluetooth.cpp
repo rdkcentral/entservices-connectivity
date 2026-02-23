@@ -73,6 +73,16 @@ protected:
         TEST_LOG("*** DEBUG: BluetoothTest ctor");
 
         p_storeMock  = new NiceMock <StoreMock>;
+
+        EXPECT_CALL(service, QueryInterfaceByCallsign(::testing::_, ::testing::_))
+          .Times(::testing::AnyNumber())
+          .WillRepeatedly(::testing::Invoke(
+              [&](const uint32_t id, const std::string& name) -> void* {
+                if (name == "org.rdk.PersistentStore") {
+                   return reinterpret_cast<void*>(p_storeMock);
+                }
+                return nullptr;
+        }));
         
         p_btmgrMock = new NiceMock<BtmgrImplMock>;
         Btmgr::setImpl(p_btmgrMock);
