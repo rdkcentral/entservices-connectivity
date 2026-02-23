@@ -1,0 +1,4 @@
+precondition = ["platform"]
+callsign = "org.rdk.GStreamer"
+autostart = "true"
+startuporder = "@PLUGIN_GSTREAMER_STARTUPORDER@"
