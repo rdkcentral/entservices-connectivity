@@ -142,12 +142,6 @@ protected:
 
         PluginHost::IFactories::Assign(nullptr);
 
-        Store::setImpl(nullptr);
-        if(p_storeMock != nullptr)        {
-            delete p_storeMock;
-            p_storeMock = nullptr;
-        }
-
         IarmBus::setImpl(nullptr);
         if (p_iarmBusImplMock != nullptr)
         {
