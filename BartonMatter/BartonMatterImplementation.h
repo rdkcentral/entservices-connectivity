@@ -104,8 +104,15 @@ namespace WPEFramework
             std::string savedDeviceUri; // Store the device URI from endpoint
             std::mutex deviceUriMtx; // Protect access to savedDeviceUri
 
-            // Cached device info: nodeId -> model name
-            std::map<std::string, std::string> commissionedDevicesCache;
+            // Structure to hold commissioned device information
+            struct DeviceInfo {
+                std::string model;  // Device model name (e.g., "Mini Smart Wi-Fi Plug")
+                std::string label;  // Device label - defaults to "matter light", "matter plug" etc.
+                                    // User can customize to "bedroom plug", "kitchen light" etc.
+            };
+
+            // Cached device info: nodeId -> DeviceInfo
+            std::map<std::string, DeviceInfo> commissionedDevicesCache;
             std::mutex devicesCacheMtx; // Protect access to device cache
             bool devicesCacheInitialized = false;
 
