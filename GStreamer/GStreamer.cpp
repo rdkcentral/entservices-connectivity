@@ -105,7 +105,22 @@ void GStreamer::initializePipeline()
     
     // Video branch
     m_videoconvert = gst_element_factory_make("videoconvert", "videoconvert");
-    m_videosink = gst_element_factory_make("autovideosink", "videosink");
+    
+    // Try platform-specific video sinks with fallback
+    // Priority: westerossink (RDK) -> waylandsink -> brcmvideosink -> autovideosink
+    m_videosink = gst_element_factory_make("westerossink", "videosink");
+    if (!m_videosink) {
+        g_print("westerossink not available, trying waylandsink...\n");
+        m_videosink = gst_element_factory_make("waylandsink", "videosink");
+    }
+    if (!m_videosink) {
+        g_print("waylandsink not available, trying brcmvideosink...\n");
+        m_videosink = gst_element_factory_make("brcmvideosink", "videosink");
+    }
+    if (!m_videosink) {
+        g_print("Platform sinks not available, falling back to autovideosink...\n");
+        m_videosink = gst_element_factory_make("autovideosink", "videosink");
+    }
     
     // Create pipeline
     m_pipeline = gst_pipeline_new("gstreamer-plugin-pipeline");
