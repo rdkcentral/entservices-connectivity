@@ -1,50 +1,68 @@
 #pragma once
 
 #include "Module.h"
+#include <gst/gst.h>
 
-namespace WPEFramework{
-    namespace Plugin {
-        class GStreamer : public PluginHost::IPlugin, public PluginHost::JSONRPC {
+namespace WPEFramework {
+namespace Plugin {
 
-            #To prevent copy and assignment
-            private:    
-                GStreamer(const GStreamer&) = delete;
-                GStreamer& operator=(const GStreamer&) = delete;
-            
-                //JSONRPC methods
-                bool playWrapper(const JsonObject& parameters, JsonObject& response);
-                bool pauseWrapper(const JsonObject& parameters, JsonObject& response);
-                bool quitWrapper(const JsonObject& parameters, JsonObject& response);
-            
-            //internal logic for the Gstreamer plugin
-            private:
-                void play();
-                void pause();
-                void quit();
-            
-            public:
-                static const string SERVICE_NAME;
+class GStreamer : public PluginHost::IPlugin, public PluginHost::JSONRPC {
 
-                static const string METHOD_PLAY;
-                static const string METHOD_PAUSE;  
-                static const string METHOD_QUIT;
+private:
+    // Prevent copy and assignment
+    GStreamer(const GStreamer&) = delete;
+    GStreamer& operator=(const GStreamer&) = delete;
 
-                static const string METHOD_GET_API_VERSION_NUMBER;
+    // JSONRPC wrapper methods
+    uint32_t playWrapper(const JsonObject& parameters, JsonObject& response);
+    uint32_t pauseWrapper(const JsonObject& parameters, JsonObject& response);
+    uint32_t quitWrapper(const JsonObject& parameters, JsonObject& response);
 
-                GStreamer();
-                virtual ~GStreamer() override;
+private:
+    // Internal logic for the GStreamer plugin
+    void play();
+    void pause();
+    void quit();
+    void initializePipeline();
+    void cleanupPipeline();
+    
+    // Pad-added handler for dynamic pads
+    static void padAddedHandler(GstElement* src, GstPad* newPad, GStreamer* data);
 
-                virtual const string Initialize(PluginHost::IShell* shell) override { return {}; }
-                virtual void Deinitialize(PluginHost::IShell* service) override;
-                virtual string Information() const override;
+public:
+    // Service Name
+    static const string SERVICE_NAME;
 
-                BEGIN_INTERFACE_MAP(GStreamer)
-                    INTERFACE_ENTRY(PluginHost::IPlugin)
-                    INTERFACE_ENTRY(PluginHost::IDispatcher)
-                END_INTERFACE_MAP
+    // Methods
+    static const string METHOD_PLAY;
+    static const string METHOD_PAUSE;
+    static const string METHOD_QUIT;
 
-                private:
-                    uint32_t m_apiVersionNumber;
-        };
-    }//plugin
-}//namespace WPEFramework
+    GStreamer();
+    virtual ~GStreamer() override;
+
+    virtual const string Initialize(PluginHost::IShell* shell) override;
+    virtual void Deinitialize(PluginHost::IShell* service) override;
+    virtual string Information() const override;
+
+    BEGIN_INTERFACE_MAP(GStreamer)
+        INTERFACE_ENTRY(PluginHost::IPlugin)
+        INTERFACE_ENTRY(PluginHost::IDispatcher)
+    END_INTERFACE_MAP
+
+private:
+    // GStreamer pipeline elements
+    GstElement* m_pipeline;
+    GstElement* m_source;
+    GstElement* m_audioconvert;
+    GstElement* m_audioresample;
+    GstElement* m_audiosink;
+    GstElement* m_videoconvert;
+    GstElement* m_videosink;
+    GstBus* m_bus;
+    
+    bool m_pipelineInitialized;
+};
+
+} // Plugin
+} // WPEFramework
