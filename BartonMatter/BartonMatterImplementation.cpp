@@ -1461,6 +1461,64 @@ void BartonMatterImplementation::OnSessionFailure(const chip::ScopedNodeId & pee
                 }
             }
 
+            // ---------------------------------------------------------------
+            // Fallback colour detection: catches natural phrasing that the
+            // explicit triggers above miss, e.g.:
+            //   "change the bedroom light to red"
+            //   "set bedroom light to red"
+            //   "set kitchen light to blue"
+            //   "change the bedroom light color to blue"  ← already caught above
+            //
+            // Strategy: if action is still UNKNOWN and the command contains
+            //   - an intent verb (set / change / make / turn)
+            //   - the word " to "
+            //   - one of the 7 supported colour names
+            // ... then treat it as SET_COLOR.
+            //
+            // NOTE: Simple typos in the colour name (e.g. "greeen", "bllue")
+            // will NOT match because we use exact substring search. A fuzzy
+            // matcher would be needed to handle arbitrary misspellings.
+            // Typos in the device/location qualifier (e.g. "kitched" instead of
+            // "kitchen") only affect device matching, not action detection.
+            // ---------------------------------------------------------------
+            if (cmd.action == VoiceCommand::Action::UNKNOWN) {
+                const std::vector<std::string> colorIntentVerbs = {
+                    "set", "change", "make", "turn"
+                };
+                const std::vector<std::string> colorNames = {
+                    "red", "green", "blue", "yellow", "purple", "cyan", "white"
+                };
+
+                bool hasVerb = false;
+                for (const auto& verb : colorIntentVerbs) {
+                    // Match whole word only: preceded by start or space
+                    size_t vpos = normalized.find(verb);
+                    if (vpos != std::string::npos &&
+                        (vpos == 0 || normalized[vpos - 1] == ' ')) {
+                        hasVerb = true;
+                        break;
+                    }
+                }
+
+                bool hasTo = (normalized.find(" to ") != std::string::npos);
+
+                if (hasVerb && hasTo) {
+                    for (const auto& color : colorNames) {
+                        if (normalized.find(color) != std::string::npos) {
+                            cmd.action   = VoiceCommand::Action::SET_COLOR;
+                            cmd.colorName = color;
+                            LOGINFO("ParseVoiceCommand: Fallback colour detection matched '%s' in '%s'",
+                                    color.c_str(), normalized.c_str());
+                            break;
+                        }
+                    }
+                }
+
+                if (cmd.action == VoiceCommand::Action::UNKNOWN) {
+                    LOGWARN("ParseVoiceCommand: Could not determine action from: '%s'", normalized.c_str());
+                }
+            }
+
             // Parse device type - check for common device types and synonyms
             const std::vector<std::pair<std::string, std::vector<std::string>>> deviceTypes = {
                 {"light", {"light", "lamp", "bulb", "lighting"}},
