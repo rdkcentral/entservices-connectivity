@@ -22,6 +22,7 @@
 #include <fstream>
 #include <dirent.h>
 #include <map>
+#include <unordered_map>
 #include <algorithm>
 #include <cctype>
 #include <vector>
@@ -1348,7 +1349,7 @@ void BartonMatterImplementation::OnSessionFailure(const chip::ScopedNodeId & pee
             std::string resourceType;
             std::string value;
             
-            if (!MapActionToResource(cmd.action, cmd.levelValue, resourceType, value)) {
+            if (!MapActionToResource(cmd.action, cmd.levelValue, cmd.colorName, resourceType, value)) {
                 LOGERR("Failed to map action to resource");
                 return false;
             }
@@ -1410,6 +1411,54 @@ void BartonMatterImplementation::OnSessionFailure(const chip::ScopedNodeId & pee
                      normalized.find("brighter") != std::string::npos ||
                      normalized.find("increase") != std::string::npos) {
                 cmd.action = VoiceCommand::Action::BRIGHTEN;
+            }
+            else if (normalized.find("set brightness") != std::string::npos ||
+                     normalized.find("brightness to") != std::string::npos ||
+                     normalized.find("brightness at") != std::string::npos) {
+                // "set brightness to 75%"  /  "set the bedroom light brightness to 50%"
+                cmd.action = VoiceCommand::Action::SET_BRIGHTNESS;
+
+                // Extract the numeric percentage that precedes a % character
+                size_t pctPos = normalized.find('%');
+                if (pctPos != std::string::npos) {
+                    size_t numEnd = pctPos;
+                    size_t numStart = numEnd;
+                    while (numStart > 0 && std::isdigit(static_cast<unsigned char>(normalized[numStart - 1]))) {
+                        --numStart;
+                    }
+                    if (numStart < numEnd) {
+                        int pct = std::stoi(normalized.substr(numStart, numEnd - numStart));
+                        cmd.levelValue = std::max(0, std::min(100, pct));
+                    }
+                }
+
+                if (cmd.levelValue < 0) {
+                    cmd.levelValue = 50; // Sensible default when no percentage is detected
+                    LOGWARN("ParseVoiceCommand: No percentage found in brightness command, defaulting to 50%%");
+                }
+            }
+            else if (normalized.find("set color") != std::string::npos ||
+                     normalized.find("change color") != std::string::npos ||
+                     normalized.find("color to") != std::string::npos ||
+                     normalized.find("make it") != std::string::npos) {
+                // "set the light to red"  /  "change color to blue"  /  "make it yellow"
+                cmd.action = VoiceCommand::Action::SET_COLOR;
+
+                // Match against the 7 supported CIE 1931 colour names
+                const std::vector<std::string> supportedColors = {
+                    "red", "green", "blue", "yellow", "purple", "cyan", "white"
+                };
+                for (const auto& color : supportedColors) {
+                    if (normalized.find(color) != std::string::npos) {
+                        cmd.colorName = color;
+                        break;
+                    }
+                }
+
+                if (cmd.colorName.empty()) {
+                    LOGWARN("ParseVoiceCommand: SET_COLOR detected but no supported colour found in: '%s'",
+                            normalized.c_str());
+                }
             }
 
             // Parse device type - check for common device types and synonyms
@@ -1579,13 +1628,16 @@ void BartonMatterImplementation::OnSessionFailure(const chip::ScopedNodeId & pee
 
         /**
          * @brief Map voice action to Matter resource type and value
-         * 
+         *
          * Matter resource mappings:
-         * - OnOff cluster: resourceType = "isOn", value = "true"/"false"
-         * - Level cluster: resourceType = "level", value = "0-254"
+         * - OnOff cluster:    resourceType = "isOn",         value = "true" / "false"
+         * - Level cluster:    resourceType = "level",        value = 0-254 (legacy)
+         * - Brightness:       resourceType = "currentLevel", value = 0-254  (Matter Level Control)
+         * - Color (CIE 1931): resourceType = "colorXY",      value = "x,y"
          */
         bool BartonMatterImplementation::MapActionToResource(
             VoiceCommand::Action action, int levelValue,
+            const std::string& colorName,
             std::string& resourceType, std::string& value) const
         {
             switch (action) {
@@ -1593,45 +1645,150 @@ void BartonMatterImplementation::OnSessionFailure(const chip::ScopedNodeId & pee
                     resourceType = "isOn";
                     value = "true";
                     return true;
-                    
+
                 case VoiceCommand::Action::TURN_OFF:
                     resourceType = "isOn";
                     value = "false";
                     return true;
-                    
+
                 case VoiceCommand::Action::TOGGLE:
-                    // Toggle would require reading current state first
-                    // For simplicity, default to ON
+                    // Toggle requires reading current state first—default to ON for now
                     resourceType = "isOn";
                     value = "true";
                     LOGWARN("Toggle not fully implemented, defaulting to ON");
                     return true;
-                    
+
                 case VoiceCommand::Action::DIM:
                     resourceType = "level";
-                    value = "64"; // ~25% brightness (Matter level: 0-254)
+                    value = "64"; // ~25% brightness (Matter level 0-254)
                     return true;
-                    
+
                 case VoiceCommand::Action::BRIGHTEN:
                     resourceType = "level";
                     value = "254"; // 100% brightness
                     return true;
-                    
+
                 case VoiceCommand::Action::SET_LEVEL:
                     if (levelValue >= 0 && levelValue <= 100) {
                         resourceType = "level";
-                        // Convert percentage (0-100) to Matter level (0-254)
-                        int matterLevel = (levelValue * 254) / 100;
-                        value = std::to_string(matterLevel);
+                        value = std::to_string((levelValue * 254) / 100);
                         return true;
                     }
                     LOGERR("Invalid level value: %d", levelValue);
                     return false;
-                    
+
+                // -----------------------------------------------------------------
+                // New: SET_BRIGHTNESS — maps to Matter Level Control cluster
+                //   resourceId : "currentLevel"
+                //   value range: 0-254 (Matter scale)
+                // -----------------------------------------------------------------
+                case VoiceCommand::Action::SET_BRIGHTNESS: {
+                    if (levelValue < 0 || levelValue > 100) {
+                        LOGERR("SET_BRIGHTNESS: levelValue %d out of range [0,100]", levelValue);
+                        return false;
+                    }
+                    resourceType = "currentLevel";
+                    value = std::to_string(PercentageToMatterLevel(levelValue));
+                    LOGINFO("SET_BRIGHTNESS: %d%% → Matter level %s", levelValue, value.c_str());
+                    return true;
+                }
+
+                // -----------------------------------------------------------------
+                // New: SET_COLOR — maps to Matter Color Control cluster (CIE 1931 XY)
+                //   resourceId : "colorXY"
+                //   value      : "x,y" (unsigned 16-bit CIE integers)
+                // Supported: red, green, blue, yellow, purple, cyan, white
+                // -----------------------------------------------------------------
+                case VoiceCommand::Action::SET_COLOR: {
+                    if (colorName.empty()) {
+                        LOGERR("SET_COLOR: No colour name provided");
+                        return false;
+                    }
+                    std::string xy = GetColorXY(colorName);
+                    if (xy.empty()) {
+                        LOGERR("SET_COLOR: Unsupported colour '%s'. "
+                               "Supported: red, green, blue, yellow, purple, cyan, white",
+                               colorName.c_str());
+                        return false;
+                    }
+                    resourceType = "colorXY";
+                    value = xy;
+                    LOGINFO("SET_COLOR: '%s' → XY = %s", colorName.c_str(), value.c_str());
+                    return true;
+                }
+
                 default:
                     LOGERR("Unknown action type");
                     return false;
             }
+        }
+
+        /**
+         * @brief Convert a brightness percentage to the Matter Level Control scale.
+         *
+         * Matter Level Control attribute currentLevel uses an unsigned 8-bit value:
+         *   0   = off / minimum
+         *   254 = maximum (0xFF is reserved)
+         *
+         * Formula: matterLevel = round(percentage * 254 / 100)
+         *
+         * Examples:
+         *   0%   → 0
+         *   50%  → 127
+         *   100% → 254
+         *
+         * @param percentage Value in [0, 100]. Clamped to this range if out of bounds.
+         * @return Matter level in [0, 254]
+         */
+        int BartonMatterImplementation::PercentageToMatterLevel(int percentage)
+        {
+            // Clamp input to [0, 100] for safety
+            int pct = std::max(0, std::min(100, percentage));
+            // Use rounding: add 50 before integer division to get nearest integer
+            return (pct * 254 + 50) / 100;
+        }
+
+        /**
+         * @brief Return the CIE 1931 XY colour coordinates for a predefined colour name.
+         *
+         * Values are 16-bit unsigned integers as specified by the Matter Color Control
+         * cluster (colorX / colorY attributes, each in range 0-65279). The string format
+         * is "x,y" matching the "colorXY" resource type accepted by WriteResource().
+         *
+         * Colour table (7 entries):
+         * | Name   | x     | y     | Notes                          |
+         * |--------|-------|-------|--------------------------------|
+         * | red    | 45712 | 18133 | sRGB red primary               |
+         * | green  | 17242 | 43690 | sRGB green primary             |
+         * | blue   |  6553 |  6553 | sRGB blue primary              |
+         * | yellow | 38228 | 45000 | warm yellow                    |
+         * | purple | 40000 | 20000 | violet-purple                  |
+         * | cyan   | 15000 | 40000 | blue-green cyan                |
+         * | white  | 24931 | 24703 | D65 white point (6500 K)       |
+         *
+         * @param colorName Lowercase colour name (e.g. "red", "blue").
+         * @return "x,y" string, or empty string if the colour name is not recognised.
+         */
+        std::string BartonMatterImplementation::GetColorXY(const std::string& colorName)
+        {
+            // Static lookup table — avoids rebuilding on every call
+            static const std::unordered_map<std::string, std::string> kColorXYTable = {
+                { "red",    "45712,18133" },
+                { "green",  "17242,43690" },
+                { "blue",   "6553,6553"   },
+                { "yellow", "38228,45000" },
+                { "purple", "40000,20000" },
+                { "cyan",   "15000,40000" },
+                { "white",  "24931,24703" },
+            };
+
+            auto it = kColorXYTable.find(colorName);
+            if (it != kColorXYTable.end()) {
+                return it->second;
+            }
+
+            // Unknown colour — return empty string; caller must handle gracefully
+            return {};
         }
 
         /**

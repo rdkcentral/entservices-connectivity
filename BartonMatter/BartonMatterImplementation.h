@@ -160,13 +160,16 @@ namespace WPEFramework
                     TOGGLE,
                     DIM,
                     BRIGHTEN,
-                    SET_LEVEL
+                    SET_LEVEL,
+                    SET_BRIGHTNESS,  ///< "set brightness to X%" — maps to currentLevel (0-254)
+                    SET_COLOR        ///< "set color to red/blue/..." — maps to colorXY (CIE 1931)
                 };
                 
                 Action action = Action::UNKNOWN;
                 std::string deviceType;        // e.g., "light", "plug", "outlet"
                 std::string deviceQualifier;   // e.g., "bedroom", "kitchen"
-                int levelValue = -1;           // For SET_LEVEL actions (0-100)
+                int levelValue = -1;           // For SET_LEVEL / SET_BRIGHTNESS actions (0-100)
+                std::string colorName;         // For SET_COLOR actions (e.g., "red", "blue")
                 
                 bool isValid() const {
                     return action != Action::UNKNOWN && !deviceType.empty();
@@ -216,6 +219,7 @@ namespace WPEFramework
              * @return true if mapping succeeded
              */
             bool MapActionToResource(VoiceCommand::Action action, int levelValue,
+                                   const std::string& colorName,
                                    std::string& resourceType, std::string& value) const;
             
             /**
@@ -232,6 +236,23 @@ namespace WPEFramework
              * @return Similarity score (0-100)
              */
             int CalculateSimilarity(const std::string& str1, const std::string& str2) const;
+
+            /**
+             * @brief Convert a brightness percentage (0-100) to a Matter level value (0-254)
+             * @param percentage Input percentage in range [0, 100]
+             * @return Matter level in range [0, 254]
+             */
+            static int PercentageToMatterLevel(int percentage);
+
+            /**
+             * @brief Look up the CIE 1931 XY colour coordinates for a named colour
+             *
+             * Supported colours: red, green, blue, yellow, purple, cyan, white
+             *
+             * @param colorName Lowercase colour name
+             * @return "x,y" string (e.g. "45712,18133") or empty string if unknown
+             */
+            static std::string GetColorXY(const std::string& colorName);
         };
     } // namespace Plugin
 } // namespace WPEFramework
