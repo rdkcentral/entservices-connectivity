@@ -1031,11 +1031,9 @@ void BartonMatterImplementation::OnSessionFailure(const chip::ScopedNodeId & pee
         {
             std::lock_guard<std::mutex> lock(devicesCacheMtx);
 
-            // Scan devicedb on first call to populate cache
-            if (!devicesCacheInitialized) {
-                ScanDeviceDatabase();
-                devicesCacheInitialized = true;
-            }
+            // Always rescan devicedb so live resource values (isOn, currentLevel, etc.) are fresh
+            ScanDeviceDatabase();
+            devicesCacheInitialized = true;
 
             if (commissionedDevicesCache.empty()) {
                 LOGWARN("No commissioned devices found");
@@ -1043,21 +1041,35 @@ void BartonMatterImplementation::OnSessionFailure(const chip::ScopedNodeId & pee
                 return Core::ERROR_UNAVAILABLE;
             }
 
-            // Build JSON array response with all devices
-            // Include both model and label (label may be empty if not set)
+            // Build JSON array response with all devices.
+            // Each entry contains: nodeId, deviceClass, deviceDriver, and a
+            // "resources" object holding every id->value pair found in
+            // deviceEndpoints.1.resources (e.g. label, isOn, currentLevel, colorXY).
             deviceInfo = "[";
             bool first = true;
 
-            for (const auto& device : commissionedDevicesCache) {
-                if (!first) {
-                    deviceInfo += ",";
-                }
+            for (const auto& kv : commissionedDevicesCache) {
+                const std::string& nodeId  = kv.first;
+                const DeviceInfo&  info    = kv.second;
+
+                if (!first) deviceInfo += ",";
                 first = false;
 
                 deviceInfo += "{";
-                deviceInfo += "\"nodeId\":\"" + device.first + "\"";
-                deviceInfo += ",\"model\":\"" + device.second.model + "\"";
-                deviceInfo += ",\"label\":\"" + device.second.label + "\"";
+                deviceInfo += "\"nodeId\":\""      + nodeId           + "\"";
+                deviceInfo += ",\"deviceClass\":\"" + info.deviceClass  + "\"";
+                deviceInfo += ",\"deviceDriver\":\""+ info.deviceDriver + "\"";
+
+                // Emit resources object
+                deviceInfo += ",\"resources\":{";
+                bool firstRes = true;
+                for (const auto& res : info.resources) {
+                    if (!firstRes) deviceInfo += ",";
+                    firstRes = false;
+                    deviceInfo += "\"" + res.first + "\":\"" + res.second + "\"";
+                }
+                deviceInfo += "}";
+
                 deviceInfo += "}";
             }
 
@@ -1103,35 +1115,144 @@ void BartonMatterImplementation::OnSessionFailure(const chip::ScopedNodeId & pee
         }
 
         /**
-         * @brief Helper function to extract field value from device database file content
-         * @param content The device file JSON content
-         * @param fieldName The field name to extract (e.g., "model", "label")
-         * @return The field value, or empty string if not found
+         * @brief Extract a top-level string value from JSON content.
+         *
+         * Handles direct string fields such as "deviceClass", "deviceDriver", "uuid"
+         * whose JSON representation is:  "key":  "value"
+         *
+         * @param content  Raw JSON text
+         * @param key      The field name to look up
+         * @return         The string value, or empty string if not found
          */
-        static std::string ExtractFieldValue(const std::string& content, const std::string& fieldName)
+        static std::string ExtractTopLevelString(const std::string& content, const std::string& key)
         {
-            size_t fieldPos = content.find("\"" + fieldName + "\"");
-            if (fieldPos == std::string::npos) {
-                return "";
-            }
-            
-            size_t valuePos = content.find("\"value\"", fieldPos);
-            if (valuePos == std::string::npos || (valuePos - fieldPos) > 300) {
-                return "";
-            }
-            
-            size_t valueStart = content.find('"', valuePos + 7);
-            if (valueStart == std::string::npos) {
-                return "";
-            }
-            valueStart++;
-            
+            std::string searchKey = "\"" + key + "\"";
+            size_t pos = content.find(searchKey);
+            if (pos == std::string::npos) return "";
+
+            size_t colonPos = content.find(':', pos + searchKey.size());
+            if (colonPos == std::string::npos) return "";
+
+            size_t valueStart = content.find('"', colonPos + 1);
+            if (valueStart == std::string::npos) return "";
+            valueStart++; // step past the opening quote
+
             size_t valueEnd = content.find('"', valueStart);
-            if (valueEnd == std::string::npos) {
-                return "";
-            }
-            
+            if (valueEnd == std::string::npos) return "";
+
             return content.substr(valueStart, valueEnd - valueStart);
+        }
+
+        /**
+         * @brief Extract all resource id->value pairs from a devicedb JSON file.
+         *
+         * Navigates to the path:
+         *   deviceEndpoints -> "1" -> resources
+         * and for every resource object found there reads the "value" field.
+         *
+         * The "value" field may be a quoted string ("tanuj", "true", "24939,24701")
+         * or an unquoted scalar (254).  Both are returned as std::string.
+         *
+         * @param content  Raw JSON text of the devicedb file
+         * @return         Map of resource id (e.g. "label", "isOn") -> value string
+         */
+        static std::map<std::string, std::string> ExtractAllResources(const std::string& content)
+        {
+            std::map<std::string, std::string> resources;
+
+            // Anchor search inside "deviceEndpoints"
+            size_t endpointsPos = content.find("\"deviceEndpoints\"");
+            if (endpointsPos == std::string::npos) return resources;
+
+            // Find "resources" inside the endpoints block
+            size_t resourcesPos = content.find("\"resources\"", endpointsPos);
+            if (resourcesPos == std::string::npos) return resources;
+
+            // Find the opening brace of the resources object
+            size_t resourcesOpen = content.find('{', resourcesPos + 11); // 11 = len("\"resources\"")
+            if (resourcesOpen == std::string::npos) return resources;
+
+            // Find the matching closing brace of the resources object
+            size_t resourcesClose = resourcesOpen + 1;
+            {
+                int depth = 1;
+                while (resourcesClose < content.size() && depth > 0) {
+                    if (content[resourcesClose] == '{') ++depth;
+                    else if (content[resourcesClose] == '}') --depth;
+                    if (depth > 0) ++resourcesClose;
+                }
+            }
+
+            // Iterate over each child of the resources object.
+            // Each child looks like:  "resourceName": { ... "value": "...", ... }
+            size_t pos = resourcesOpen + 1;
+            while (pos < resourcesClose) {
+                // Find the next quoted key (resource name)
+                size_t keyStart = content.find('"', pos);
+                if (keyStart == std::string::npos || keyStart >= resourcesClose) break;
+                size_t keyEnd = content.find('"', keyStart + 1);
+                if (keyEnd == std::string::npos || keyEnd >= resourcesClose) break;
+
+                std::string resourceName = content.substr(keyStart + 1, keyEnd - keyStart - 1);
+
+                // Find the opening brace of this resource's object
+                size_t objOpen = content.find('{', keyEnd + 1);
+                if (objOpen == std::string::npos || objOpen >= resourcesClose) break;
+
+                // Find the matching closing brace of this resource's object
+                size_t objClose = objOpen + 1;
+                {
+                    int depth = 1;
+                    while (objClose < content.size() && depth > 0) {
+                        if (content[objClose] == '{') ++depth;
+                        else if (content[objClose] == '}') --depth;
+                        if (depth > 0) ++objClose;
+                    }
+                }
+
+                // Now parse the "value" field within [objOpen, objClose]
+                size_t valueKeyPos = content.find("\"value\"", objOpen);
+                if (valueKeyPos != std::string::npos && valueKeyPos < objClose) {
+                    size_t colonPos = content.find(':', valueKeyPos + 7);
+                    if (colonPos != std::string::npos && colonPos < objClose) {
+                        // Skip whitespace after colon
+                        size_t vs = colonPos + 1;
+                        while (vs < objClose &&
+                               (content[vs] == ' ' || content[vs] == '\t' ||
+                                content[vs] == '\n' || content[vs] == '\r')) {
+                            ++vs;
+                        }
+                        if (vs < objClose) {
+                            if (content[vs] == '"') {
+                                // Quoted string value
+                                ++vs; // skip opening quote
+                                size_t ve = content.find('"', vs);
+                                if (ve != std::string::npos && ve <= objClose) {
+                                    resources[resourceName] = content.substr(vs, ve - vs);
+                                }
+                            } else {
+                                // Unquoted scalar (number / boolean)
+                                size_t ve = vs;
+                                while (ve < objClose &&
+                                       content[ve] != ',' && content[ve] != '}' &&
+                                       content[ve] != '\n' && content[ve] != '\r') {
+                                    ++ve;
+                                }
+                                // Trim trailing whitespace
+                                while (ve > vs &&
+                                       (content[ve - 1] == ' ' || content[ve - 1] == '\t')) {
+                                    --ve;
+                                }
+                                resources[resourceName] = content.substr(vs, ve - vs);
+                            }
+                        }
+                    }
+                }
+
+                pos = objClose + 1;
+            }
+
+            return resources;
         }
 
         void BartonMatterImplementation::ScanDeviceDatabase()
@@ -1155,7 +1276,7 @@ void BartonMatterImplementation::OnSessionFailure(const chip::ScopedNodeId & pee
                     continue;
                 }
 
-                // This is a device file (node ID)
+                // This is a device file (node ID = filename)
                 std::string nodeId = filename;
                 std::string filePath = dbPath + "/" + filename;
 
@@ -1170,16 +1291,22 @@ void BartonMatterImplementation::OnSessionFailure(const chip::ScopedNodeId & pee
                                    std::istreambuf_iterator<char>());
                 file.close();
 
-                // Extract both model and label
+                // Extract top-level device metadata
                 DeviceInfo info;
-                info.model = ExtractFieldValue(content, "model");
-                info.label = ExtractFieldValue(content, "label");
+                info.deviceClass  = ExtractTopLevelString(content, "deviceClass");
+                info.deviceDriver = ExtractTopLevelString(content, "deviceDriver");
 
-                if (!info.model.empty()) {
+                // Extract all resource values from deviceEndpoints.1.resources
+                info.resources = ExtractAllResources(content);
+
+                // Only cache entries that have at least a device class
+                if (!info.deviceClass.empty()) {
                     commissionedDevicesCache[nodeId] = info;
-                    LOGINFO("Found device in DB: nodeId=%s, model='%s', label='%s'",
-                           nodeId.c_str(), info.model.c_str(),
-                           info.label.empty() ? "(none)" : info.label.c_str());
+
+                    std::string labelVal = info.resources.count("label") ? info.resources.at("label") : "(none)";
+                    LOGINFO("Found device in DB: nodeId=%s, deviceClass='%s', deviceDriver='%s', label='%s', resources=%zu",
+                           nodeId.c_str(), info.deviceClass.c_str(), info.deviceDriver.c_str(),
+                           labelVal.c_str(), info.resources.size());
                 }
             }
 
@@ -1199,23 +1326,26 @@ void BartonMatterImplementation::OnSessionFailure(const chip::ScopedNodeId & pee
                                std::istreambuf_iterator<char>());
             file.close();
 
-            std::string modelName = ExtractFieldValue(content, "model");
-            return modelName;
+            // Return deviceClass as a proxy for model (actual model lives in resources.label)
+            return ExtractTopLevelString(content, "deviceClass");
         }
 
-        void BartonMatterImplementation::UpdateDeviceCache(const std::string& nodeId, const std::string& modelName)
+        void BartonMatterImplementation::UpdateDeviceCache(const std::string& nodeId, const std::string& deviceClass)
         {
             std::lock_guard<std::mutex> lock(devicesCacheMtx);
 
-            // Update or add device to cache (prevents duplicates)
+            // Seed the cache with the device class received at commission time.
+            // Full resource values will be populated on the next ScanDeviceDatabase() call
+            // (i.e. when GetCommissionedDeviceInfo() is invoked).
             DeviceInfo info;
-            info.model = modelName;
-            info.label = ""; // Label will be populated on next database scan or when user sets it
-            
+            info.deviceClass  = deviceClass;
+            info.deviceDriver = ""; // Not yet available — filled in by ScanDeviceDatabase
+            // resources left empty — filled in by ScanDeviceDatabase
+
             commissionedDevicesCache[nodeId] = info;
 
-            LOGINFO("Updated device cache: nodeId=%s, model='%s' (total devices: %zu)",
-                   nodeId.c_str(), modelName.c_str(), commissionedDevicesCache.size());
+            LOGINFO("Seeded device cache: nodeId=%s, deviceClass='%s' (total devices: %zu)",
+                   nodeId.c_str(), deviceClass.c_str(), commissionedDevicesCache.size());
         }
 
         void BartonMatterImplementation::RemoveDeviceFromCache(const std::string& nodeId)
@@ -1570,117 +1700,115 @@ void BartonMatterImplementation::OnSessionFailure(const chip::ScopedNodeId & pee
             const VoiceCommand& command, const std::string& deviceInfo) const
         {
             DeviceMatch bestMatch;
-            
-            // Parse JSON manually (simple parsing for structure: [{"nodeId":"xxx","model":"yyy"},...]
+
+            // Parse the JSON produced by GetCommissionedDeviceInfo().
+            // Format (one entry):
+            //   {"nodeId":"xxx","deviceClass":"light","deviceDriver":"matterLight",
+            //    "resources":{"label":"tanuj","isOn":"true","currentLevel":"254",...}}
             size_t pos = 0;
-            
+
             while ((pos = deviceInfo.find("\"nodeId\"", pos)) != std::string::npos) {
-                // Extract nodeId
-                size_t nodeIdStart = deviceInfo.find(":", pos) + 2; // Skip :" 
-                size_t nodeIdEnd = deviceInfo.find("\"", nodeIdStart);
+                // --- nodeId ---
+                size_t nodeIdStart = deviceInfo.find(':', pos) + 1;
+                while (nodeIdStart < deviceInfo.size() && (deviceInfo[nodeIdStart] == ' ' || deviceInfo[nodeIdStart] == '"')) ++nodeIdStart;
+                size_t nodeIdEnd = deviceInfo.find('"', nodeIdStart);
                 std::string nodeId = deviceInfo.substr(nodeIdStart, nodeIdEnd - nodeIdStart);
-                
-                // Extract model
-                size_t modelPos = deviceInfo.find("\"model\"", nodeIdEnd);
-                if (modelPos == std::string::npos) break;
-                
-                size_t modelStart = deviceInfo.find(":", modelPos) + 2; // Skip :"
-                size_t modelEnd = deviceInfo.find("\"", modelStart);
-                std::string model = deviceInfo.substr(modelStart, modelEnd - modelStart);
-                
-                // Extract label (may be empty)
-                std::string label;
-                size_t labelPos = deviceInfo.find("\"label\"", modelEnd);
-                if (labelPos != std::string::npos && labelPos < deviceInfo.find("}", modelEnd)) {
-                    size_t labelStart = deviceInfo.find(":", labelPos) + 2; // Skip :"
-                    size_t labelEnd = deviceInfo.find("\"", labelStart);
-                    label = deviceInfo.substr(labelStart, labelEnd - labelStart);
+
+                // --- deviceClass ---
+                std::string deviceClass;
+                size_t classPos = deviceInfo.find("\"deviceClass\"", nodeIdEnd);
+                if (classPos != std::string::npos) {
+                    size_t classStart = deviceInfo.find(':', classPos) + 1;
+                    while (classStart < deviceInfo.size() && (deviceInfo[classStart] == ' ' || deviceInfo[classStart] == '"')) ++classStart;
+                    size_t classEnd = deviceInfo.find('"', classStart);
+                    deviceClass = deviceInfo.substr(classStart, classEnd - classStart);
                 }
-                
-                LOGINFO("Checking device - NodeId: %s, Model: %s, Label: %s", 
-                       nodeId.c_str(), model.c_str(), label.empty() ? "(none)" : label.c_str());
-                
-                // Calculate match confidence
+
+                // --- resources.label (the user-visible name) ---
+                std::string label;
+                size_t resPos = deviceInfo.find("\"resources\"", nodeIdEnd);
+                if (resPos != std::string::npos) {
+                    size_t labelKeyPos = deviceInfo.find("\"label\"", resPos);
+                    // Make sure we're still in this device's resources block
+                    size_t nextBrace = deviceInfo.find('}', resPos);
+                    if (labelKeyPos != std::string::npos && labelKeyPos < nextBrace) {
+                        size_t labelStart = deviceInfo.find(':', labelKeyPos) + 1;
+                        while (labelStart < deviceInfo.size() && (deviceInfo[labelStart] == ' ' || deviceInfo[labelStart] == '"')) ++labelStart;
+                        size_t labelEnd = deviceInfo.find('"', labelStart);
+                        if (labelEnd != std::string::npos && labelEnd < nextBrace + 20) {
+                            label = deviceInfo.substr(labelStart, labelEnd - labelStart);
+                        }
+                    }
+                }
+
+                LOGINFO("Checking device - NodeId: %s, DeviceClass: %s, Label: %s",
+                       nodeId.c_str(), deviceClass.c_str(), label.empty() ? "(none)" : label.c_str());
+
                 // Determine which text to use for matching:
-                // - Use label if it's custom (not default like "matter light", "matter plug")
-                // - Use model if label is default/generic or empty
-                
-                std::string matchText = model;  // Default to model
+                // Prefer the user-set label (if it looks custom), fall back to deviceClass.
+                std::string matchText = deviceClass;
                 std::string normalizedLabel = NormalizeText(label);
-                
-                // Check if label is custom (not a default generic label)
+
                 bool isCustomLabel = false;
                 if (!label.empty()) {
-                    // Default labels are typically: "matter light", "matter plug", etc.
-                    // Custom labels have location/qualifiers: "bedroom plug", "kitchen light"
-                    
-                    // If label contains qualifier words, it's likely custom
                     const std::vector<std::string> qualifiers = {
                         "bedroom", "kitchen", "living room", "bathroom", "garage",
                         "hallway", "basement", "attic", "office", "dining room",
                         "master", "guest", "kids", "front", "back", "main",
                         "upstairs", "downstairs", "outside", "indoor", "outdoor"
                     };
-                    
                     for (const auto& qualifier : qualifiers) {
                         if (normalizedLabel.find(qualifier) != std::string::npos) {
                             isCustomLabel = true;
                             break;
                         }
                     }
-                    
-                    // Also check if it's NOT a default pattern like "matter [type]"
-                    if (!isCustomLabel && normalizedLabel.find("matter") == std::string::npos) {
-                        // If it doesn't contain "matter" and is different from model, likely custom
-                        if (normalizedLabel != NormalizeText(model)) {
-                            isCustomLabel = true;
-                        }
+                    if (!isCustomLabel && normalizedLabel != NormalizeText(deviceClass)) {
+                        isCustomLabel = true;
                     }
                 }
-                
+
                 if (isCustomLabel) {
                     matchText = label;
                     LOGINFO("Using custom label '%s' for matching", label.c_str());
                 } else {
-                    LOGINFO("Using model '%s' for matching (label is default/generic)", model.c_str());
+                    LOGINFO("Using deviceClass '%s' for matching", deviceClass.c_str());
                 }
-                
+
                 int confidence = 0;
                 std::string normalizedText = NormalizeText(matchText);
-                
-                // Check for device type match
+
+                // Score device type similarity
                 int deviceTypeScore = CalculateSimilarity(command.deviceType, normalizedText);
                 confidence += deviceTypeScore;
-                
-                // Check for qualifier match
+
+                // Score qualifier similarity (weighted less)
                 if (!command.deviceQualifier.empty()) {
                     int qualifierScore = CalculateSimilarity(command.deviceQualifier, normalizedText);
-                    confidence += qualifierScore / 2; // Weight qualifier less than device type
+                    confidence += qualifierScore / 2;
                 }
-                
-                // Bonus for exact substring match
+
+                // Bonus for exact substring match on device type
                 if (normalizedText.find(command.deviceType) != std::string::npos) {
                     confidence += 30;
                 }
-                
+
                 LOGINFO("Device '%s' scored %d%% confidence", matchText.c_str(), confidence);
-                
-                // Update best match if this is better
+
                 if (confidence > bestMatch.confidence) {
-                    bestMatch.nodeId = nodeId;
-                    bestMatch.model = matchText;  // Store the text we matched against
-                    bestMatch.confidence = confidence;
+                    bestMatch.nodeId      = nodeId;
+                    bestMatch.model       = matchText;
+                    bestMatch.confidence  = confidence;
                 }
-                
-                pos = modelEnd;
+
+                pos = nodeIdEnd;
             }
-            
-            // Only return match if confidence is reasonable (>30%)
+
             if (bestMatch.confidence < 30) {
                 LOGWARN("Best match confidence too low: %d%%", bestMatch.confidence);
-                bestMatch = DeviceMatch(); // Reset to invalid
+                bestMatch = DeviceMatch();
             }
-            
+
             return bestMatch;
         }
 

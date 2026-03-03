@@ -33,6 +33,7 @@
 #include <mutex>
 #include <thread>
 #include <vector>
+#include <map>
 
 #include <access/AccessControl.h>
 #include <lib/core/CHIPError.h>
@@ -106,9 +107,11 @@ namespace WPEFramework
 
             // Structure to hold commissioned device information
             struct DeviceInfo {
-                std::string model;  // Device model name (e.g., "Mini Smart Wi-Fi Plug")
-                std::string label;  // Device label - defaults to "matter light", "matter plug" etc.
-                                    // User can customize to "bedroom plug", "kitchen light" etc.
+                std::string deviceClass;   // Device class from devicedb (e.g., "light", "plug")
+                std::string deviceDriver;  // Device driver from devicedb (e.g., "matterLight")
+                // All resource values from deviceEndpoints.1.resources (e.g., "label" -> "tanuj",
+                // "isOn" -> "true", "currentLevel" -> "254", "colorXY" -> "24939,24701")
+                std::map<std::string, std::string> resources;
             };
 
             // Cached device info: nodeId -> DeviceInfo
