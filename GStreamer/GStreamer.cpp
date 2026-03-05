@@ -280,7 +280,7 @@ uint32_t GStreamer::initializeWrapper(const JsonObject& parameters, JsonObject& 
     if (!error.empty()) {
         response["success"] = false;
         response["message"] = error;
-        return Core::ERROR_GENERAL;
+        return Core::ERROR_NONE;
     }
     
     response["success"] = true;
@@ -295,7 +295,7 @@ uint32_t GStreamer::playWrapper(const JsonObject& parameters, JsonObject& respon
     if (!error.empty()) {
         response["success"] = false;
         response["message"] = error;
-        return Core::ERROR_GENERAL;
+        return Core::ERROR_NONE;
     }
     
     response["success"] = true;
@@ -310,7 +310,7 @@ uint32_t GStreamer::pauseWrapper(const JsonObject& parameters, JsonObject& respo
     if (!error.empty()) {
         response["success"] = false;
         response["message"] = error;
-        return Core::ERROR_GENERAL;
+        return Core::ERROR_NONE;
     }
     
     response["success"] = true;
@@ -323,7 +323,7 @@ uint32_t GStreamer::quitWrapper(const JsonObject& parameters, JsonObject& respon
     if (!m_pipelineInitialized) {
         response["success"] = false;
         response["message"] = "No active pipeline to quit";
-        return Core::ERROR_GENERAL;
+        return Core::ERROR_NONE;
     }
     
     cleanupPipeline();
