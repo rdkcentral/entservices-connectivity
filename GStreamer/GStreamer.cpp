@@ -34,6 +34,7 @@ SERVICE_REGISTRATION(GStreamer,
 const string GStreamer::SERVICE_NAME = "org.rdk.GStreamer";
 
 // Method names
+const string GStreamer::METHOD_INITIALIZE = "initialize";
 const string GStreamer::METHOD_PLAY = "play";
 const string GStreamer::METHOD_PAUSE = "pause";
 const string GStreamer::METHOD_QUIT = "quit";
@@ -52,6 +53,7 @@ GStreamer::GStreamer()
     , m_bus(nullptr)
     , m_pipelineInitialized(false)
 {
+    Register(METHOD_INITIALIZE, &GStreamer::initializeWrapper, this);
     Register(METHOD_PLAY, &GStreamer::playWrapper, this);
     Register(METHOD_PAUSE, &GStreamer::pauseWrapper, this);
     Register(METHOD_QUIT, &GStreamer::quitWrapper, this);
@@ -66,12 +68,10 @@ GStreamer::~GStreamer()
 
 const string GStreamer::Initialize(PluginHost::IShell* shell)
 {
-    // Initialize GStreamer
+    // Initialize GStreamer library only
     gst_init(nullptr, nullptr);
     
-    // Initialize the pipeline
-    initializePipeline();
-    
+    // Pipeline will be built when user calls initialize() JSON-RPC method
     return {};
 }
 
@@ -89,50 +89,42 @@ string GStreamer::Information() const
 //////////////////// INTERNAL LOGIC ////////////////////////
 ////////////////////////////////////////////////////////////
 
-void GStreamer::initializePipeline()
+string GStreamer::buildPipeline()
 {
     if (m_pipelineInitialized) {
-        return;
+        return string("Pipeline already initialized");
     }
 
     // Create elements
     m_source = gst_element_factory_make("uridecodebin", "source");
+    if (!m_source) return string("Failed to create uridecodebin element");
     
     // Audio branch
     m_audioconvert = gst_element_factory_make("audioconvert", "audioconvert");
-    m_audioresample = gst_element_factory_make("audioresample", "audioresample");
-    m_audiosink = gst_element_factory_make("autoaudiosink", "audiosink");
+    if (!m_audioconvert) return string("Failed to create audioconvert element");
     
+    m_audioresample = gst_element_factory_make("audioresample", "audioresample");
+    if (!m_audioresample) return string("Failed to create audioresample element");
+    
+    // Try audio sinks with fallback
+    m_audiosink = gst_element_factory_make("autoaudiosink","autoaudiosink");
+    if(!m_audiosink) return string("Failed to create audio sink autoaudiosink");
+
     // Video branch
     m_videoconvert = gst_element_factory_make("videoconvert", "videoconvert");
+    if (!m_videoconvert) return string("Failed to create videoconvert element");
     
-    // Try platform-specific video sinks with fallback
-    // Priority: westerossink (RDK) -> waylandsink -> brcmvideosink -> autovideosink
-    m_videosink = gst_element_factory_make("westerossink", "videosink");
-    if (!m_videosink) {
-        g_print("westerossink not available, trying waylandsink...\n");
-        m_videosink = gst_element_factory_make("waylandsink", "videosink");
-    }
-    if (!m_videosink) {
-        g_print("waylandsink not available, trying brcmvideosink...\n");
-        m_videosink = gst_element_factory_make("brcmvideosink", "videosink");
-    }
-    if (!m_videosink) {
-        g_print("Platform sinks not available, falling back to autovideosink...\n");
-        m_videosink = gst_element_factory_make("autovideosink", "videosink");
-    }
+    // Try video sinks with fallback
+    m_videosink = gst_element_factory_make("waylandsink", "videosink");
+    if (!m_videosink) m_videosink = gst_element_factory_make("westerossink", "videosink");
+    if (!m_videosink) m_videosink = gst_element_factory_make("autovideosink", "videosink");
+    if (!m_videosink) return string("Failed to create video sink (tried: waylandsink, westerossink, autovideosink)");
     
     // Create pipeline
     m_pipeline = gst_pipeline_new("gstreamer-plugin-pipeline");
+    if (!m_pipeline) return string("Failed to create GStreamer pipeline");
     
-    if (!m_pipeline || !m_source ||
-        !m_audioconvert || !m_audioresample || !m_audiosink ||
-        !m_videoconvert || !m_videosink) {
-        g_printerr("Not all elements could be created.\n");
-        return;
-    }
-    
-    // Build the pipeline
+    // Build the pipeline - add all elements
     gst_bin_add_many(GST_BIN(m_pipeline),
                      m_source,
                      m_audioconvert, m_audioresample, m_audiosink,
@@ -140,22 +132,15 @@ void GStreamer::initializePipeline()
                      NULL);
     
     // Link audio elements
-    if (!gst_element_link_many(m_audioconvert,
-                               m_audioresample,
-                               m_audiosink,
-                               NULL)) {
-        g_printerr("Audio elements could not be linked.\n");
+    if (!gst_element_link_many(m_audioconvert, m_audioresample, m_audiosink, NULL)) {
         cleanupPipeline();
-        return;
+        return string("Failed to link audio pipeline elements");
     }
     
     // Link video elements
-    if (!gst_element_link_many(m_videoconvert,
-                               m_videosink,
-                               NULL)) {
-        g_printerr("Video elements could not be linked.\n");
+    if (!gst_element_link_many(m_videoconvert, m_videosink, NULL)) {
         cleanupPipeline();
-        return;
+        return string("Failed to link video pipeline elements");
     }
     
     // Set URI
@@ -163,14 +148,21 @@ void GStreamer::initializePipeline()
                  "https://gstreamer.freedesktop.org/data/media/sintel_trailer-480p.webm",
                  NULL);
     
-    // Connect to pad-added signal
-    g_signal_connect(m_source, "pad-added",
-                     G_CALLBACK(padAddedHandler), this);
+    // Connect to pad-added signal for dynamic linking
+    g_signal_connect(m_source, "pad-added", G_CALLBACK(padAddedHandler), this);
     
     // Get bus
     m_bus = gst_element_get_bus(m_pipeline);
     
+    // Set to READY state (pipeline built but not playing)
+    GstStateChangeReturn ret = gst_element_set_state(m_pipeline, GST_STATE_READY);
+    if (ret == GST_STATE_CHANGE_FAILURE) {
+        cleanupPipeline();
+        return string("Failed to set pipeline to READY state");
+    }
+    
     m_pipelineInitialized = true;
+    return string();  // Empty = success
 }
 
 void GStreamer::cleanupPipeline()
@@ -195,35 +187,32 @@ void GStreamer::cleanupPipeline()
     m_pipelineInitialized = false;
 }
 
-void GStreamer::play()
+string GStreamer::playPipeline()
 {
     if (!m_pipelineInitialized || !m_pipeline) {
-        g_printerr("Pipeline not initialized.\n");
-        return;
+        return string("Pipeline not initialized. Call initialize() first.");
     }
     
     GstStateChangeReturn ret = gst_element_set_state(m_pipeline, GST_STATE_PLAYING);
     if (ret == GST_STATE_CHANGE_FAILURE) {
-        g_printerr("Unable to set the pipeline to the playing state.\n");
+        return string("Failed to set pipeline to PLAYING state");
     }
+    
+    return string();  // Success
 }
 
-void GStreamer::pause()
+string GStreamer::pausePipeline()
 {
     if (!m_pipelineInitialized || !m_pipeline) {
-        g_printerr("Pipeline not initialized.\n");
-        return;
+        return string("Pipeline not initialized");
     }
     
     GstStateChangeReturn ret = gst_element_set_state(m_pipeline, GST_STATE_PAUSED);
     if (ret == GST_STATE_CHANGE_FAILURE) {
-        g_printerr("Unable to set the pipeline to the paused state.\n");
+        return string("Failed to set pipeline to PAUSED state");
     }
-}
-
-void GStreamer::quit()
-{
-    cleanupPipeline();
+    
+    return string("success");  // Success
 }
 
 // Static pad-added handler
@@ -235,6 +224,8 @@ void GStreamer::padAddedHandler(GstElement* src, GstPad* newPad, GStreamer* data
     const gchar* newPadType = nullptr;
     GstPadLinkReturn ret;
     
+    //---------------Need to edit this--------------------------//
+    //---------------remove gprint command as they might not be useful or ot may not print in the console
     g_print("Received new pad '%s' from '%s'\n",
             GST_PAD_NAME(newPad),
             GST_ELEMENT_NAME(src));
@@ -282,25 +273,60 @@ void GStreamer::padAddedHandler(GstElement* src, GstPad* newPad, GStreamer* data
 //////////////////// WRAPPER METHODS ///////////////////////
 ////////////////////////////////////////////////////////////
 
+uint32_t GStreamer::initializeWrapper(const JsonObject& parameters, JsonObject& response)
+{
+    string error = buildPipeline();
+    
+    if (!error.empty()) {
+        response["success"] = false;
+        response["message"] = error;
+        return Core::ERROR_GENERAL;
+    }
+    
+    response["success"] = true;
+    response["message"] = "Pipeline initialized successfully. Ready to play.";
+    return Core::ERROR_NONE;
+}
+
 uint32_t GStreamer::playWrapper(const JsonObject& parameters, JsonObject& response)
 {
-    play();
+    string error = playPipeline();
+    
+    if (!error.empty()) {
+        response["success"] = false;
+        response["message"] = error;
+        return Core::ERROR_GENERAL;
+    }
+    
     response["success"] = true;
-    response["message"] = "Pipeline started playing";
+    response["message"] = "Video playback started";
     return Core::ERROR_NONE;
 }
 
 uint32_t GStreamer::pauseWrapper(const JsonObject& parameters, JsonObject& response)
 {
-    pause();
+    string error = pausePipeline();
+    
+    if (!error.empty()) {
+        response["success"] = false;
+        response["message"] = error;
+        return Core::ERROR_GENERAL;
+    }
+    
     response["success"] = true;
-    response["message"] = "Pipeline paused";
+    response["message"] = "Video playback paused";
     return Core::ERROR_NONE;
 }
 
 uint32_t GStreamer::quitWrapper(const JsonObject& parameters, JsonObject& response)
 {
-    quit();
+    if (!m_pipelineInitialized) {
+        response["success"] = false;
+        response["message"] = "No active pipeline to quit";
+        return Core::ERROR_GENERAL;
+    }
+    
+    cleanupPipeline();
     response["success"] = true;
     response["message"] = "Pipeline stopped and cleaned up";
     return Core::ERROR_NONE;

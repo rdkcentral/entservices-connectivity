@@ -14,16 +14,16 @@ private:
     GStreamer& operator=(const GStreamer&) = delete;
 
     // JSONRPC wrapper methods
+    uint32_t initializeWrapper(const JsonObject& parameters, JsonObject& response);
     uint32_t playWrapper(const JsonObject& parameters, JsonObject& response);
     uint32_t pauseWrapper(const JsonObject& parameters, JsonObject& response);
     uint32_t quitWrapper(const JsonObject& parameters, JsonObject& response);
 
 private:
     // Internal logic for the GStreamer plugin
-    void play();
-    void pause();
-    void quit();
-    void initializePipeline();
+    string buildPipeline();
+    string playPipeline();
+    string pausePipeline();
     void cleanupPipeline();
     
     // Pad-added handler for dynamic pads
@@ -34,6 +34,7 @@ public:
     static const string SERVICE_NAME;
 
     // Methods
+    static const string METHOD_INITIALIZE;
     static const string METHOD_PLAY;
     static const string METHOD_PAUSE;
     static const string METHOD_QUIT;
