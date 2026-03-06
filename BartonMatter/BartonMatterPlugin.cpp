@@ -60,6 +60,12 @@ namespace WPEFramework {
             }
             mConfig.FromString(service->ConfigLine());
 	    Exchange::JBartonMatter::Register(*this, mBartonMatter);
+
+            // Register ourselves as a notification sink so GLib signals from BartonCore
+            // (resource-updated, device-added) are forwarded to us via COM-RPC and then
+            // broadcast to subscribed JSON-RPC clients via sendNotify.
+            mBartonMatter->Register(this);
+
             return "";
         }
 
@@ -68,6 +74,7 @@ namespace WPEFramework {
 	    LOGINFO("Deinitializing BartonMatter instance");	
             if (mBartonMatter != nullptr) {
 
+                mBartonMatter->Unregister(this);
                 Exchange::JBartonMatter::Unregister(*this);
 
                 mBartonMatter->Release();
@@ -83,6 +90,27 @@ namespace WPEFramework {
         {
             return(string("{\"service\": \"") + SERVICE_NAME + string("\"}"));
         }
-        
+
+        void BartonMatter::OnDeviceCommissioned(const std::string& nodeId, const std::string& deviceClass)
+        {
+            LOGINFO("BartonMatter: broadcasting onDeviceCommissioned — nodeId=%s, deviceClass=%s",
+                    nodeId.c_str(), deviceClass.c_str());
+            JsonObject params;
+            params["nodeId"]      = nodeId;
+            params["deviceClass"] = deviceClass;
+            sendNotify("onDeviceCommissioned", params);
+        }
+
+        void BartonMatter::OnDeviceStateChanged(const std::string& nodeId, const std::string& resourceType, const std::string& value)
+        {
+            LOGINFO("BartonMatter: broadcasting onDeviceStateChanged — nodeId=%s, resourceType=%s, value=%s",
+                    nodeId.c_str(), resourceType.c_str(), value.c_str());
+            JsonObject params;
+            params["nodeId"]        = nodeId;
+            params["resourceType"]  = resourceType;
+            params["value"]         = value;
+            sendNotify("onDeviceStateChanged", params);
+        }
+
     } // namespace Plugin
 } // namespace WPEFramework

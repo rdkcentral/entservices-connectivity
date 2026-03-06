@@ -30,6 +30,7 @@
 #include <events/barton-core-endpoint-added-event.h>
 #include <events/barton-core-device-added-event.h>
 #include <events/barton-core-device-removed-event.h>
+#include <events/barton-core-resource-updated-event.h>
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -78,8 +79,8 @@ namespace WPEFramework
             virtual Core::hresult GetCommissionedDeviceInfo(std::string& deviceInfo /* @out */) override;
             virtual Core::hresult RemoveDevice(const std::string deviceUuid /* @in */) override;
             virtual Core::hresult OpenCommissioningWindow(const uint16_t timeoutSeconds /* @in */, std::string& commissioningInfo /* @out */) override;
-	    virtual Core::hresult OnVoiceCommandReceived(const std::string& payload /* @in */) override;
-
+	    virtual Core::hresult OnVoiceCommandReceived(const std::string& payload /* @in */) override;            virtual Core::hresult Register(Exchange::IBartonMatter::INotification* sink /* @in */) override;
+            virtual Core::hresult Unregister(Exchange::IBartonMatter::INotification* sink /* @in */) override;
             void InitializeClient(gchar *confDir);
             static void SetDefaultParameters(BCoreInitializeParamsContainer *params);
             bool Commission(BCoreClient *client, gchar *setupPayload, guint16 timeoutSeconds);
@@ -89,6 +90,7 @@ namespace WPEFramework
 	        bool AddACLEntryForClient(uint16_t vendorId, uint16_t productId, const std::string& deviceUuid);
             bool GetNodeIdFromDeviceUuid(const std::string& deviceUuid, uint64_t& nodeId);
 	        static void DeviceConfigurationCompletedHandler(BCoreClient *client, const gchar *deviceUuid, gboolean success, gpointer userData);
+            static void ResourceUpdatedHandler(BCoreClient *source, BCoreResourceUpdatedEvent *event, gpointer userData);
             void OnSessionEstablished(const chip::SessionHandle & sessionHandle);
             void OnSessionFailure(const chip::ScopedNodeId & peerId, CHIP_ERROR error);
             static void OnSessionEstablishedStatic(void * context, chip::Messaging::ExchangeManager & exchangeMgr, const chip::SessionHandle & sessionHandle);
@@ -104,6 +106,10 @@ namespace WPEFramework
             BCoreClient *bartonClient; // Pointer to Barton Core client instance
             std::string savedDeviceUri; // Store the device URI from endpoint
             std::mutex deviceUriMtx; // Protect access to savedDeviceUri
+
+            // Notification sinks registered by the plugin for event forwarding
+            std::vector<Exchange::IBartonMatter::INotification*> mNotificationSinks;
+            std::mutex mNotificationMtx;
 
             // Structure to hold commissioned device information
             struct DeviceInfo {

@@ -163,6 +163,18 @@ namespace WPEFramework
                     } else {
                         LOGWARN("=== ACL configured successfully - device %s can now discover endpoints ===", deviceUuid);
                     }
+
+                    // Notify registered sinks — copy list under lock then invoke outside to avoid deadlocks
+                    std::vector<Exchange::IBartonMatter::INotification*> sinks;
+                    {
+                        std::lock_guard<std::mutex> lock(plugin->mNotificationMtx);
+                        sinks = plugin->mNotificationSinks;
+                        for (auto* s : sinks) s->AddRef();
+                    }
+                    for (auto* s : sinks) {
+                        s->OnDeviceCommissioned(std::string(deviceUuid), std::string(deviceClass));
+                        s->Release();
+                    }
                 }
             }
         }
@@ -303,6 +315,87 @@ namespace WPEFramework
             return rc;
         }
 
+        Core::hresult BartonMatterImplementation::Register(Exchange::IBartonMatter::INotification* sink)
+        {
+            ASSERT(sink != nullptr);
+            std::lock_guard<std::mutex> lock(mNotificationMtx);
+            // Guard against double-registration
+            auto it = std::find(mNotificationSinks.begin(), mNotificationSinks.end(), sink);
+            if (it == mNotificationSinks.end()) {
+                sink->AddRef();
+                mNotificationSinks.push_back(sink);
+                LOGINFO("BartonMatter: registered notification sink %p (total: %zu)", sink, mNotificationSinks.size());
+            } else {
+                LOGWARN("BartonMatter: notification sink %p already registered", sink);
+            }
+            return Core::ERROR_NONE;
+        }
+
+        Core::hresult BartonMatterImplementation::Unregister(Exchange::IBartonMatter::INotification* sink)
+        {
+            ASSERT(sink != nullptr);
+            std::lock_guard<std::mutex> lock(mNotificationMtx);
+            auto it = std::find(mNotificationSinks.begin(), mNotificationSinks.end(), sink);
+            if (it != mNotificationSinks.end()) {
+                (*it)->Release();
+                mNotificationSinks.erase(it);
+                LOGINFO("BartonMatter: unregistered notification sink %p (remaining: %zu)", sink, mNotificationSinks.size());
+            } else {
+                LOGWARN("BartonMatter: notification sink %p not found for unregister", sink);
+            }
+            return Core::ERROR_NONE;
+        }
+
+        void BartonMatterImplementation::ResourceUpdatedHandler(BCoreClient *source, BCoreResourceUpdatedEvent *event, gpointer userData)
+        {
+            // Extract the BCoreResource object from the event
+            g_autoptr(BCoreResource) resource = NULL;
+            g_object_get(G_OBJECT(event),
+                         B_CORE_RESOURCE_UPDATED_EVENT_PROPERTY_NAMES[B_CORE_RESOURCE_UPDATED_EVENT_PROP_RESOURCE],
+                         &resource,
+                         NULL);
+
+            if (!resource) {
+                LOGERR("ResourceUpdatedHandler: received NULL resource in event");
+                return;
+            }
+
+            g_autofree gchar *deviceUuid  = NULL;
+            g_autofree gchar *resourceId  = NULL;
+            g_autofree gchar *value       = NULL;
+
+            g_object_get(G_OBJECT(resource),
+                         B_CORE_RESOURCE_PROPERTY_NAMES[B_CORE_RESOURCE_PROP_DEVICE_UUID], &deviceUuid,
+                         B_CORE_RESOURCE_PROPERTY_NAMES[B_CORE_RESOURCE_PROP_ID],          &resourceId,
+                         B_CORE_RESOURCE_PROPERTY_NAMES[B_CORE_RESOURCE_PROP_VALUE],       &value,
+                         NULL);
+
+            if (!deviceUuid || !resourceId || !value) {
+                LOGERR("ResourceUpdatedHandler: missing required resource properties (uuid=%s, id=%s, value=%s)",
+                       deviceUuid ? deviceUuid : "NULL",
+                       resourceId ? resourceId : "NULL",
+                       value      ? value      : "NULL");
+                return;
+            }
+
+            LOGINFO("ResourceUpdatedHandler: device=%s, resource=%s, value=%s", deviceUuid, resourceId, value);
+
+            BartonMatterImplementation* self = static_cast<BartonMatterImplementation*>(userData);
+            if (!self) return;
+
+            // Copy sink list under lock, then invoke callbacks outside lock to prevent deadlocks
+            std::vector<Exchange::IBartonMatter::INotification*> sinks;
+            {
+                std::lock_guard<std::mutex> lock(self->mNotificationMtx);
+                sinks = self->mNotificationSinks;
+                for (auto* s : sinks) s->AddRef();
+            }
+            for (auto* s : sinks) {
+                s->OnDeviceStateChanged(std::string(deviceUuid), std::string(resourceId), std::string(value));
+                s->Release();
+            }
+        }
+
 
         void BartonMatterImplementation::InitializeClient(gchar *confDir)
         {
@@ -331,6 +424,10 @@ namespace WPEFramework
 
             // Connect endpoint added signal handler
             g_signal_connect(bartonClient, B_CORE_CLIENT_SIGNAL_NAME_ENDPOINT_ADDED, G_CALLBACK(EndpointAddedHandler), this);
+
+            // Connect resource updated signal handler - fires on any device attribute change
+            g_signal_connect(bartonClient, B_CORE_CLIENT_SIGNAL_NAME_RESOURCE_UPDATED, G_CALLBACK(ResourceUpdatedHandler), this);
+
             SetDefaultParameters(params);
         }
 

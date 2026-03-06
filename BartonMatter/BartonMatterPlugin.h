@@ -30,7 +30,7 @@ namespace WPEFramework {
 
     namespace Plugin {
 
-        class BartonMatter : public PluginHost::IPlugin, public PluginHost::JSONRPC {
+        class BartonMatter : public PluginHost::IPlugin, public PluginHost::JSONRPC, public Exchange::IBartonMatter::INotification {
         public:
             class Config : public Core::JSON::Container
             {
@@ -59,6 +59,7 @@ namespace WPEFramework {
             INTERFACE_AGGREGATE(Exchange::IBartonMatter, mBartonMatter)
 	    INTERFACE_ENTRY(PluginHost::IPlugin)
 	    INTERFACE_ENTRY(PluginHost::IDispatcher)
+            INTERFACE_ENTRY(Exchange::IBartonMatter::INotification)
 	    END_INTERFACE_MAP
 
         public:
@@ -67,6 +68,12 @@ namespace WPEFramework {
             virtual const string Initialize(PluginHost::IShell* service) override;
             virtual void Deinitialize(PluginHost::IShell* service) override;
             virtual string Information() const override;
+
+            // IBartonMatter::INotification implementation
+            // Called by BartonMatterImplementation (out-of-process) via COM-RPC when BartonCore fires GLib signals.
+            // These methods run on the Thunder main process and broadcast JSON-RPC events to subscribed UI clients.
+            void OnDeviceCommissioned(const std::string& nodeId /* @in */, const std::string& deviceClass /* @in */) override;
+            void OnDeviceStateChanged(const std::string& nodeId /* @in */, const std::string& resourceType /* @in */, const std::string& value /* @in */) override;
 
         public/*members*/:
             static BartonMatter* _instance;
