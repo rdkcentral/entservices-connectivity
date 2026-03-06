@@ -268,10 +268,9 @@ namespace WPEFramework
             fullUri = "/" + uri + "/ep/1/r/" + resourceType;
             LOGWARN("Writing %s resource with value: %s", resourceType.c_str(), value.c_str());
 
-            g_autoptr(GError) err = NULL;
             if(!b_core_client_write_resource(bartonClient, fullUri.c_str(), value.c_str()))
             {
-                LOGERR("Write resource failed: %s", err->message);
+                LOGERR("Write resource failed for URI: %s", fullUri.c_str());
                 result = false;
             }
             else
