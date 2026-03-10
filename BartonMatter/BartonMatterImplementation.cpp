@@ -1310,9 +1310,13 @@ void BartonMatterImplementation::OnSessionFailure(const chip::ScopedNodeId & pee
                 first = false;
 
                 deviceInfo += "{";
-                deviceInfo += "\"nodeId\":\""      + nodeId           + "\"";
-                deviceInfo += ",\"deviceClass\":\"" + info.deviceClass  + "\"";
-                deviceInfo += ",\"deviceDriver\":\""+ info.deviceDriver + "\"";
+                deviceInfo += "\"nodeId\":\""        + nodeId            + "\"";
+                deviceInfo += ",\"deviceClass\":\""  + info.deviceClass  + "\"";
+                deviceInfo += ",\"deviceDriver\":\"" + info.deviceDriver + "\"";
+                if (!info.manufacturer.empty())
+                    deviceInfo += ",\"manufacturer\":\"" + info.manufacturer + "\"";
+                if (!info.model.empty())
+                    deviceInfo += ",\"model\":\""        + info.model        + "\"";
 
                 // Emit resources object
                 deviceInfo += ",\"resources\":{";
@@ -1410,6 +1414,96 @@ void BartonMatterImplementation::OnSessionFailure(const chip::ScopedNodeId & pee
          * @param content  Raw JSON text of the devicedb file
          * @return         Map of resource id (e.g. "label", "isOn") -> value string
          */
+        /**
+         * @brief Extract the "value" field of a named entry inside "deviceResources".
+         *
+         * The deviceResources section holds device-level attributes such as
+         * "manufacturer" and "model", each represented as an object with a
+         * "value" key.  Example:
+         *
+         *   "deviceResources": {
+         *       "model": { "value": "Mini Smart Wi-Fi Plug", ... },
+         *       "manufacturer": { "value": "TP-Link", ... }
+         *   }
+         *
+         * @param content    Raw JSON text of the devicedb file
+         * @param resourceId The resource entry name (e.g. "model", "manufacturer")
+         * @return           The "value" string, or empty string if not found
+         */
+        static std::string ExtractDeviceResourceValue(const std::string& content,
+                                                      const std::string& resourceId)
+        {
+            // Find the "deviceResources" section
+            size_t drPos = content.find("\"deviceResources\"");
+            if (drPos == std::string::npos) return "";
+
+            size_t drOpen = content.find('{', drPos + 17);
+            if (drOpen == std::string::npos) return "";
+
+            // Find the matching closing brace
+            size_t drClose = drOpen + 1;
+            {
+                int depth = 1;
+                while (drClose < content.size() && depth > 0) {
+                    if (content[drClose] == '{') ++depth;
+                    else if (content[drClose] == '}') --depth;
+                    if (depth > 0) ++drClose;
+                }
+            }
+
+            // Find the resource entry key within deviceResources
+            std::string searchKey = "\"" + resourceId + "\"";
+            size_t keyPos = content.find(searchKey, drOpen);
+            if (keyPos == std::string::npos || keyPos >= drClose) return "";
+
+            // Find the opening brace of this resource's object
+            size_t objOpen = content.find('{', keyPos + searchKey.size());
+            if (objOpen == std::string::npos || objOpen >= drClose) return "";
+
+            // Find the matching closing brace
+            size_t objClose = objOpen + 1;
+            {
+                int depth = 1;
+                while (objClose < content.size() && depth > 0) {
+                    if (content[objClose] == '{') ++depth;
+                    else if (content[objClose] == '}') --depth;
+                    if (depth > 0) ++objClose;
+                }
+            }
+
+            // Extract "value" within this object
+            size_t valueKeyPos = content.find("\"value\"", objOpen);
+            if (valueKeyPos == std::string::npos || valueKeyPos >= objClose) return "";
+
+            size_t colonPos = content.find(':', valueKeyPos + 7);
+            if (colonPos == std::string::npos || colonPos >= objClose) return "";
+
+            size_t vs = colonPos + 1;
+            while (vs < objClose &&
+                   (content[vs] == ' ' || content[vs] == '\t' ||
+                    content[vs] == '\n' || content[vs] == '\r')) {
+                ++vs;
+            }
+            if (vs >= objClose) return "";
+
+            if (content[vs] == '"') {
+                ++vs; // skip opening quote
+                size_t ve = content.find('"', vs);
+                if (ve == std::string::npos || ve > objClose) return "";
+                return content.substr(vs, ve - vs);
+            }
+
+            // Unquoted scalar
+            size_t ve = vs;
+            while (ve < objClose &&
+                   content[ve] != ',' && content[ve] != '}' &&
+                   content[ve] != '\n' && content[ve] != '\r') {
+                ++ve;
+            }
+            while (ve > vs && (content[ve - 1] == ' ' || content[ve - 1] == '\t')) --ve;
+            return content.substr(vs, ve - vs);
+        }
+
         static std::map<std::string, std::string> ExtractAllResources(const std::string& content)
         {
             std::map<std::string, std::string> resources;
@@ -1549,6 +1643,10 @@ void BartonMatterImplementation::OnSessionFailure(const chip::ScopedNodeId & pee
                 DeviceInfo info;
                 info.deviceClass  = ExtractTopLevelString(content, "deviceClass");
                 info.deviceDriver = ExtractTopLevelString(content, "deviceDriver");
+
+                // Extract manufacturer and model from deviceResources
+                info.manufacturer = ExtractDeviceResourceValue(content, "manufacturer");
+                info.model        = ExtractDeviceResourceValue(content, "model");
 
                 // Extract all resource values from deviceEndpoints.1.resources
                 info.resources = ExtractAllResources(content);
@@ -1694,6 +1792,56 @@ void BartonMatterImplementation::OnSessionFailure(const chip::ScopedNodeId & pee
         bool BartonMatterImplementation::ExecuteVoiceAction(const std::string& voiceCommand)
         {
             LOGINFO("Processing voice command: '%s'", voiceCommand.c_str());
+
+            // ----------------------------------------------------------------
+            // Commissioning shortcut:
+            // Detect phrases such as:
+            //   "add matter device 1234567891"
+            //   "commission device 1234567891"
+            //   "pair matter device 1234567891"
+            //   "add device 1234567891"
+            // The passcode is the last whitespace-separated token and must be
+            // all digits (standard Matter setup codes are numeric).
+            // ----------------------------------------------------------------
+            {
+                std::string normalized = NormalizeText(voiceCommand);
+
+                // Extract the last token — the candidate passcode
+                size_t lastSpace = normalized.rfind(' ');
+                if (lastSpace != std::string::npos)
+                {
+                    std::string lastToken = normalized.substr(lastSpace + 1);
+                    std::string prefix    = normalized.substr(0, lastSpace);
+
+                    bool allDigits = !lastToken.empty() &&
+                                     std::all_of(lastToken.begin(), lastToken.end(), ::isdigit);
+
+                    bool isCommissionIntent =
+                        prefix.find("add matter device")   != std::string::npos ||
+                        prefix.find("add device")          != std::string::npos ||
+                        prefix.find("commission device")   != std::string::npos ||
+                        prefix.find("commission matter")   != std::string::npos ||
+                        prefix.find("pair matter device")  != std::string::npos ||
+                        prefix.find("pair device")         != std::string::npos;
+
+                    if (allDigits && isCommissionIntent)
+                    {
+                        LOGWARN("Voice command detected as commissioning request, passcode: %s",
+                                lastToken.c_str());
+                        Core::hresult result = CommissionDevice(lastToken);
+                        if (result == Core::ERROR_NONE)
+                        {
+                            LOGINFO("CommissionDevice initiated successfully via voice command");
+                            return true;
+                        }
+                        else
+                        {
+                            LOGERR("CommissionDevice failed via voice command (error: %u)", result);
+                            return false;
+                        }
+                    }
+                }
+            }
 
             // Step 1: Parse the voice command
             VoiceCommand cmd = ParseVoiceCommand(voiceCommand);

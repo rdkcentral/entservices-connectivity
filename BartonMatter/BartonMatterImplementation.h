@@ -115,6 +115,8 @@ namespace WPEFramework
             struct DeviceInfo {
                 std::string deviceClass;   // Device class from devicedb (e.g., "light", "plug")
                 std::string deviceDriver;  // Device driver from devicedb (e.g., "matterLight")
+                std::string manufacturer;  // From deviceResources.manufacturer.value
+                std::string model;         // From deviceResources.model.value
                 // All resource values from deviceEndpoints.1.resources (e.g., "label" -> "tanuj",
                 // "isOn" -> "true", "currentLevel" -> "254", "colorXY" -> "24939,24701")
                 std::map<std::string, std::string> resources;
