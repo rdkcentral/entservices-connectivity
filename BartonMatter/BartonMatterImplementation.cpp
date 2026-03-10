@@ -228,6 +228,115 @@ namespace WPEFramework
             LOGWARN("BartonMatter wifi cred processed successfully ssid: %s | pass: %s", ssid.c_str(), password.c_str());
             return (Core::ERROR_NONE);
         }
+
+        /**
+         * @brief Scan /etc/NetworkManager/system-connections for a WiFi connection file
+         *        and extract its SSID and PSK.
+         *
+         * Each .nmconnection file is an INI-style file.  The connection type is stored
+         * as   type=<value>   in the [connection] section.  For WiFi connections the
+         * SSID lives in the [wifi] section and the passphrase in [wifi-security].
+         *
+         * Only the credentials of the first valid WiFi profile found are returned so
+         * that the function is deterministic when multiple WiFi profiles exist.
+         */
+        bool BartonMatterImplementation::RetrieveWifiCredentialsFromNM(std::string& ssid, std::string& psk)
+        {
+            static const char* NM_CONNECTIONS_DIR = "/etc/NetworkManager/system-connections";
+
+            DIR* dir = opendir(NM_CONNECTIONS_DIR);
+            if (!dir)
+            {
+                LOGERR("Cannot open NetworkManager connections directory: %s", NM_CONNECTIONS_DIR);
+                return false;
+            }
+
+            struct dirent* entry;
+            while ((entry = readdir(dir)) != nullptr)
+            {
+                const std::string filename = entry->d_name;
+
+                // Only process files ending in ".nmconnection" (13 chars)
+                if (filename.size() < 14 ||
+                    filename.compare(filename.size() - 13, 13, ".nmconnection") != 0)
+                {
+                    continue;
+                }
+
+                const std::string fullPath = std::string(NM_CONNECTIONS_DIR) + "/" + filename;
+                std::ifstream file(fullPath);
+                if (!file.is_open())
+                {
+                    LOGWARN("Cannot read connection file: %s", fullPath.c_str());
+                    continue;
+                }
+
+                std::string currentSection;
+                std::string fileType;
+                std::string fileSsid;
+                std::string filePsk;
+                std::string line;
+
+                while (std::getline(file, line))
+                {
+                    // Strip leading whitespace
+                    const auto lstart = line.find_first_not_of(" \t\r\n");
+                    if (lstart == std::string::npos) continue;
+                    line = line.substr(lstart);
+
+                    // Skip comments
+                    if (line[0] == '#' || line[0] == ';') continue;
+
+                    // Section header [section]
+                    if (line[0] == '[')
+                    {
+                        const auto end = line.find(']');
+                        if (end != std::string::npos)
+                            currentSection = line.substr(1, end - 1);
+                        continue;
+                    }
+
+                    // key=value pair
+                    const auto eq = line.find('=');
+                    if (eq == std::string::npos) continue;
+
+                    std::string key = line.substr(0, eq);
+                    std::string val = line.substr(eq + 1);
+
+                    // Trim trailing whitespace from key
+                    const auto ktrim = key.find_last_not_of(" \t");
+                    if (ktrim != std::string::npos) key.erase(ktrim + 1);
+
+                    // Trim leading/trailing whitespace from value
+                    const auto vstart = val.find_first_not_of(" \t");
+                    if (vstart != std::string::npos) val = val.substr(vstart);
+                    const auto vend = val.find_last_not_of(" \t\r\n");
+                    if (vend != std::string::npos) val.erase(vend + 1);
+
+                    if (currentSection == "connection" && key == "type")
+                        fileType = val;
+                    else if (currentSection == "wifi" && key == "ssid")
+                        fileSsid = val;
+                    else if (currentSection == "wifi-security" && key == "psk")
+                        filePsk = val;
+                }
+
+                if (fileType == "wifi" && !fileSsid.empty() && !filePsk.empty())
+                {
+                    closedir(dir);
+                    ssid = fileSsid;
+                    psk  = filePsk;
+                    LOGINFO("Auto-retrieved WiFi credentials from %s (SSID: %s)",
+                            fullPath.c_str(), ssid.c_str());
+                    return true;
+                }
+            }
+
+            closedir(dir);
+            LOGERR("No valid WiFi connection profile found in %s", NM_CONNECTIONS_DIR);
+            return false;
+        }
+
         Core::hresult BartonMatterImplementation::CommissionDevice(const std::string passcode)
         {
             LOGWARN("Commission called with passcode: %s", passcode.c_str());
@@ -240,6 +349,44 @@ namespace WPEFramework
             if (passcode.empty()) {
                 LOGERR("Invalid passcode provided");
                 return (Core::ERROR_INVALID_INPUT_LENGTH);
+            }
+
+            // If the user has not explicitly set WiFi credentials via SetWifiCredentials(),
+            // attempt to auto-retrieve them from the NetworkManager connection profiles.
+            // User-supplied credentials always take priority.
+            {
+                std::lock_guard<std::mutex> lock(networkCredsMtx);
+                if (network_ssid && network_psk)
+                {
+                    LOGINFO("Using user-supplied WiFi credentials (SSID: %s)", network_ssid);
+                }
+            }
+
+            bool needsAutoCredentials = false;
+            {
+                std::lock_guard<std::mutex> lock(networkCredsMtx);
+                needsAutoCredentials = (!network_ssid || !network_psk);
+            }
+
+            if (needsAutoCredentials)
+            {
+                LOGWARN("WiFi credentials not set by caller — attempting auto-retrieval from NetworkManager");
+                std::string autoSsid, autoPsk;
+                if (RetrieveWifiCredentialsFromNM(autoSsid, autoPsk))
+                {
+                    Core::hresult setResult = SetWifiCredentials(autoSsid, autoPsk);
+                    if (setResult != Core::ERROR_NONE)
+                    {
+                        LOGERR("Failed to apply auto-retrieved WiFi credentials");
+                        return setResult;
+                    }
+                    LOGWARN("Auto-applied WiFi credentials for SSID: %s", autoSsid.c_str());
+                }
+                else
+                {
+                    LOGERR("Could not retrieve WiFi credentials from NetworkManager; "
+                           "commissioning may fail without valid network credentials");
+                }
             }
 
             g_autofree gchar* setupPayload = g_strdup(passcode.c_str());
@@ -508,8 +655,19 @@ namespace WPEFramework
             }
 
             if (needsDefaults) {
-                LOGWARN("Using default wifi credentials");
-                b_reference_network_credentials_provider_set_wifi_network_credentials("MySSID", "MyPassword");
+                LOGWARN("WiFi credentials not set — attempting auto-retrieval from NetworkManager");
+                std::string autoSsid, autoPsk;
+                if (RetrieveWifiCredentialsFromNM(autoSsid, autoPsk))
+                {
+                    b_reference_network_credentials_provider_set_wifi_network_credentials(
+                        autoSsid.c_str(), autoPsk.c_str());
+                    LOGWARN("Auto-set WiFi credentials for SSID: %s", autoSsid.c_str());
+                }
+                else
+                {
+                    LOGWARN("Could not auto-retrieve WiFi credentials; using placeholder defaults");
+                    b_reference_network_credentials_provider_set_wifi_network_credentials("MySSID", "MyPassword");
+                }
             }
 
             g_autofree gchar* confDir = GetConfigDirectory();

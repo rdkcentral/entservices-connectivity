@@ -262,6 +262,19 @@ namespace WPEFramework
              * @return "x,y" string (e.g. "45712,18133") or empty string if unknown
              */
             static std::string GetColorXY(const std::string& colorName);
+
+            /**
+             * @brief Auto-retrieve WiFi credentials from NetworkManager connection files
+             *
+             * Scans /etc/NetworkManager/system-connections for .nmconnection files,
+             * finds the first one with type=wifi, and extracts its ssid and psk.
+             * Used as a fallback when the user has not called SetWifiCredentials().
+             *
+             * @param ssid Output parameter for the WiFi SSID
+             * @param psk  Output parameter for the WiFi password
+             * @return true if a valid WiFi connection with credentials was found
+             */
+            static bool RetrieveWifiCredentialsFromNM(std::string& ssid, std::string& psk);
         };
     } // namespace Plugin
 } // namespace WPEFramework
