@@ -112,10 +112,12 @@ namespace WPEFramework {
             sendNotify("onDeviceStateChanged", params);
         }
 
-        void BartonMatter::OnCommissioningStarted()
+        void BartonMatter::OnCommissioningStarted(const std::string& passcode)
         {
             LOGINFO("BartonMatter: broadcasting onCommissioningStarted — passcode=%s", passcode.c_str());
-            sendNotify("onCommissioningStarted");
+            JsonObject params;
+            params["passcode"] = passcode;
+            sendNotify("onCommissioningStarted", params);
         }
 
     } // namespace Plugin

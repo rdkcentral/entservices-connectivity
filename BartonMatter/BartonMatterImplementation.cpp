@@ -456,9 +456,10 @@ namespace WPEFramework
                     sinks = mNotificationSinks;
                     for (auto* s : sinks) s->AddRef();
                 }
+                const std::string passcode(setupPayload ? setupPayload : "");
                 for (auto* s : sinks)
                 {
-                    s->OnCommissioningStarted();
+                    s->OnCommissioningStarted(passcode);
                     s->Release();
                 }
             }
