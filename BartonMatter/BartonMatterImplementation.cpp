@@ -458,7 +458,7 @@ namespace WPEFramework
                 }
                 for (auto* s : sinks)
                 {
-                    s->OnCommissioningStarted(passcode);
+                    s->OnCommissioningStarted();
                     s->Release();
                 }
             }
