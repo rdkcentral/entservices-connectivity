@@ -447,6 +447,20 @@ namespace WPEFramework
             if(rc)
             {
                 LOGWARN("Attempting to commission device");
+
+                // Notify registered sinks that commissioning has started.
+                // Copy the sink list under lock, then invoke callbacks outside to avoid deadlocks.
+                std::vector<Exchange::IBartonMatter::INotification*> sinks;
+                {
+                    std::lock_guard<std::mutex> lock(mNotificationMtx);
+                    sinks = mNotificationSinks;
+                    for (auto* s : sinks) s->AddRef();
+                }
+                for (auto* s : sinks)
+                {
+                    s->OnCommissioningStarted(passcode);
+                    s->Release();
+                }
             }
             else
             {
@@ -1797,38 +1811,69 @@ void BartonMatterImplementation::OnSessionFailure(const chip::ScopedNodeId & pee
             // Commissioning shortcut:
             // Detect phrases such as:
             //   "add matter device 1234567891"
+            //   "add matter device 002761 35006"   (passcode split by spaces)
             //   "commission device 1234567891"
             //   "pair matter device 1234567891"
             //   "add device 1234567891"
-            // The passcode is the last whitespace-separated token and must be
-            // all digits (standard Matter setup codes are numeric).
+            //
+            // Strategy:
+            //   1. Find the first matching intent keyword phrase.
+            //   2. Take everything after that phrase as the "passcode region".
+            //   3. Strip all spaces from the passcode region — this handles
+            //      servers that inject a space into the middle of the code
+            //      (e.g. "002761 35006" → "00276135006").
+            //   4. The resulting string must be non-empty and all-digits.
             // ----------------------------------------------------------------
             {
                 std::string normalized = NormalizeText(voiceCommand);
 
-                // Extract the last token — the candidate passcode
-                size_t lastSpace = normalized.rfind(' ');
-                if (lastSpace != std::string::npos)
+                // Ordered by specificity (longer phrases first) so a more
+                // specific prefix is always preferred over a shorter one.
+                static const char* kIntentPhrases[] = {
+                    "add matter device",
+                    "pair matter device",
+                    "commission matter device",
+                    "commission device",
+                    "commission matter",
+                    "pair device",
+                    "add device",
+                    nullptr
+                };
+
+                std::string passcodeRegion;
+                bool        intentFound = false;
+
+                for (int i = 0; kIntentPhrases[i] != nullptr; ++i)
                 {
-                    std::string lastToken = normalized.substr(lastSpace + 1);
-                    std::string prefix    = normalized.substr(0, lastSpace);
+                    size_t pos = normalized.find(kIntentPhrases[i]);
+                    if (pos != std::string::npos)
+                    {
+                        size_t afterPhrase = pos + strlen(kIntentPhrases[i]);
+                        // Skip any whitespace immediately after the phrase
+                        while (afterPhrase < normalized.size() && normalized[afterPhrase] == ' ')
+                            ++afterPhrase;
+                        passcodeRegion = normalized.substr(afterPhrase);
+                        intentFound    = true;
+                        break;
+                    }
+                }
 
-                    bool allDigits = !lastToken.empty() &&
-                                     std::all_of(lastToken.begin(), lastToken.end(), ::isdigit);
+                if (intentFound && !passcodeRegion.empty())
+                {
+                    // Collapse all spaces — passcode digits may arrive space-separated
+                    std::string passcode;
+                    passcode.reserve(passcodeRegion.size());
+                    for (char c : passcodeRegion)
+                        if (c != ' ') passcode += c;
 
-                    bool isCommissionIntent =
-                        prefix.find("add matter device")   != std::string::npos ||
-                        prefix.find("add device")          != std::string::npos ||
-                        prefix.find("commission device")   != std::string::npos ||
-                        prefix.find("commission matter")   != std::string::npos ||
-                        prefix.find("pair matter device")  != std::string::npos ||
-                        prefix.find("pair device")         != std::string::npos;
+                    bool allDigits = !passcode.empty() &&
+                                     std::all_of(passcode.begin(), passcode.end(), ::isdigit);
 
-                    if (allDigits && isCommissionIntent)
+                    if (allDigits)
                     {
                         LOGWARN("Voice command detected as commissioning request, passcode: %s",
-                                lastToken.c_str());
-                        Core::hresult result = CommissionDevice(lastToken);
+                                passcode.c_str());
+                        Core::hresult result = CommissionDevice(passcode);
                         if (result == Core::ERROR_NONE)
                         {
                             LOGINFO("CommissionDevice initiated successfully via voice command");

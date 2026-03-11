@@ -74,6 +74,7 @@ namespace WPEFramework {
             // These methods run on the Thunder main process and broadcast JSON-RPC events to subscribed UI clients.
             void OnDeviceCommissioned(const std::string& nodeId /* @in */, const std::string& deviceClass /* @in */) override;
             void OnDeviceStateChanged(const std::string& nodeId /* @in */, const std::string& resourceType /* @in */, const std::string& value /* @in */) override;
+            void OnCommissioningStarted(const string& passcode /* @in */) override;
 
         public/*members*/:
             static BartonMatter* _instance;
