@@ -39,8 +39,8 @@
 // which finally calls to "BTRMGR_StartDeviceDiscovery()" in Bluetooth Manager.
 
 #define API_VERSION_NUMBER_MAJOR 1
-#define API_VERSION_NUMBER_MINOR 0
-#define API_VERSION_NUMBER_PATCH 11
+#define API_VERSION_NUMBER_MINOR 1
+#define API_VERSION_NUMBER_PATCH 0
 
 const string WPEFramework::Plugin::Bluetooth::SERVICE_NAME = "org.rdk.Bluetooth";
 const string WPEFramework::Plugin::Bluetooth::METHOD_START_SCAN = "startScan";
@@ -66,6 +66,8 @@ const string WPEFramework::Plugin::Bluetooth::METHOD_GET_AUDIO_INFO = "getAudioI
 const string WPEFramework::Plugin::Bluetooth::METHOD_GET_API_VERSION_NUMBER = "getApiVersionNumber";
 const string WPEFramework::Plugin::Bluetooth::METHOD_GET_DEVICE_VOLUME_MUTE_INFO = "getDeviceVolumeMuteInfo";
 const string WPEFramework::Plugin::Bluetooth::METHOD_SET_DEVICE_VOLUME_MUTE_INFO = "setDeviceVolumeMuteInfo";
+const string WPEFramework::Plugin::Bluetooth::METHOD_SET_AUTO_CONNECT = "setAutoConnect";
+const string WPEFramework::Plugin::Bluetooth::METHOD_GET_AUTO_CONNECT_STATUS = "getAutoConnect";
 
 const string WPEFramework::Plugin::Bluetooth::EVT_STATUS_CHANGED = "onStatusChanged";
 const string WPEFramework::Plugin::Bluetooth::EVT_PAIRING_REQUEST = "onPairingRequest";
@@ -106,6 +108,7 @@ const string WPEFramework::Plugin::Bluetooth::STATUS_DISCOVERY_STARTED = "DISCOV
 const string WPEFramework::Plugin::Bluetooth::STATUS_DISCOVERY_COMPLETED = "DISCOVERY_COMPLETED";
 const string WPEFramework::Plugin::Bluetooth::STATUS_PAIRING_FAILED = "PAIRING_FAILED";
 const string WPEFramework::Plugin::Bluetooth::STATUS_CONNECTION_FAILED= "CONNECTION_FAILED";
+const string WPEFramework::Plugin::Bluetooth::STATUS_AUTOCONNECT_STATUS_CHANGE= "AUTOCONNECT_STATUS_CHANGE";
 
 const string WPEFramework::Plugin::Bluetooth::CMD_AUDIO_CTRL_PLAY = "PLAY";
 const string WPEFramework::Plugin::Bluetooth::CMD_AUDIO_CTRL_STOP = "STOP";
@@ -159,8 +162,19 @@ namespace WPEFramework
         , m_apiVersionNumber(API_VERSION_NUMBER_MAJOR)
         , m_discoveryRunning(false)
         , m_discoveryTimer(this)
+        , m_powerManagerNotification(*this)
         {
             Bluetooth::_instance = this;
+        }
+
+        Bluetooth::~Bluetooth()
+        {
+        }
+
+        const string Bluetooth::Initialize(PluginHost::IShell* service)
+        {
+            string message = "";
+
             Register(METHOD_GET_API_VERSION_NUMBER, &Bluetooth::getApiVersionNumber, this);
             Register(METHOD_START_SCAN, &Bluetooth::startScanWrapper, this);
             Register(METHOD_STOP_SCAN, &Bluetooth::stopScanWrapper, this);
@@ -184,25 +198,53 @@ namespace WPEFramework
             Register(METHOD_GET_AUDIO_INFO, &Bluetooth::getMediaTrackInfoWrapper, this);
             Register(METHOD_GET_DEVICE_VOLUME_MUTE_INFO, &Bluetooth::getDeviceVolumeMuteInfoWrapper, this);
             Register(METHOD_SET_DEVICE_VOLUME_MUTE_INFO, &Bluetooth::setDeviceVolumeMuteInfoWrapper, this);
+            Register(METHOD_SET_AUTO_CONNECT, &Bluetooth::setAutoConnectWrapper, this);
+            Register(METHOD_GET_AUTO_CONNECT_STATUS, &Bluetooth::getAutoConnectWrapper, this);
 
             Utils::IARM::init();
 
             BTRMGR_Result_t rc = BTRMGR_RegisterForCallbacks(Utils::IARM::NAME);
             if (BTRMGR_RESULT_SUCCESS != rc)
             {
-                LOGWARN("Failed to Register BTRMgr...!");
+                message = "Failed to Register BTRMgr...!";
+                LOGERR("%s", message.c_str());
+                return message;
             }
             else {
                 BTRMGR_RegisterEventCallback(bluetoothSrv_EventCallback);
             }
+
+            m_powerManagerPlugin = PowerManagerInterfaceBuilder(_T("org.rdk.PowerManager"))
+                .withIShell(service)
+                .withRetryIntervalMS(200)
+                .withRetryCount(25)
+                .createInterface();
+
+            if (m_powerManagerPlugin) {
+                m_powerManagerPlugin->Register(&m_powerManagerNotification);
+
+                WPEFramework::Exchange::IPowerManager::PowerState currentState, prevState;
+                if (Core::ERROR_NONE == m_powerManagerPlugin->GetPowerState(currentState, prevState)) {
+                    onPowerModeChanged(prevState, currentState);
+                } else {
+                    LOGERR("Failed to get current power state");
+                }
+            } else {
+                LOGERR("Failed to get PowerManager interface");
+            }
+
+            return m_bluetoothDeviceManager.init(service);
         }
 
-        Bluetooth::~Bluetooth()
+        void Bluetooth::Deinitialize(PluginHost::IShell* service)
         {
-        }
+            m_bluetoothDeviceManager.deinit();
 
-        void Bluetooth::Deinitialize(PluginHost::IShell* /* service */)
-        {
+            if (m_powerManagerPlugin) {
+                m_powerManagerPlugin->Unregister(&m_powerManagerNotification);
+                m_powerManagerPlugin.Reset();
+            }
+
             Bluetooth::_instance = nullptr;
 
             BTRMGR_Result_t rc = BTRMGR_UnRegisterFromCallbacks(Utils::IARM::NAME);
@@ -405,7 +447,8 @@ namespace WPEFramework
                 {
                     deviceDetails["deviceID"] = std::to_string(discoveredDevices->m_deviceProperty[i].m_deviceHandle);
                     deviceDetails["name"] = string(discoveredDevices->m_deviceProperty[i].m_name);
-                    deviceDetails["deviceType"] = string(BTRMGR_GetDeviceTypeAsString(discoveredDevices->m_deviceProperty[i].m_deviceType));
+                    const char* deviceTypeStr = BTRMGR_GetDeviceTypeAsString(discoveredDevices->m_deviceProperty[i].m_deviceType);
+                    deviceDetails["deviceType"] = string(deviceTypeStr ? deviceTypeStr : "UNKNOWN");
                     deviceDetails["connected"] = discoveredDevices->m_deviceProperty[i].m_isConnected?true:false;
                     deviceDetails["paired"] = discoveredDevices->m_deviceProperty[i].m_isPairedDevice?true:false;
                     deviceDetails["rawDeviceType"] = std::to_string(discoveredDevices->m_deviceProperty[i].m_ui32DevClassBtSpec);
@@ -413,6 +456,7 @@ namespace WPEFramework
                     deviceArray.Add(deviceDetails);
                 }
             }
+
             free(discoveredDevices);
             return deviceArray;
         }
@@ -436,16 +480,34 @@ namespace WPEFramework
             else
             {
                 int i = 0;
-                JsonObject deviceDetails;
                 LOGINFO ("Success....   Paired %d Devices", pairedDevices->m_numOfDevices);
                 for (; i < pairedDevices->m_numOfDevices; i++)
                 {
-                    deviceDetails["deviceID"] = std::to_string(pairedDevices->m_deviceProperty[i].m_deviceHandle);
+                    JsonObject deviceDetails;
+
+                    string deviceId = std::to_string(pairedDevices->m_deviceProperty[i].m_deviceHandle);
+
+                    deviceDetails["deviceID"] = deviceId;
                     deviceDetails["name"] = string(pairedDevices->m_deviceProperty[i].m_name);
-                    deviceDetails["deviceType"] = string(BTRMGR_GetDeviceTypeAsString(pairedDevices->m_deviceProperty[i].m_deviceType));
+                    const char* deviceTypeStr = BTRMGR_GetDeviceTypeAsString(pairedDevices->m_deviceProperty[i].m_deviceType);
+                    deviceDetails["deviceType"] = string(deviceTypeStr ? deviceTypeStr : "UNKNOWN");
                     deviceDetails["connected"] = pairedDevices->m_deviceProperty[i].m_isConnected?true:false;
-		    deviceDetails["rawDeviceType"] = std::to_string(pairedDevices->m_deviceProperty[i].m_ui32DevClassBtSpec);
-		    deviceDetails["rawBleDeviceType"] = std::to_string(pairedDevices->m_deviceProperty[i].m_ui16DevAppearanceBleSpec);
+		            deviceDetails["rawDeviceType"] = std::to_string(pairedDevices->m_deviceProperty[i].m_ui32DevClassBtSpec);
+		            deviceDetails["rawBleDeviceType"] = std::to_string(pairedDevices->m_deviceProperty[i].m_ui16DevAppearanceBleSpec);
+                    
+                    string lastConnectTimeUtc;
+                    Core::hresult result = m_bluetoothDeviceManager.getLastConnectTimeUtc(deviceId, lastConnectTimeUtc);
+
+                    if (Core::ERROR_NONE == result && !lastConnectTimeUtc.empty()) {
+                        deviceDetails["lastConnectTimeUtc"] = lastConnectTimeUtc;
+                    }
+
+                    AutoConnectStatus autoConnectStatus;
+                    result = m_bluetoothDeviceManager.getAutoConnect(deviceId, autoConnectStatus);
+
+                    if (Core::ERROR_NONE == result && AUTO_CONNECT_STATUS_UNSET != autoConnectStatus) {
+                        deviceDetails["autoconnect"] = (AUTO_CONNECT_STATUS_ENABLED == autoConnectStatus);
+                    }
 
                     deviceArray.Add(deviceDetails);
                 }
@@ -473,16 +535,34 @@ namespace WPEFramework
             else
             {
                 int i = 0;
-                JsonObject deviceDetails;
                 LOGINFO ("Success....   Connected %d Devices", connectedDevices->m_numOfDevices);
                 for (; i < connectedDevices->m_numOfDevices; i++)
                 {
-                    deviceDetails["deviceID"] = std::to_string(connectedDevices->m_deviceProperty[i].m_deviceHandle);
+                    JsonObject deviceDetails;
+
+                    string deviceId = std::to_string(connectedDevices->m_deviceProperty[i].m_deviceHandle);
+
+                    deviceDetails["deviceID"] = deviceId;
                     deviceDetails["name"] = string(connectedDevices->m_deviceProperty[i].m_name);
-                    deviceDetails["deviceType"] = string(BTRMGR_GetDeviceTypeAsString(connectedDevices->m_deviceProperty[i].m_deviceType));
+                    const char* deviceTypeStr = BTRMGR_GetDeviceTypeAsString(connectedDevices->m_deviceProperty[i].m_deviceType);
+                    deviceDetails["deviceType"] = string(deviceTypeStr ? deviceTypeStr : "UNKNOWN");
                     deviceDetails["activeState"] = std::to_string(connectedDevices->m_deviceProperty[i].m_powerStatus);
-		    deviceDetails["rawDeviceType"] = std::to_string(connectedDevices->m_deviceProperty[i].m_ui32DevClassBtSpec);
-		    deviceDetails["rawBleDeviceType"] = std::to_string(connectedDevices->m_deviceProperty[i].m_ui16DevAppearanceBleSpec);
+		            deviceDetails["rawDeviceType"] = std::to_string(connectedDevices->m_deviceProperty[i].m_ui32DevClassBtSpec);
+		            deviceDetails["rawBleDeviceType"] = std::to_string(connectedDevices->m_deviceProperty[i].m_ui16DevAppearanceBleSpec);
+                    
+                    string lastConnectTimeUtc;
+                    Core::hresult result = m_bluetoothDeviceManager.getLastConnectTimeUtc(deviceId, lastConnectTimeUtc);
+
+                    if (Core::ERROR_NONE == result && !lastConnectTimeUtc.empty()) {
+                        deviceDetails["lastConnectTimeUtc"] = lastConnectTimeUtc;
+                    }
+
+                    AutoConnectStatus autoConnectStatus;
+                    result = m_bluetoothDeviceManager.getAutoConnect(deviceId, autoConnectStatus);
+
+                    if (Core::ERROR_NONE == result && AUTO_CONNECT_STATUS_UNSET != autoConnectStatus) {
+                        deviceDetails["autoconnect"] = (AUTO_CONNECT_STATUS_ENABLED == autoConnectStatus);
+                    }
 
                     deviceArray.Add(deviceDetails);
                 }
@@ -491,53 +571,54 @@ namespace WPEFramework
             return deviceArray;
         }
 
-        bool Bluetooth::setDeviceConnection(long long int deviceID, const string &enable, const string &deviceType)
+        bool Bluetooth::setDeviceConnection(long long int deviceID, bool connect, const string &deviceType)
         {
             BTRMGR_Result_t rc = BTRMGR_RESULT_SUCCESS;
             BTRMgrDeviceHandle deviceHandle = (BTRMgrDeviceHandle) deviceID;
 
             if (Utils::String::equal(deviceType, "LE TILE")) {
-                if (Utils::String::equal(enable, "DISCONNECT")) {
-                    rc = BTRMGR_DisconnectFromDevice(0, deviceHandle);
-                }
-                else if (Utils::String::equal(enable, "CONNECT")) {
+                if (connect) {
                     BTRMGR_DeviceOperationType_t stream_pref = BTRMGR_DEVICE_OP_TYPE_LE;
                     rc = BTRMGR_ConnectToDevice(0, deviceHandle, stream_pref);
+                } else {
+                    rc = BTRMGR_DisconnectFromDevice(0, deviceHandle);
                 }
             }
-                else if (Utils::String::equal(deviceType, "HUMAN INTERFACE DEVICE") ||
+            else if (Utils::String::equal(deviceType, "HUMAN INTERFACE DEVICE") ||
 			 Utils::String::contains(deviceType, "KEYBOARD") ||
 		         Utils::String::contains(deviceType, "MOUSE") ||
 			 Utils::String::contains(deviceType, "JOYSTICK")) {
-	            if (Utils::String::equal(enable, "DISCONNECT")) {
-                    rc = BTRMGR_DisconnectFromDevice(0, deviceHandle);
-                }
-                else if (Utils::String::equal(enable, "CONNECT")) {
+                if (connect) {
                     BTRMGR_DeviceOperationType_t stream_pref = BTRMGR_DEVICE_OP_TYPE_HID;
                     rc = BTRMGR_ConnectToDevice(0, deviceHandle, stream_pref);
+                } else {
+                    rc = BTRMGR_DisconnectFromDevice(0, deviceHandle);
                 }
             }
             else if ((Utils::String::equal(deviceType, "SMARTPHONE")) || (Utils::String::equal(deviceType, "TABLET"))) {
-                if (Utils::String::equal(enable, "DISCONNECT")) {
-                    rc = BTRMGR_StopAudioStreamingIn(0, deviceHandle);
-                }
-                else if (Utils::String::equal(enable, "CONNECT")) {
+                if (connect) {
                     BTRMGR_DeviceOperationType_t stream_pref = BTRMGR_DEVICE_OP_TYPE_AUDIO_INPUT;
                     rc = BTRMGR_StartAudioStreamingIn(0, deviceHandle, stream_pref);
+                } else {
+                    rc = BTRMGR_StopAudioStreamingIn(0, deviceHandle);
                 }
             }
             else {
-                if (Utils::String::equal(enable, "DISCONNECT")) {
-                    rc = BTRMGR_StopAudioStreamingOut(0, deviceHandle);
-                }
-                else if (Utils::String::equal(enable, "CONNECT")) {
+                if (connect) {
                     BTRMGR_DeviceOperationType_t stream_pref = BTRMGR_DEVICE_OP_TYPE_AUDIO_OUTPUT;
                     rc = BTRMGR_StartAudioStreamingOut(0, deviceHandle, stream_pref);
+                } else {
+                    rc = BTRMGR_StopAudioStreamingOut(0, deviceHandle);
                 }
             }
 
-            if (BTRMGR_RESULT_SUCCESS != rc)
+            if (BTRMGR_RESULT_SUCCESS == rc ) {
+                if (connect) {
+                    m_bluetoothDeviceManager.setLastConnectTimeUtc(std::to_string(deviceHandle));
+                }
+            } else {
                 LOGERR("Failed to do setDeviceConnection");
+            }
 
             return BTRMGR_RESULT_SUCCESS == rc;
         }
@@ -839,7 +920,8 @@ namespace WPEFramework
             } else {
                 deviceDetails["deviceID"] = std::to_string(deviceProperty.m_deviceHandle);
                 deviceDetails["name"] =  string(deviceProperty.m_name);
-                deviceDetails["deviceType"] = string(BTRMGR_GetDeviceTypeAsString(deviceProperty.m_deviceType));
+                const char* deviceTypeStr = BTRMGR_GetDeviceTypeAsString(deviceProperty.m_deviceType);
+                deviceDetails["deviceType"] = string(deviceTypeStr ? deviceTypeStr : "UNKNOWN");
                 deviceDetails["manufacturer"] = std::to_string(deviceProperty.m_vendorID);
                 deviceDetails["MAC"] = string(deviceProperty.m_deviceAddress);
                 deviceDetails["signalStrength"] = std::to_string(deviceProperty.m_signalLevel);
@@ -916,7 +998,7 @@ namespace WPEFramework
                     params["name"] = string(eventMsg.m_discoveredDevice.m_name);
                     params["deviceType"] = BTRMGR_GetDeviceTypeAsString(eventMsg.m_discoveredDevice.m_deviceType);
                     params["rawDeviceType"] = C_STR(std::to_string(eventMsg.m_discoveredDevice.m_ui32DevClassBtSpec));
-		    params["rawBleDeviceType"] = C_STR(std::to_string(eventMsg.m_discoveredDevice.m_ui16DevAppearanceBleSpec));
+		            params["rawBleDeviceType"] = C_STR(std::to_string(eventMsg.m_discoveredDevice.m_ui16DevAppearanceBleSpec));
                     params["lastConnectedState"] = eventMsg.m_discoveredDevice.m_isLastConnectedDevice ? true : false;
                     params["paired"] = eventMsg.m_discoveredDevice.m_isPairedDevice ? true : false;
                     params["connected"] = eventMsg.m_discoveredDevice.m_isConnected ? true : false;
@@ -931,7 +1013,7 @@ namespace WPEFramework
                     params["name"] = string(eventMsg.m_pairedDevice.m_name);
                     params["deviceType"] = BTRMGR_GetDeviceTypeAsString(eventMsg.m_pairedDevice.m_deviceType);
                     params["rawDeviceType"] = std::to_string(eventMsg.m_pairedDevice.m_ui32DevClassBtSpec);
-		    params["rawBleDeviceType"] = std::to_string(eventMsg.m_pairedDevice.m_ui16DevAppearanceBleSpec);
+		            params["rawBleDeviceType"] = std::to_string(eventMsg.m_pairedDevice.m_ui16DevAppearanceBleSpec);
                     params["lastConnectedState"] = eventMsg.m_pairedDevice.m_isLastConnectedDevice ? true : false;
                     params["paired"] = false;
                     params["connected"] = eventMsg.m_pairedDevice.m_isConnected ? true : false;
@@ -940,20 +1022,34 @@ namespace WPEFramework
                     break;
 
                 case BTRMGR_EVENT_DEVICE_CONNECTION_COMPLETE:
-                case BTRMGR_EVENT_DEVICE_DISCONNECT_COMPLETE:
+                case BTRMGR_EVENT_DEVICE_DISCONNECT_COMPLETE: {
                     LOGINFO ("Received %s Event from BTRMgr", C_STR(STATUS_CONNECTION_CHANGE));
+                    string deviceId = std::to_string(eventMsg.m_pairedDevice.m_deviceHandle);
+                    
                     params["newStatus"] = STATUS_CONNECTION_CHANGE;
-                    params["deviceID"] = std::to_string(eventMsg.m_pairedDevice.m_deviceHandle);
+                    params["deviceID"] = deviceId;
                     params["name"] = string(eventMsg.m_pairedDevice.m_name);
                     params["deviceType"] = BTRMGR_GetDeviceTypeAsString(eventMsg.m_pairedDevice.m_deviceType);
                     params["rawDeviceType"] = std::to_string(eventMsg.m_pairedDevice.m_ui32DevClassBtSpec);
-		    params["rawBleDeviceType"] = std::to_string(eventMsg.m_pairedDevice.m_ui16DevAppearanceBleSpec);
+		            params["rawBleDeviceType"] = std::to_string(eventMsg.m_pairedDevice.m_ui16DevAppearanceBleSpec);
                     params["lastConnectedState"] = eventMsg.m_pairedDevice.m_isLastConnectedDevice ? true : false;
                     params["paired"] = true;
                     params["connected"] = eventMsg.m_pairedDevice.m_isConnected ? true : false;
 
+                    AutoConnectStatus autoConnectStatus;
+                    Core::hresult result = m_bluetoothDeviceManager.getAutoConnect(deviceId, autoConnectStatus);
+
+                    if (Core::ERROR_NONE == result) {
+                        if (AUTO_CONNECT_STATUS_UNSET != autoConnectStatus) {
+                            params["autoconnect"] = (AUTO_CONNECT_STATUS_ENABLED == autoConnectStatus);
+                        }
+                    } else {
+                        LOGINFO("Unable to retrieve autoconnect status for device %s: %d", deviceId.c_str(), result);
+                    }
+
                     eventId = EVT_STATUS_CHANGED;
                     break;
+                }
 
                 case BTRMGR_EVENT_DEVICE_DISCOVERY_STARTED:
                     LOGINFO ("Received %s Event from BTRMgr", C_STR(STATUS_DISCOVERY_STARTED));
@@ -995,7 +1091,7 @@ namespace WPEFramework
                     params["name"] = string(eventMsg.m_discoveredDevice.m_name);
                     params["deviceType"] = BTRMGR_GetDeviceTypeAsString(eventMsg.m_discoveredDevice.m_deviceType);
                     params["rawDeviceType"] = std::to_string(eventMsg.m_discoveredDevice.m_ui32DevClassBtSpec);
-		    params["rawBleDeviceType"] = std::to_string(eventMsg.m_discoveredDevice.m_ui16DevAppearanceBleSpec);
+		            params["rawBleDeviceType"] = std::to_string(eventMsg.m_discoveredDevice.m_ui16DevAppearanceBleSpec);
                     params["lastConnectedState"] = eventMsg.m_discoveredDevice.m_isLastConnectedDevice ? true : false;
                     params["paired"] = eventMsg.m_discoveredDevice.m_isPairedDevice ? true : false;
                     params["connected"] = eventMsg.m_discoveredDevice.m_isConnected ? true : false;
@@ -1010,7 +1106,7 @@ namespace WPEFramework
                     params["name"] = string(eventMsg.m_pairedDevice.m_name);
                     params["deviceType"] = BTRMGR_GetDeviceTypeAsString(eventMsg.m_pairedDevice.m_deviceType);
                     params["rawDeviceType"] = std::to_string(eventMsg.m_pairedDevice.m_ui32DevClassBtSpec);
-		    params["rawBleDeviceType"] = std::to_string(eventMsg.m_pairedDevice.m_ui16DevAppearanceBleSpec);
+		            params["rawBleDeviceType"] = std::to_string(eventMsg.m_pairedDevice.m_ui16DevAppearanceBleSpec);
                     params["lastConnectedState"] = eventMsg.m_pairedDevice.m_isLastConnectedDevice ? true : false;
                     params["paired"] = true;
                     params["connected"] = eventMsg.m_pairedDevice.m_isConnected ? true : false;
@@ -1025,7 +1121,7 @@ namespace WPEFramework
                     params["name"] = string(eventMsg.m_pairedDevice.m_name);
                     params["deviceType"] = BTRMGR_GetDeviceTypeAsString(eventMsg.m_pairedDevice.m_deviceType);
                     params["rawDeviceType"] = std::to_string(eventMsg.m_pairedDevice.m_ui32DevClassBtSpec);
-		    params["rawBleDeviceType"] = std::to_string(eventMsg.m_pairedDevice.m_ui16DevAppearanceBleSpec);
+		            params["rawBleDeviceType"] = std::to_string(eventMsg.m_pairedDevice.m_ui16DevAppearanceBleSpec);
                     params["lastConnectedState"] = eventMsg.m_pairedDevice.m_isLastConnectedDevice ? true : false;
                     params["paired"] = true;
                     params["connected"] = eventMsg.m_pairedDevice.m_isConnected ? true : false;
@@ -1136,7 +1232,7 @@ namespace WPEFramework
                     params["name"] = string(eventMsg.m_pairedDevice.m_name);
                     params["deviceType"] = BTRMGR_GetDeviceTypeAsString(eventMsg.m_pairedDevice.m_deviceType);
                     params["rawDeviceType"] = std::to_string(eventMsg.m_pairedDevice.m_ui32DevClassBtSpec);
-		    params["rawBleDeviceType"] = std::to_string(eventMsg.m_pairedDevice.m_ui16DevAppearanceBleSpec);
+		            params["rawBleDeviceType"] = std::to_string(eventMsg.m_pairedDevice.m_ui16DevAppearanceBleSpec);
                     params["lastConnectedState"] = eventMsg.m_pairedDevice.m_isLastConnectedDevice?true:false;
 
                     eventId = EVT_DEVICE_FOUND;
@@ -1147,7 +1243,7 @@ namespace WPEFramework
                     params["name"] = string(eventMsg.m_pairedDevice.m_name);
                     params["deviceType"] = BTRMGR_GetDeviceTypeAsString(eventMsg.m_pairedDevice.m_deviceType);
                     params["rawDeviceType"] = std::to_string(eventMsg.m_pairedDevice.m_ui32DevClassBtSpec);
-		    params["rawBleDeviceType"] = std::to_string(eventMsg.m_pairedDevice.m_ui16DevAppearanceBleSpec);
+		            params["rawBleDeviceType"] = std::to_string(eventMsg.m_pairedDevice.m_ui16DevAppearanceBleSpec);
                     params["lastConnectedState"] = eventMsg.m_pairedDevice.m_isLastConnectedDevice?true:false;
                     eventId = EVT_DEVICE_LOST_OR_OUT_OF_RANGE;
                     break;
@@ -1158,7 +1254,7 @@ namespace WPEFramework
                     params["name"] = string(eventMsg.m_discoveredDevice.m_name);
                     params["deviceType"] = BTRMGR_GetDeviceTypeAsString(eventMsg.m_discoveredDevice.m_deviceType);
                     params["rawDeviceType"] = std::to_string(eventMsg.m_discoveredDevice.m_ui32DevClassBtSpec);
-		    params["rawBleDeviceType"] = std::to_string(eventMsg.m_discoveredDevice.m_ui16DevAppearanceBleSpec);
+		            params["rawBleDeviceType"] = std::to_string(eventMsg.m_discoveredDevice.m_ui16DevAppearanceBleSpec);
                     params["lastConnectedState"] = eventMsg.m_discoveredDevice.m_isLastConnectedDevice? true:false;
                     params["paired"] = eventMsg.m_discoveredDevice.m_isPairedDevice ? true:false;
 
@@ -1192,7 +1288,7 @@ namespace WPEFramework
                     eventId = EVT_DEVICE_MEDIA_STATUS;
                     break;
 
-                    // TODO: implement or delete these values from enum
+                // TODO: implement or delete these values from enum
                 case BTRMGR_EVENT_MAX:
                     break;
                 case BTRMGR_EVENT_DEVICE_OP_READY:
@@ -1241,7 +1337,6 @@ namespace WPEFramework
             {
                 sendNotify(C_STR(eventId), params);
             }
-            return;
         }
         //
         /// Internal methods end
@@ -1363,7 +1458,6 @@ namespace WPEFramework
             string deviceIDStr;
             long long int deviceID = 0;
             bool deviceIDDefined = false;
-            string enable = "CONNECT"; // "CONNECT" or "DISCONNECT"
             string deviceType;
             bool deviceTypeDefined = false;
             bool successFlag;
@@ -1385,11 +1479,11 @@ namespace WPEFramework
 
             if (deviceIDDefined && deviceTypeDefined)
             {
-                LOGINFO("Making a call with deviceID=%llu enable=%s deviceType=%s", deviceID, enable.c_str(), deviceType.c_str());
-                successFlag = setDeviceConnection(deviceID, enable, deviceType);
+                LOGINFO("Making a call with deviceID=%llu enable=%s deviceType=%s", deviceID, "CONNECT", deviceType.c_str());
+                successFlag = setDeviceConnection(deviceID, true, deviceType);
             } else if (deviceIDDefined) {
-                LOGINFO("Making a call with deviceID=%llu enable=%s", deviceID, enable.c_str());
-                successFlag = setDeviceConnection(deviceID, enable);
+                LOGINFO("Making a call with deviceID=%llu enable=%s", deviceID, "CONNECT");
+                successFlag = setDeviceConnection(deviceID, true);
             } else {
                 LOGERR("Please specify parameters. Example: \"params\": {\"deviceID\": \"271731989589742\"}");
                 successFlag = false;
@@ -1403,7 +1497,6 @@ namespace WPEFramework
             string deviceIDStr;
             long long int deviceID = 0;
             bool deviceIDDefined = false;
-            string enable = "DISCONNECT"; // "CONNECT" or "DISCONNECT"
             string deviceType;
             bool deviceTypeDefined = false;
             bool successFlag;
@@ -1425,11 +1518,11 @@ namespace WPEFramework
 
             if (deviceIDDefined && deviceTypeDefined)
             {
-                LOGINFO("Making a call with deviceID=%llu enable=%s deviceType=%s", deviceID, enable.c_str(), deviceType.c_str());
-                successFlag = setDeviceConnection(deviceID, enable, deviceType);
+                LOGINFO("Making a call with deviceID=%llu enable=%s deviceType=%s", deviceID, "DISCONNECT", deviceType.c_str());
+                successFlag = setDeviceConnection(deviceID, false, deviceType);
             } else if (deviceIDDefined) {
-                LOGINFO("Making a call with deviceID=%llu enable=%s", deviceID, enable.c_str());
-                successFlag = setDeviceConnection(deviceID, enable);
+                LOGINFO("Making a call with deviceID=%llu enable=%s", deviceID, "DISCONNECT");
+                successFlag = setDeviceConnection(deviceID, false);
             } else {
                 LOGERR("Please specify parameters. Example: \"params\": {\"deviceID\": \"271731989589742\"}");
                 successFlag = false;
@@ -1756,8 +1849,146 @@ namespace WPEFramework
             }
             returnResponse(successFlag);
         }
+
+        uint32_t Bluetooth::setAutoConnectWrapper(const JsonObject& parameters, JsonObject& response)
+        {
+            LOGINFOMETHOD();
+            string deviceID;
+            bool enable;
+            bool successFlag = true;
+            if (parameters.HasLabel("deviceID") && parameters.HasLabel("enable"))
+            {
+                getStringParameter("deviceID", deviceID);
+                getBoolParameter("enable", enable);
+                Core::hresult result = m_bluetoothDeviceManager.setAutoConnect(deviceID, enable);
+                if (Core::ERROR_NONE != result) {
+                    LOGERR("Failed to set autoConnect status for deviceID=%s, result=0x%08X", deviceID.c_str(), result);
+                    successFlag = false;
+                } else {
+                    notifyAutoConnectStatusChanged(deviceID, enable);
+                }
+            } else {
+                LOGERR("Please specify parameters. Example: \"params\": {\"deviceID\": \"1234567890\", \"enable\": true}");
+                successFlag = false;
+            }
+            
+            returnResponse(successFlag);
+        }
+
+        uint32_t Bluetooth::getAutoConnectWrapper(const JsonObject& parameters, JsonObject& response)
+        {
+            LOGINFOMETHOD();
+            string deviceID;
+            bool successFlag = true;
+            if (parameters.HasLabel("deviceID"))
+            {
+                getStringParameter("deviceID", deviceID);
+                AutoConnectStatus status;
+                Core::hresult result = m_bluetoothDeviceManager.getAutoConnect(deviceID, status);
+
+                if (Core::ERROR_NONE == result) {
+                    response["autoconnect"] = (AUTO_CONNECT_STATUS_ENABLED == status);
+                } else {
+                    successFlag = false;
+                    LOGWARN("Failed to get autoConnect status for deviceID=%s, result=0x%08X", deviceID.c_str(), result);
+                }
+            } else {
+                LOGERR("Please specify parameters. Example: \"params\": {\"deviceID\": \"1234567890\"}");
+                successFlag = false;
+            }
+            returnResponse(successFlag);
+        }
+
         //
         /// Registered methods end
+
+        void Bluetooth::onPowerModeChanged(const WPEFramework::Exchange::IPowerManager::PowerState currentState, const WPEFramework::Exchange::IPowerManager::PowerState newState)
+        {
+            // Disabling until integration phase
+            #if 0
+
+            static const char* powerStateNames[] = {
+                "POWER_STATE_UNKNOWN",
+                "POWER_STATE_OFF",
+                "POWER_STATE_STANDBY",
+                "POWER_STATE_ON",
+                "POWER_STATE_STANDBY_LIGHT_SLEEP",
+                "POWER_STATE_STANDBY_DEEP_SLEEP"
+            };
+
+            LOGINFO("%s --> %s\n", powerStateNames[currentState], powerStateNames[newState]);
+
+            if ((WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_ON == currentState || WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_UNKNOWN == currentState) &&
+                (WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_OFF == newState || WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_STANDBY == newState || WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_STANDBY_LIGHT_SLEEP == newState)) {
+
+                JsonArray connectedDevices = getConnectedDevices();
+
+                LOGINFO("connectedDevices.Length()=%d\n", connectedDevices.Length());
+
+                for (uint16_t i = 0; i < connectedDevices.Length(); i++) {
+                    JsonObject device = connectedDevices[i].Object();
+                    string deviceStr;
+                    device.ToString(deviceStr);
+                    LOGINFO("connectedDevices[%d] = %s\n", i, deviceStr.c_str());
+                    if (device.HasLabel("autoconnect") && !device["autoconnect"].Boolean()) {
+                        // Only disconnect if autoConnect was explicitly set false (HasLabel), to preserve backward compatibility.
+                        try {
+                            long long int deviceID = stoll(device["deviceID"].String());
+                            bool bSuccess = setDeviceConnection(deviceID, false, device["deviceType"].String());
+                            LOGINFO("POWER OFF/STANDBY: Disconnecting deviceID=%llu, success=%s\n", deviceID, bSuccess ? "true" : "false");
+                        } catch (const std::exception& e) {
+                            LOGERR("Failed to parse deviceID: %s\n", e.what());
+                        }
+                    }
+                }
+            } else if (WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_ON == newState ) {
+                JsonArray pairedDevices = getPairedDevices();
+
+                LOGINFO("pairedDevices.Length()=%d\n", pairedDevices.Length());
+                for (uint16_t i = 0; i < pairedDevices.Length(); i++) {
+                    JsonObject device = pairedDevices[i].Object();
+                    string deviceStr;
+                    device.ToString(deviceStr);
+                    LOGINFO("pairedDevices[%d] = %s\n", i, deviceStr.c_str());
+                }
+
+                if (pairedDevices.Length() > 0) {
+                    setBluetoothEnabled(ENABLE_BLUETOOTH_ENABLED);
+                }
+            } else if (WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_STANDBY_DEEP_SLEEP == newState ) {
+
+                JsonArray connectedDevices = getConnectedDevices();
+
+                LOGINFO("connectedDevices.Length()=%d\n", connectedDevices.Length());
+
+                for (uint16_t i = 0; i < connectedDevices.Length(); i++) {
+                    JsonObject device = connectedDevices[i].Object();
+                    string deviceStr;
+                    device.ToString(deviceStr);
+                    LOGINFO("connectedDevices[%d] = %s\n", i, deviceStr.c_str());
+                    try {
+                        long long int deviceID = stoll(device["deviceID"].String());
+                        bool bSuccess = setDeviceConnection(deviceID, false, device["deviceType"].String());
+                        LOGINFO("POWER_STATE_STANDBY_DEEP_SLEEP: Disconnecting deviceID=%llu, success=%s\n", deviceID, bSuccess ? "true" : "false");
+                    } catch (const std::exception& e) {
+                        LOGERR("Failed to parse deviceID: %s\n", e.what());
+                    }
+                }
+            } else {
+                LOGWARN("Unhandled transition\n");
+            }
+
+            #endif
+        }
+
+        void Bluetooth::notifyAutoConnectStatusChanged(const string& deviceID, const bool enable)
+        {
+            JsonObject params;
+            params["deviceID"] = deviceID;
+            params["autoconnect"] = enable;
+            params["newStatus"] = STATUS_AUTOCONNECT_STATUS_CHANGE;
+            sendNotify(C_STR(EVT_STATUS_CHANGED), params);
+        }
 
         uint64_t DiscoveryTimer::Timed(const uint64_t scheduledTime)
         {
