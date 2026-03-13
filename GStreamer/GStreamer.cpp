@@ -106,19 +106,15 @@ string GStreamer::buildPipeline()
     m_audioresample = gst_element_factory_make("audioresample", "audioresample");
     if (!m_audioresample) return string("Failed to create audioresample element");
     
-    // Try audio sinks with fallback
-    m_audiosink = gst_element_factory_make("autoaudiosink","autoaudiosink");
-    if(!m_audiosink) return string("Failed to create audio sink autoaudiosink");
+    m_audiosink = gst_element_factory_make("autoaudiosink", "audiosink");
+    if (!m_audiosink) return string("Failed to create autoaudiosink");
 
     // Video branch
     m_videoconvert = gst_element_factory_make("videoconvert", "videoconvert");
     if (!m_videoconvert) return string("Failed to create videoconvert element");
     
-    // Try video sinks with fallback
-    m_videosink = gst_element_factory_make("waylandsink", "videosink");
-    if (!m_videosink) m_videosink = gst_element_factory_make("westerossink", "videosink");
-    if (!m_videosink) m_videosink = gst_element_factory_make("autovideosink", "videosink");
-    if (!m_videosink) return string("Failed to create video sink (tried: waylandsink, westerossink, autovideosink)");
+    m_videosink = gst_element_factory_make("westerossink", "videosink");
+    if (!m_videosink) return string("Failed to create westerossink");
     
     // Create pipeline
     m_pipeline = gst_pipeline_new("gstreamer-plugin-pipeline");
@@ -156,7 +152,30 @@ string GStreamer::buildPipeline()
     
     // Set to READY state (pipeline built but not playing)
     GstStateChangeReturn ret = gst_element_set_state(m_pipeline, GST_STATE_READY);
+
     if (ret == GST_STATE_CHANGE_FAILURE) {
+
+        GstMessage *msg = gst_bus_pop_filtered(
+            m_bus,
+            GST_MESSAGE_ERROR
+        );
+
+        if (msg) {
+            GError *err = NULL;
+            gchar *debug = NULL;
+
+            gst_message_parse_error(msg, &err, &debug);
+
+            std::string errorMsg = err->message;
+
+            g_error_free(err);
+            g_free(debug);
+            gst_message_unref(msg);
+
+            cleanupPipeline();
+            return errorMsg;
+        }
+
         cleanupPipeline();
         return string("Failed to set pipeline to READY state");
     }
