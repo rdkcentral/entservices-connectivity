@@ -125,7 +125,7 @@ namespace WPEFramework {
 
         const string BluetoothDeviceManager::init(PluginHost::IShell* service)
         {
-            if (_service != nullptr) {
+            if (service != nullptr) {
                 _service = service;
                 _service->AddRef();
                 updateBluetoothDeviceInfoCache();
