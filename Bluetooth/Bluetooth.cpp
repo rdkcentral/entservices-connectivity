@@ -1928,8 +1928,9 @@ namespace WPEFramework
                     device.ToString(deviceStr);
                     LOGINFO("pairedDevices[%d] = %s\n", i, deviceStr.c_str());
 
-                    if (device["deviceType"].String() == "REMOTE") {
+                    if (device["deviceType"].String() == "HUMAN INTERFACE DEVICE") { // <pca> Should we use rawBleDeviceType instead? </pca>
                         printf("*** _DEBUG: Detected RCU, skipping entry...\n");
+                        // Don't disconnect RCU devices on power off/standby, as they are needed to wake up the device.
                         continue;
                     }
 
@@ -1957,7 +1958,8 @@ namespace WPEFramework
                     device.ToString(deviceStr);
                     LOGINFO("pairedDevices[%d] = %s\n", i, deviceStr.c_str());
                     
-                    if (device["deviceType"].String() != "REMOTE") {
+                    if (device["deviceType"].String() != "HUMAN INTERFACE DEVICE") {
+                        // <pca> AS doesn't consider RCUs as paired devices, confirm we don't either </pca>
                         ++pairedDevicvesCount;
                     } else {
                         printf("*** _DEBUG: Detected RCU, skipping entry...\n");
@@ -1979,8 +1981,9 @@ namespace WPEFramework
                     device.ToString(deviceStr);
                     LOGINFO("pairedDevices[%d] = %s\n", i, deviceStr.c_str());
 
-                    if (device["deviceType"].String() == "REMOTE") {
+                    if (device["deviceType"].String() == "HUMAN INTERFACE DEVICE") {
                         printf("*** _DEBUG: Detected RCU, skipping entry...\n");
+                        // Don't disconnect RCU devices when entering DEEP_SLEEP, as they are needed to wake up the device.
                         continue;
                     }
 
