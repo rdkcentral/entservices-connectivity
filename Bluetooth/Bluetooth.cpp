@@ -1904,9 +1904,6 @@ namespace WPEFramework
 
         void Bluetooth::onPowerModeChanged(const WPEFramework::Exchange::IPowerManager::PowerState currentState, const WPEFramework::Exchange::IPowerManager::PowerState newState)
         {
-            // Disabling until integration phase
-            #if 0
-
             static const char* powerStateNames[] = {
                 "POWER_STATE_UNKNOWN",
                 "POWER_STATE_OFF",
@@ -1921,15 +1918,21 @@ namespace WPEFramework
             if ((WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_ON == currentState || WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_UNKNOWN == currentState) &&
                 (WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_OFF == newState || WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_STANDBY == newState || WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_STANDBY_LIGHT_SLEEP == newState)) {
 
-                JsonArray connectedDevices = getConnectedDevices();
+                JsonArray pairedDevices = getPairedDevices();
 
-                LOGINFO("connectedDevices.Length()=%d\n", connectedDevices.Length());
+                LOGINFO("pairedDevices.Length()=%d\n", pairedDevices.Length());
 
-                for (uint16_t i = 0; i < connectedDevices.Length(); i++) {
-                    JsonObject device = connectedDevices[i].Object();
+                for (uint16_t i = 0; i < pairedDevices.Length(); i++) {
+                    JsonObject device = pairedDevices[i].Object();
                     string deviceStr;
                     device.ToString(deviceStr);
-                    LOGINFO("connectedDevices[%d] = %s\n", i, deviceStr.c_str());
+                    LOGINFO("pairedDevices[%d] = %s\n", i, deviceStr.c_str());
+
+                    if (device["deviceType"].String() == "REMOTE") {
+                        printf("*** _DEBUG: Detected RCU, skipping entry...\n");
+                        continue;
+                    }
+
                     if (device.HasLabel("autoconnect") && !device["autoconnect"].Boolean()) {
                         // Only disconnect if autoConnect was explicitly set false (HasLabel), to preserve backward compatibility.
                         try {
@@ -1945,27 +1948,42 @@ namespace WPEFramework
                 JsonArray pairedDevices = getPairedDevices();
 
                 LOGINFO("pairedDevices.Length()=%d\n", pairedDevices.Length());
+
+                uint16_t pairedDevicvesCount = 0;
+
                 for (uint16_t i = 0; i < pairedDevices.Length(); i++) {
                     JsonObject device = pairedDevices[i].Object();
                     string deviceStr;
                     device.ToString(deviceStr);
                     LOGINFO("pairedDevices[%d] = %s\n", i, deviceStr.c_str());
+                    
+                    if (device["deviceType"].String() != "REMOTE") {
+                        ++pairedDevicvesCount;
+                    } else {
+                        printf("*** _DEBUG: Detected RCU, skipping entry...\n");
+                    }
                 }
 
-                if (pairedDevices.Length() > 0) {
+                if (pairedDevicvesCount > 0) {
                     setBluetoothEnabled(ENABLE_BLUETOOTH_ENABLED);
                 }
             } else if (WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_STANDBY_DEEP_SLEEP == newState ) {
 
-                JsonArray connectedDevices = getConnectedDevices();
+                JsonArray pairedDevices = getPairedDevices();
 
-                LOGINFO("connectedDevices.Length()=%d\n", connectedDevices.Length());
+                LOGINFO("pairedDevices.Length()=%d\n", pairedDevices.Length());
 
-                for (uint16_t i = 0; i < connectedDevices.Length(); i++) {
-                    JsonObject device = connectedDevices[i].Object();
+                for (uint16_t i = 0; i < pairedDevices.Length(); i++) {
+                    JsonObject device = pairedDevices[i].Object();
                     string deviceStr;
                     device.ToString(deviceStr);
-                    LOGINFO("connectedDevices[%d] = %s\n", i, deviceStr.c_str());
+                    LOGINFO("pairedDevices[%d] = %s\n", i, deviceStr.c_str());
+
+                    if (device["deviceType"].String() == "REMOTE") {
+                        printf("*** _DEBUG: Detected RCU, skipping entry...\n");
+                        continue;
+                    }
+
                     try {
                         long long int deviceID = stoll(device["deviceID"].String());
                         bool bSuccess = setDeviceConnection(deviceID, false, device["deviceType"].String());
@@ -1977,8 +1995,6 @@ namespace WPEFramework
             } else {
                 LOGWARN("Unhandled transition\n");
             }
-
-            #endif
         }
 
         void Bluetooth::notifyAutoConnectStatusChanged(const string& deviceID, const bool enable)
