@@ -672,16 +672,16 @@ namespace WPEFramework
                         string deviceId = std::to_string(deviceHandle);
                         BluetoothDeviceInfo deviceInfo;
                         deviceInfo.deviceType = deviceProperty.m_deviceType;
-                        _bluetoothDeviceInfoCache[deviceId] = std::move(deviceInfo);
+                        _pairedDeviceCache[deviceId] = std::move(deviceInfo);
                     } else {
                         LOGERR("Failed to get device properties for deviceID: %s", C_STR(deviceId));
                     }
                 } else {
                     // Remove device info from cache.
                     
-                    auto it = _bluetoothDeviceInfoCache.find(deviceId);
-                    if (it != _bluetoothDeviceInfoCache.end()) {
-                        _bluetoothDeviceInfoCache.erase(deviceId);
+                    auto it = _pairedDeviceCache.find(deviceId);
+                    if (it != _pairedDeviceCache.end()) {
+                        _pairedDeviceCache.erase(deviceId);
                     } else {
                         LOGWARN("Device info is not found in cache for deviceID: %s", C_STR(deviceId));
                     }

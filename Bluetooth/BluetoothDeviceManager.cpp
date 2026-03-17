@@ -46,7 +46,7 @@ namespace WPEFramework {
 
                 _adminLock.Lock();
 
-                _bluetoothDeviceInfoCache.clear();
+                _pairedDeviceCache.clear();
 
                 for (uint16_t i = 0; i < deviceInfoArray.Length(); i++) {
                     JsonObject deviceInfoObj = deviceInfoArray[i].Object();
@@ -60,7 +60,7 @@ namespace WPEFramework {
                     deviceInfo.autoConnectStatus = autoConnectStatus;
                     deviceInfo.lastConnectTimeUtc = lastConnectTimeUtc;
 
-                    _bluetoothDeviceInfoCache[deviceID] = std::move(deviceInfo);
+                    _pairedDeviceCache[deviceID] = std::move(deviceInfo);
 
                     LOGINFO("Loaded device info for deviceID=%s, autoConnectStatus=%d, lastConnectTimeUtc=%s\n",
                             deviceID.c_str(), static_cast<int>(autoConnectStatus), lastConnectTimeUtc.c_str());
@@ -95,7 +95,7 @@ namespace WPEFramework {
 
             _adminLock.Lock();
 
-            for (const auto& entry : _bluetoothDeviceInfoCache) {
+            for (const auto& entry : _pairedDeviceCache) {
                 const std::string& deviceID = entry.first;
                 const BluetoothDeviceInfo& deviceInfo = entry.second;
 
@@ -137,7 +137,7 @@ namespace WPEFramework {
 
             updateCacheFromStorage();
 
-            if (!_bluetoothDeviceInfoCache.empty()) {
+            if (!_pairedDeviceCache.empty()) {
                 return {};
             }
 
@@ -167,7 +167,7 @@ namespace WPEFramework {
 
                 BluetoothDeviceInfo deviceInfo;
                 deviceInfo.deviceType = deviceType;
-                _bluetoothDeviceInfoCache[deviceId] = std::move(deviceInfo);
+                _pairedDeviceCache[deviceId] = std::move(deviceInfo);
             }
 
             updateStorageFromCache();
@@ -183,10 +183,10 @@ namespace WPEFramework {
             }
         }
 
-        Core::hresult BluetoothDeviceManager::getBluetoothDeviceInfo(const std::string& deviceID, BluetoothDeviceInfo& deviceInfo)
+        Core::hresult BluetoothDeviceManager::getPairedDeviceInfo(const std::string& deviceID, BluetoothDeviceInfo& deviceInfo)
         {
-            auto it = _bluetoothDeviceInfoCache.find(deviceID);
-            const bool bFound = (it != _bluetoothDeviceInfoCache.end());
+            auto it = _pairedDeviceCache.find(deviceID);
+            const bool bFound = (it != _pairedDeviceCache.end());
 
             if (bFound) {
                 deviceInfo = it->second;
@@ -204,10 +204,10 @@ namespace WPEFramework {
 
             _adminLock.Lock();
 
-            getBluetoothDeviceInfo(deviceID, deviceInfo);
+            getPairedDeviceInfo(deviceID, deviceInfo);
             deviceInfo.autoConnectStatus = autoConnectStatus;
 
-            _bluetoothDeviceInfoCache[deviceID] = std::move(deviceInfo);
+            _pairedDeviceCache[deviceID] = std::move(deviceInfo);
 
             _adminLock.Unlock();
             
@@ -221,7 +221,7 @@ namespace WPEFramework {
 
             _adminLock.Lock();
 
-            Core::hresult result = getBluetoothDeviceInfo(deviceID, deviceInfo);
+            Core::hresult result = getPairedDeviceInfo(deviceID, deviceInfo);
 
             _adminLock.Unlock();
 
@@ -248,9 +248,9 @@ namespace WPEFramework {
 
             _adminLock.Lock();
 
-            getBluetoothDeviceInfo(deviceID, deviceInfo);
+            getPairedDeviceInfo(deviceID, deviceInfo);
             deviceInfo.lastConnectTimeUtc = std::move(currentUtcTime);
-            _bluetoothDeviceInfoCache[deviceID] = std::move(deviceInfo);
+            _pairedDeviceCache[deviceID] = std::move(deviceInfo);
 
             _adminLock.Unlock();
 
@@ -264,7 +264,7 @@ namespace WPEFramework {
 
             _adminLock.Lock();
         
-            Core::hresult result = getBluetoothDeviceInfo(deviceID, deviceInfo);
+            Core::hresult result = getPairedDeviceInfo(deviceID, deviceInfo);
 
             _adminLock.Unlock();
 
