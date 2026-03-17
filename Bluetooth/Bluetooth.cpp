@@ -38,6 +38,8 @@
 // For example, the exposed "startScan" method is mapped to "startScanWrapper()" and that one calls to "startDeviceDiscovery()" internally,
 // which finally calls to "BTRMGR_StartDeviceDiscovery()" in Bluetooth Manager.
 
+#define BLUETOOTH_DEBUG
+
 #define API_VERSION_NUMBER_MAJOR 1
 #define API_VERSION_NUMBER_MINOR 1
 #define API_VERSION_NUMBER_PATCH 0
@@ -656,8 +658,40 @@ namespace WPEFramework
             {
                 LOGERR("Failed to do %s ", (pair ? "Pair" : "Unpair"));
             } else {
-                LOGINFO("Successfully done %s ", (pair ? "Pair" : "Unpair"));
+                string deviceId = std::to_string(deviceHandle);
+
+                if (pair) {
+                    // Get device info and add to cache.
+
+                    BTRMGR_DevicesProperty_t deviceProperty;
+                    memset (&deviceProperty, 0, sizeof(deviceProperty));
+
+                    rc = BTRMGR_GetDeviceProperties(0, deviceHandle, &deviceProperty);
+                    if (BTRMGR_RESULT_SUCCESS == rc)
+                    {
+                        string deviceId = std::to_string(deviceHandle);
+                        BluetoothDeviceInfo deviceInfo;
+                        deviceInfo.deviceType = deviceProperty.m_deviceType;
+                        _bluetoothDeviceInfoCache[deviceId] = std::move(deviceInfo);
+                    } else {
+                        LOGERR("Failed to get device properties for deviceID: %s", C_STR(deviceId));
+                    }
+                } else {
+                    // Remove device info from cache.
+                    
+                    auto it = _bluetoothDeviceInfoCache.find(deviceId);
+                    if (it != _bluetoothDeviceInfoCache.end()) {
+                        _bluetoothDeviceInfoCache.erase(deviceId);
+                    } else {
+                        LOGWARN("Device info is not found in cache for deviceID: %s", C_STR(deviceId));
+                    }
+                }
+
+                _bluetoothDeviceManager.updateStorageFromCache();
             }
+
+            LOGINFO("Successfully done %s ", (pair ? "Pair" : "Unpair"));
+
             return BTRMGR_RESULT_SUCCESS == rc;
         }
 
@@ -1904,16 +1938,20 @@ namespace WPEFramework
 
         void Bluetooth::onPowerModeChanged(const WPEFramework::Exchange::IPowerManager::PowerState currentState, const WPEFramework::Exchange::IPowerManager::PowerState newState)
         {
-            static const char* powerStateNames[] = {
-                "POWER_STATE_UNKNOWN",
-                "POWER_STATE_OFF",
-                "POWER_STATE_STANDBY",
-                "POWER_STATE_ON",
-                "POWER_STATE_STANDBY_LIGHT_SLEEP",
-                "POWER_STATE_STANDBY_DEEP_SLEEP"
-            };
+            #ifdef BLUETOOTH_DEBUG
+                static const char* powerStateNames[] = {
+                    "POWER_STATE_UNKNOWN",
+                    "POWER_STATE_OFF",
+                    "POWER_STATE_STANDBY",
+                    "POWER_STATE_ON",
+                    "POWER_STATE_STANDBY_LIGHT_SLEEP",
+                    "POWER_STATE_STANDBY_DEEP_SLEEP"
+                };
 
-            LOGINFO("%s --> %s\n", powerStateNames[currentState], powerStateNames[newState]);
+                LOGINFO("%s --> %s\n", powerStateNames[currentState], powerStateNames[newState]);
+            #else
+                LOGINFO("Power mode changed: %d --> %d\n", currentState, newState);
+            #endif
 
             if ((WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_ON == currentState || WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_UNKNOWN == currentState) &&
                 (WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_OFF == newState || WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_STANDBY == newState || WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_STANDBY_LIGHT_SLEEP == newState)) {

@@ -41,6 +41,7 @@ namespace WPEFramework {
         } AutoConnectStatus;
 
         typedef struct _BluetoothDeviceInfo {
+            std::string         deviceType          = "";
             AutoConnectStatus   autoConnectStatus   = AUTO_CONNECT_STATUS_UNSET;
             std::string         lastConnectTimeUtc  = "";
         } BluetoothDeviceInfo;
@@ -59,6 +60,7 @@ namespace WPEFramework {
                 Core::hresult getAutoConnect(const std::string& deviceID, AutoConnectStatus& status);
                 void setLastConnectTimeUtc(const std::string& deviceID);
                 Core::hresult getLastConnectTimeUtc(const std::string& deviceID, std::string& lastConnectTimeUtc);
+                Core::hresult updateStorageFromCache();
 
             private:
 
@@ -67,8 +69,7 @@ namespace WPEFramework {
                 std::unordered_map<std::string /* deviceID */, BluetoothDeviceInfo /* deviceInfo */> _bluetoothDeviceInfoCache;
 
                 Core::hresult getBluetoothDeviceInfo(const std::string& deviceID, BluetoothDeviceInfo& deviceInfo);
-                Core::hresult updateBluetoothDeviceInfoCache();
-                Core::hresult updateBluetoothDeviceInfoPersistentStore();
+                Core::hresult updateCacheFromStorage();
         };
 
     } // Plugin

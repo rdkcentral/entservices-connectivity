@@ -23,7 +23,7 @@
 namespace WPEFramework {
     namespace Plugin {
 
-        Core::hresult BluetoothDeviceManager::updateBluetoothDeviceInfoCache()
+        Core::hresult BluetoothDeviceManager::updateCacheFromStorage()
         {
             if (_service == nullptr) {
                 LOGERR("Service is null\n");
@@ -51,10 +51,12 @@ namespace WPEFramework {
                 for (uint16_t i = 0; i < deviceInfoArray.Length(); i++) {
                     JsonObject deviceInfoObj = deviceInfoArray[i].Object();
                     std::string deviceID = deviceInfoObj["deviceID"].String();
+                    std::string deviceType = deviceInfoObj["deviceType"].String();
                     AutoConnectStatus autoConnectStatus = static_cast<AutoConnectStatus>(deviceInfoObj["autoconnect"].Number());
                     std::string lastConnectTimeUtc = deviceInfoObj["lastConnectTimeUtc"].String();
 
                     BluetoothDeviceInfo deviceInfo;
+                    deviceInfo.deviceType = deviceType;
                     deviceInfo.autoConnectStatus = autoConnectStatus;
                     deviceInfo.lastConnectTimeUtc = lastConnectTimeUtc;
 
@@ -75,7 +77,7 @@ namespace WPEFramework {
             return result;
         }
 
-        Core::hresult BluetoothDeviceManager::updateBluetoothDeviceInfoPersistentStore()
+        Core::hresult BluetoothDeviceManager::updateStorageFromCache()
         {
             if (_service == nullptr) {
                 LOGERR("Service is null\n");
@@ -99,6 +101,7 @@ namespace WPEFramework {
 
                 JsonObject deviceInfoObj;
                 deviceInfoObj["deviceID"] = deviceID;
+                deviceInfoObj["deviceType"] = deviceInfo.deviceType;
                 deviceInfoObj["autoconnect"] = static_cast<int>(deviceInfo.autoConnectStatus);
                 deviceInfoObj["lastConnectTimeUtc"] = deviceInfo.lastConnectTimeUtc;
 
@@ -125,14 +128,51 @@ namespace WPEFramework {
 
         const string BluetoothDeviceManager::init(PluginHost::IShell* service)
         {
-            if (service != nullptr) {
-                _service = service;
-                _service->AddRef();
-                updateBluetoothDeviceInfoCache();
+            if (service == nullptr) {
+    `           return "Service is null";
+            }
+
+            _service = service;
+            _service->AddRef();
+
+            updateCacheFromStorage();
+
+            if (!_bluetoothDeviceInfoCache.empty()) {
                 return {};
             }
 
-            return "Failed to initialize BluetoothDeviceManager: service is null";
+            // Device info cache is empty, either due to an error retrieving from storage or simply
+            // because none exists. Fetch any paired device information from BTMgr and re-write cache/storage.
+
+            BTRMGR_PairedDevicesList_t *pairedDevices = (BTRMGR_PairedDevicesList_t*)malloc(sizeof(BTRMGR_PairedDevicesList_t));
+
+            if(pairedDevices == nullptr)
+            {
+                return "Failed to allocate memory";
+            }
+
+            memset (pairedDevices, 0, sizeof(BTRMGR_PairedDevicesList_t));
+
+            BTRMGR_Result_t result = BTRMGR_GetPairedDevices(0, pairedDevices);
+            if (BTRMGR_RESULT_SUCCESS != result)
+            {
+                return "Failed to get the paired devices";
+            }
+
+            for (int i=0; i<pairedDevices->m_numOfDevices; i++)
+            {
+                string deviceId = std::to_string(pairedDevices->m_deviceProperty[i].m_deviceHandle);
+                const char* deviceTypeStr = BTRMGR_GetDeviceTypeAsString(pairedDevices->m_deviceProperty[i].m_deviceType);
+                string deviceType = string(deviceTypeStr ? deviceTypeStr : "UNKNOWN");
+
+                BluetoothDeviceInfo deviceInfo;
+                deviceInfo.deviceType = deviceType;
+                _bluetoothDeviceInfoCache[deviceId] = std::move(deviceInfo);
+            }
+
+            updateStorageFromCache();
+
+            return {};
         }
 
         void BluetoothDeviceManager::deinit()
@@ -171,7 +211,7 @@ namespace WPEFramework {
 
             _adminLock.Unlock();
             
-            return updateBluetoothDeviceInfoPersistentStore();
+            return updateStorageFromCache();
         }
 
         Core::hresult BluetoothDeviceManager::getAutoConnect(const std::string& deviceID, AutoConnectStatus& status)
@@ -194,9 +234,6 @@ namespace WPEFramework {
 
         void BluetoothDeviceManager::setLastConnectTimeUtc(const std::string& deviceID)
         {
-            // TODO: What resolution do we want for the timestamp?
-            // For now, we use seconds precision in UTC formatted as ISO 8601 string.
-
             auto now = std::chrono::system_clock::now();
             std::time_t now_c = std::chrono::system_clock::to_time_t(now);
             std::tm utc_tm;
@@ -217,7 +254,7 @@ namespace WPEFramework {
 
             _adminLock.Unlock();
 
-            updateBluetoothDeviceInfoPersistentStore();
+            updateStorageFromCache();
         }
 
         Core::hresult BluetoothDeviceManager::getLastConnectTimeUtc(const std::string& deviceID, std::string& lastConnectTimeUtc)
