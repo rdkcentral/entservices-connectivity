@@ -129,7 +129,7 @@ namespace WPEFramework {
         const string BluetoothDeviceManager::init(PluginHost::IShell* service)
         {
             if (service == nullptr) {
-    `           return "Service is null";
+                return "Service is null";
             }
 
             _service = service;

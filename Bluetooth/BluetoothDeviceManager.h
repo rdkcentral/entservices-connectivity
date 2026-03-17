@@ -26,6 +26,7 @@
 #include <interfaces/IStore.h>
 #include <core/core.h>
 #include "UtilsJsonRpc.h"
+#include "btmgr.h"
 
 #define PERSISTENT_STORE_CALLSIGN "org.rdk.PersistentStore"
 #define PERSISTENT_STORE_NAMESPACE "Bluetooth"
