@@ -1944,10 +1944,10 @@ namespace WPEFramework
                 LOGINFO("pairedDeviceInfos.size()=%d\n", pairedDeviceInfos.size());
 
                 for (const auto& entry : pairedDeviceInfos) {
-                    const std::string& deviceID = entry.first;
+                    const std::string& deviceIdStr = entry.first;
                     const BluetoothDeviceInfo& deviceInfo = entry.second;
                     LOGINFO("pairedDeviceInfos[%s] = { deviceType=%s, autoConnectStatus=%d, lastConnectTimeUtc=%s }\n",
-                            deviceID.c_str(), deviceInfo.deviceType.c_str(), static_cast<int>(deviceInfo.autoConnectStatus), deviceInfo.lastConnectTimeUtc.c_str());
+                            deviceIdStr.c_str(), deviceInfo.deviceType.c_str(), static_cast<int>(deviceInfo.autoConnectStatus), deviceInfo.lastConnectTimeUtc.c_str());
 
                     if (deviceInfo.deviceType == "HUMAN INTERFACE DEVICE") {
                         printf("*** _DEBUG: Detected RCU, skipping entry...\n");
@@ -1958,11 +1958,11 @@ namespace WPEFramework
                     if (deviceInfo.autoConnectStatus == AutoConnectStatus::AUTO_CONNECT_STATUS_DISABLED) {
                         // Only disconnect if autoConnect was explicitly set false to preserve backward compatibility.
                         try {
-                            long long int deviceId = stoll(deviceID);
+                            long long int deviceId = stoll(deviceIdStr);
                             bool bSuccess = setDeviceConnection(deviceId, false, deviceInfo.deviceType);
                             LOGINFO("POWER OFF/STANDBY: Disconnecting deviceID=%llu, success=%s\n", deviceId, bSuccess ? "true" : "false");
                         } catch (const std::exception& e) {
-                            LOGERR("Failed to parse deviceID: %s\n", e.what());
+                            LOGERR("Failed to parse deviceId: %s\n", e.what());
                         }
                     }
                 }
@@ -1976,10 +1976,10 @@ namespace WPEFramework
                 uint16_t pairedDevicvesCount = 0;
 
                 for (const auto& entry : pairedDeviceInfos) {
-                    const std::string& deviceID = entry.first;
+                    const std::string& deviceIdStr = entry.first;
                     const BluetoothDeviceInfo& deviceInfo = entry.second;
                     LOGINFO("pairedDeviceInfos[%s] = { deviceType=%s, autoConnectStatus=%d, lastConnectTimeUtc=%s }\n",
-                            deviceID.c_str(), deviceInfo.deviceType.c_str(), static_cast<int>(deviceInfo.autoConnectStatus), deviceInfo.lastConnectTimeUtc.c_str());
+                            deviceIdStr.c_str(), deviceInfo.deviceType.c_str(), static_cast<int>(deviceInfo.autoConnectStatus), deviceInfo.lastConnectTimeUtc.c_str());
                     
                     if (deviceInfo.deviceType != "HUMAN INTERFACE DEVICE") {
                         // <pca> AS doesn't consider RCUs as paired devices, confirm we don't either </pca>
@@ -2001,10 +2001,10 @@ namespace WPEFramework
                 LOGINFO("pairedDeviceInfos.size()=%d\n", pairedDeviceInfos.size());
 
                 for (const auto& entry : pairedDeviceInfos) {
-                    const std::string& deviceID = entry.first;
+                    const std::string& deviceIdStr = entry.first;
                     const BluetoothDeviceInfo& deviceInfo = entry.second;
                     LOGINFO("pairedDeviceInfos[%s] = { deviceType=%s, autoConnectStatus=%d, lastConnectTimeUtc=%s }\n",
-                            deviceID.c_str(), deviceInfo.deviceType.c_str(), static_cast<int>(deviceInfo.autoConnectStatus), deviceInfo.lastConnectTimeUtc.c_str());
+                            deviceIdStr.c_str(), deviceInfo.deviceType.c_str(), static_cast<int>(deviceInfo.autoConnectStatus), deviceInfo.lastConnectTimeUtc.c_str());
 
                     if (deviceInfo.deviceType == "HUMAN INTERFACE DEVICE") {
                         printf("*** _DEBUG: Detected RCU, skipping entry...\n");
@@ -2013,11 +2013,11 @@ namespace WPEFramework
                     }
 
                     try {
-                        long long int deviceID = stoll(deviceID);
-                        bool bSuccess = setDeviceConnection(deviceID, false, deviceInfo.deviceType);
-                        LOGINFO("POWER_STATE_STANDBY_DEEP_SLEEP: Disconnecting deviceID=%llu, success=%s\n", deviceID, bSuccess ? "true" : "false");
+                        long long int deviceId = std::stoll(deviceIdStr);
+                        bool bSuccess = setDeviceConnection(deviceId, false, deviceInfo.deviceType);
+                        LOGINFO("POWER_STATE_STANDBY_DEEP_SLEEP: Disconnecting deviceId=%llu, success=%s\n", deviceId, bSuccess ? "true" : "false");
                     } catch (const std::exception& e) {
-                        LOGERR("Failed to parse deviceID: %s\n", e.what());
+                        LOGERR("Failed to parse deviceId: %s\n", e.what());
                     }
                 }
             } else {
