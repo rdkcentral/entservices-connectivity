@@ -122,24 +122,28 @@ namespace WPEFramework {
 
             // Scrub cache of any devices that are no longer paired with the platform.
 
-            std::vector<std::string> deviceIDsToRemove;
+            std::vector<std::string> deviceIdsToRemove;
             for (const auto& entry : _pairedDeviceCache) {
                 const std::string& cachedDeviceId = entry.first;
+                bool bFound = false;
 
-                auto it = std::find_if(std::begin(pairedDevices->m_deviceProperty), std::end(pairedDevices->m_deviceProperty),
-                    [&cachedDeviceId](const BTRMGR_DevicesProperty_t& deviceProperty) {
-                        return cachedDeviceId == std::to_string(deviceProperty.m_deviceHandle);
-                    });
+                for (int i=0; i<pairedDevices->m_numOfDevices; i++)
+                {
+                    string deviceId = std::to_string(pairedDevices->m_deviceProperty[i].m_deviceHandle);
+                    if (cachedDeviceId == deviceId) {
+                        bFound = true;
+                        break;
+                    }
+                }
 
-                if (it == std::end(pairedDevices->m_deviceProperty)) {
-                    // Cached device not found in current paired device list, mark for removal
+                if (!bFound) {
                     LOGINFO("Marking device for removal from cache: deviceID=%s\n", cachedDeviceId.c_str());
-                    deviceIDsToRemove.push_back(cachedDeviceId);
+                    deviceIdsToRemove.push_back(cachedDeviceId);
                 }
             }
 
-            for (const auto& deviceID : deviceIDsToRemove) {
-                _pairedDeviceCache.erase(deviceID);
+            for (const auto& deviceId : deviceIdsToRemove) {
+                _pairedDeviceCache.erase(deviceId);
             }
 
             _adminLock.Unlock();
