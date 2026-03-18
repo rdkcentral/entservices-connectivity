@@ -147,6 +147,7 @@ namespace WPEFramework {
             }
 
             _adminLock.Unlock();
+            return Core::ERROR_NONE;
         }
 
         Core::hresult BluetoothDeviceManager::updateStorageFromCache()
