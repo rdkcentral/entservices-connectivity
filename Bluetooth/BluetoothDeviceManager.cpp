@@ -279,6 +279,7 @@ namespace WPEFramework {
         {
             LOGINFO("deviceID=%s\n", deviceID.c_str());
             BluetoothDeviceInfo deviceInfo;
+            BTRMgrDeviceHandle deviceHandle = (BTRMgrDeviceHandle) deviceID;
 
             BTRMGR_DevicesProperty_t deviceProperty;
             memset (&deviceProperty, 0, sizeof(deviceProperty));
@@ -301,7 +302,7 @@ namespace WPEFramework {
             return updateStorageFromCache();
         }
 
-        Core::hresult removeDevice(const std::string& deviceID)
+        Core::hresult BluetoothDeviceManager::removeDevice(const std::string& deviceID)
         {
             LOGINFO("deviceID=%s\n", deviceID.c_str());
 
