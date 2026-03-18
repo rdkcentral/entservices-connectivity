@@ -320,5 +320,13 @@ namespace WPEFramework {
             return updateStorageFromCache();
         }
 
+        std::unordered_map<std::string /* deviceID */, BluetoothDeviceInfo /* deviceInfo */> BluetoothDeviceManager::getPairedDeviceInfos()
+        {
+            _adminLock.Lock();
+            auto deviceInfos = _pairedDeviceCache;
+            _adminLock.Unlock();
+            return deviceInfos;
+        }
+
     } // Plugin
 } // WPEFramework

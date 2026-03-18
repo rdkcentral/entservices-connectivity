@@ -1927,50 +1927,61 @@ namespace WPEFramework
                 LOGINFO("Power mode changed: %d --> %d\n", currentState, newState);
             #endif
 
-            if ((WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_ON == currentState || WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_UNKNOWN == currentState) &&
-                (WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_OFF == newState || WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_STANDBY == newState || WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_STANDBY_LIGHT_SLEEP == newState)) {
+            if (newState == currentState) {
+                LOGINFO("Power state unchanged, ignoring transition\n");
+                return;
+            }
 
-                JsonArray pairedDevices = getPairedDevices();
+            // ON --> OFF
+            if ((WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_ON == currentState ||
+                WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_UNKNOWN == currentState) &&
+                (WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_OFF == newState ||
+                    WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_STANDBY == newState ||
+                    WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_STANDBY_LIGHT_SLEEP == newState)) {
 
-                LOGINFO("pairedDevices.Length()=%d\n", pairedDevices.Length());
+                std::unordered_map<std::string, BluetoothDeviceInfo> pairedDeviceInfos = m_bluetoothDeviceManager.getPairedDeviceInfos();
 
-                for (uint16_t i = 0; i < pairedDevices.Length(); i++) {
-                    JsonObject device = pairedDevices[i].Object();
-                    string deviceStr;
-                    device.ToString(deviceStr);
-                    LOGINFO("pairedDevices[%d] = %s\n", i, deviceStr.c_str());
+                LOGINFO("pairedDeviceInfos.size()=%d\n", pairedDeviceInfos.size());
 
-                    if (device["deviceType"].String() == "HUMAN INTERFACE DEVICE") { // <pca> Should we use rawBleDeviceType instead? </pca>
+                for (const auto& entry : pairedDeviceInfos) {
+                    const std::string& deviceID = entry.first;
+                    const BluetoothDeviceInfo& deviceInfo = entry.second;
+                    LOGINFO("pairedDeviceInfos[%s] = { deviceType=%s, autoConnectStatus=%d, lastConnectTimeUtc=%s }\n",
+                            deviceID.c_str(), deviceInfo.deviceType.c_str(), static_cast<int>(deviceInfo.autoConnectStatus), deviceInfo.lastConnectTimeUtc.c_str());
+
+                    if (deviceInfo.deviceType == "HUMAN INTERFACE DEVICE") {
                         printf("*** _DEBUG: Detected RCU, skipping entry...\n");
                         // Don't disconnect RCU devices on power off/standby, as they are needed to wake up the device.
                         continue;
                     }
 
-                    if (device.HasLabel("autoconnect") && !device["autoconnect"].Boolean()) {
-                        // Only disconnect if autoConnect was explicitly set false (HasLabel), to preserve backward compatibility.
+                    if (deviceInfo.autoConnectStatus == AutoConnectStatus::AUTO_CONNECT_STATUS_DISABLED) {
+                        // Only disconnect if autoConnect was explicitly set false to preserve backward compatibility.
                         try {
-                            long long int deviceID = stoll(device["deviceID"].String());
-                            bool bSuccess = setDeviceConnection(deviceID, false, device["deviceType"].String());
-                            LOGINFO("POWER OFF/STANDBY: Disconnecting deviceID=%llu, success=%s\n", deviceID, bSuccess ? "true" : "false");
+                            long long int deviceId = stoll(deviceID);
+                            bool bSuccess = setDeviceConnection(deviceId, false, deviceInfo.deviceType);
+                            LOGINFO("POWER OFF/STANDBY: Disconnecting deviceID=%llu, success=%s\n", deviceId, bSuccess ? "true" : "false");
                         } catch (const std::exception& e) {
                             LOGERR("Failed to parse deviceID: %s\n", e.what());
                         }
                     }
                 }
-            } else if (WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_ON == newState ) {
-                JsonArray pairedDevices = getPairedDevices();
+            }
+            // X --> ON
+            else if (WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_ON == newState ) {
+                std::unordered_map<std::string, BluetoothDeviceInfo> pairedDeviceInfos = m_bluetoothDeviceManager.getPairedDeviceInfos();
 
-                LOGINFO("pairedDevices.Length()=%d\n", pairedDevices.Length());
+                LOGINFO("pairedDeviceInfos.size()=%d\n", pairedDeviceInfos.size());
 
                 uint16_t pairedDevicvesCount = 0;
 
-                for (uint16_t i = 0; i < pairedDevices.Length(); i++) {
-                    JsonObject device = pairedDevices[i].Object();
-                    string deviceStr;
-                    device.ToString(deviceStr);
-                    LOGINFO("pairedDevices[%d] = %s\n", i, deviceStr.c_str());
+                for (const auto& entry : pairedDeviceInfos) {
+                    const std::string& deviceID = entry.first;
+                    const BluetoothDeviceInfo& deviceInfo = entry.second;
+                    LOGINFO("pairedDeviceInfos[%s] = { deviceType=%s, autoConnectStatus=%d, lastConnectTimeUtc=%s }\n",
+                            deviceID.c_str(), deviceInfo.deviceType.c_str(), static_cast<int>(deviceInfo.autoConnectStatus), deviceInfo.lastConnectTimeUtc.c_str());
                     
-                    if (device["deviceType"].String() != "HUMAN INTERFACE DEVICE") {
+                    if (deviceInfo.deviceType != "HUMAN INTERFACE DEVICE") {
                         // <pca> AS doesn't consider RCUs as paired devices, confirm we don't either </pca>
                         ++pairedDevicvesCount;
                     } else {
@@ -1981,27 +1992,29 @@ namespace WPEFramework
                 if (pairedDevicvesCount > 0) {
                     setBluetoothEnabled(ENABLE_BLUETOOTH_ENABLED);
                 }
-            } else if (WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_STANDBY_DEEP_SLEEP == newState ) {
+            }
+            // X --> DEEP_SLEEP
+            else if (WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_STANDBY_DEEP_SLEEP == newState ) {
 
-                JsonArray pairedDevices = getPairedDevices();
+                std::unordered_map<std::string, BluetoothDeviceInfo> pairedDeviceInfos = m_bluetoothDeviceManager.getPairedDeviceInfos();
 
-                LOGINFO("pairedDevices.Length()=%d\n", pairedDevices.Length());
+                LOGINFO("pairedDeviceInfos.size()=%d\n", pairedDeviceInfos.size());
 
-                for (uint16_t i = 0; i < pairedDevices.Length(); i++) {
-                    JsonObject device = pairedDevices[i].Object();
-                    string deviceStr;
-                    device.ToString(deviceStr);
-                    LOGINFO("pairedDevices[%d] = %s\n", i, deviceStr.c_str());
+                for (const auto& entry : pairedDeviceInfos) {
+                    const std::string& deviceID = entry.first;
+                    const BluetoothDeviceInfo& deviceInfo = entry.second;
+                    LOGINFO("pairedDeviceInfos[%s] = { deviceType=%s, autoConnectStatus=%d, lastConnectTimeUtc=%s }\n",
+                            deviceID.c_str(), deviceInfo.deviceType.c_str(), static_cast<int>(deviceInfo.autoConnectStatus), deviceInfo.lastConnectTimeUtc.c_str());
 
-                    if (device["deviceType"].String() == "HUMAN INTERFACE DEVICE") {
+                    if (deviceInfo.deviceType == "HUMAN INTERFACE DEVICE") {
                         printf("*** _DEBUG: Detected RCU, skipping entry...\n");
                         // Don't disconnect RCU devices when entering DEEP_SLEEP, as they are needed to wake up the device.
                         continue;
                     }
 
                     try {
-                        long long int deviceID = stoll(device["deviceID"].String());
-                        bool bSuccess = setDeviceConnection(deviceID, false, device["deviceType"].String());
+                        long long int deviceID = stoll(deviceID);
+                        bool bSuccess = setDeviceConnection(deviceID, false, deviceInfo.deviceType);
                         LOGINFO("POWER_STATE_STANDBY_DEEP_SLEEP: Disconnecting deviceID=%llu, success=%s\n", deviceID, bSuccess ? "true" : "false");
                     } catch (const std::exception& e) {
                         LOGERR("Failed to parse deviceID: %s\n", e.what());
