@@ -645,54 +645,26 @@ namespace WPEFramework
 
         bool Bluetooth::setDevicePairing(long long int deviceID, bool pair)
         {
-            BTRMGR_Result_t rc = BTRMGR_RESULT_SUCCESS;
+            Core::hresult result = Core::ERROR_NONE;
             BTRMgrDeviceHandle deviceHandle = (BTRMgrDeviceHandle) deviceID;
-            if (pair)
-            {
-                rc = BTRMGR_PairDevice(0, deviceHandle);
-            } else{
-                rc = BTRMGR_UnpairDevice(0, deviceHandle);
-            }
+
+            BTRMGR_Result_t rc = pair ? BTRMGR_PairDevice(0, deviceHandle) : BTRMGR_UnpairDevice(0, deviceHandle);
 
             if (BTRMGR_RESULT_SUCCESS != rc)
             {
                 LOGERR("Failed to do %s ", (pair ? "Pair" : "Unpair"));
-            } else {
-                string deviceId = std::to_string(deviceHandle);
+                return false;
+            }
+            
+            string deviceId = std::to_string(deviceHandle);
 
-                if (pair) {
-                    // Get device info and add to cache.
+            Core::hresult result = pair ? m_bluetoothDeviceManager.addDevice(deviceId) : m_bluetoothDeviceManager.removeDevice(deviceId);
 
-                    BTRMGR_DevicesProperty_t deviceProperty;
-                    memset (&deviceProperty, 0, sizeof(deviceProperty));
-
-                    rc = BTRMGR_GetDeviceProperties(0, deviceHandle, &deviceProperty);
-                    if (BTRMGR_RESULT_SUCCESS == rc)
-                    {
-                        string deviceId = std::to_string(deviceHandle);
-                        BluetoothDeviceInfo deviceInfo;
-                        deviceInfo.deviceType = deviceProperty.m_deviceType;
-                        _pairedDeviceCache[deviceId] = std::move(deviceInfo);
-                    } else {
-                        LOGERR("Failed to get device properties for deviceID: %s", C_STR(deviceId));
-                    }
-                } else {
-                    // Remove device info from cache.
-                    
-                    auto it = _pairedDeviceCache.find(deviceId);
-                    if (it != _pairedDeviceCache.end()) {
-                        _pairedDeviceCache.erase(deviceId);
-                    } else {
-                        LOGWARN("Device info is not found in cache for deviceID: %s", C_STR(deviceId));
-                    }
-                }
-
-                _bluetoothDeviceManager.updateStorageFromCache();
+            if (Core::ERROR_NONE == result) {
+                LOGINFO("Successfully done %s ", (pair ? "Pair" : "Unpair"));
             }
 
-            LOGINFO("Successfully done %s ", (pair ? "Pair" : "Unpair"));
-
-            return BTRMGR_RESULT_SUCCESS == rc;
+            return Core::ERROR_NONE == result;
         }
 
         bool Bluetooth::setBluetoothEnabled(const string &enabled)

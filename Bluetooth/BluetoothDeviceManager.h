@@ -61,7 +61,8 @@ namespace WPEFramework {
                 Core::hresult getAutoConnect(const std::string& deviceID, AutoConnectStatus& status);
                 void setLastConnectTimeUtc(const std::string& deviceID);
                 Core::hresult getLastConnectTimeUtc(const std::string& deviceID, std::string& lastConnectTimeUtc);
-                Core::hresult updateStorageFromCache();
+                Core::hresult addDevice(const std::string& deviceID);
+                Core::hresult removeDevice(const std::string& deviceID);
 
             private:
 
@@ -71,6 +72,7 @@ namespace WPEFramework {
 
                 Core::hresult getPairedDeviceInfo(const std::string& deviceID, BluetoothDeviceInfo& deviceInfo);
                 Core::hresult updateCacheFromStorage();
+                Core::hresult updateStorageFromCache();
         };
 
     } // Plugin

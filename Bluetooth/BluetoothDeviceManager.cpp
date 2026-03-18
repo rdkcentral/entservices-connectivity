@@ -275,5 +275,50 @@ namespace WPEFramework {
             return result;
         }
 
+        Core::hresult BluetoothDeviceManager::addDevice(const std::string& deviceID)
+        {
+            LOGINFO("deviceID=%s\n", deviceID.c_str());
+            BluetoothDeviceInfo deviceInfo;
+
+            BTRMGR_DevicesProperty_t deviceProperty;
+            memset (&deviceProperty, 0, sizeof(deviceProperty));
+
+            BTRMGR_Result_t result = BTRMGR_GetDeviceProperties(0, deviceHandle, &deviceProperty);
+            if (BTRMGR_RESULT_SUCCESS != result)
+            {
+                LOGERR("Failed to get device properties for deviceID: %s", deviceID.c_str());
+                return Core::ERROR_NOT_EXIST;
+            }
+
+            _adminLock.Lock();
+
+            BluetoothDeviceInfo deviceInfo;
+            deviceInfo.deviceType = deviceProperty.m_deviceType;
+            _pairedDeviceCache[deviceID] = std::move(deviceInfo);
+
+            _adminLock.Unlock();
+
+            return updateStorageFromCache();
+        }
+
+        Core::hresult removeDevice(const std::string& deviceID)
+        {
+            LOGINFO("deviceID=%s\n", deviceID.c_str());
+
+            _adminLock.Lock();
+
+            auto it = _pairedDeviceCache.find(deviceID);
+            if (it != _pairedDeviceCache.end()) {
+                _pairedDeviceCache.erase(it);
+            } else {
+                LOGWARN("Device info is not found in cache for deviceID: %s", deviceID.c_str());
+                _adminLock.Unlock();
+                return Core::ERROR_NOT_EXIST;
+            }
+
+            _adminLock.Unlock();
+            return updateStorageFromCache();
+        }
+
     } // Plugin
 } // WPEFramework
