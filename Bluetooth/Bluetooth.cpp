@@ -175,6 +175,7 @@ namespace WPEFramework
 
         const string Bluetooth::Initialize(PluginHost::IShell* service)
         {
+            printf("*** _DEBUG: Bluetooth::Initialize called\n");
             string message = "";
 
             Register(METHOD_GET_API_VERSION_NUMBER, &Bluetooth::getApiVersionNumber, this);
@@ -1443,6 +1444,7 @@ namespace WPEFramework
 
         uint32_t Bluetooth::getPairedDevicesWrapper(const JsonObject& parameters, JsonObject& response)
         {
+            printf("*** _DEBUG: getPairedDevicesWrapper called\n");
             LOGINFOMETHOD();
             UNUSED(parameters);
             response["pairedDevices"] = getPairedDevices();
@@ -1919,6 +1921,7 @@ namespace WPEFramework
                     "POWER_STATE_STANDBY_DEEP_SLEEP"
                 };
 
+                printf("*** _DEBUG: onPowerModeChanged: %s --> %s\n", powerStateNames[currentState], powerStateNames[newState]);
                 LOGINFO("%s --> %s\n", powerStateNames[currentState], powerStateNames[newState]);
             #else
                 LOGINFO("Power mode changed: %d --> %d\n", currentState, newState);
