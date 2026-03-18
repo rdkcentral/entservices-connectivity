@@ -77,17 +77,85 @@ namespace WPEFramework {
             return result;
         }
 
+        Core::hresult BluetoothDeviceManager::updateCacheFromDevice()
+        {
+            BTRMGR_PairedDevicesList_t *pairedDevices = (BTRMGR_PairedDevicesList_t*)malloc(sizeof(BTRMGR_PairedDevicesList_t));
+
+            if(pairedDevices == nullptr)
+            {
+                LOGERR("Failed to allocate memory");
+                free(pairedDevices);
+                return Core::ERROR_GENERAL;
+            }
+
+            memset (pairedDevices, 0, sizeof(BTRMGR_PairedDevicesList_t));
+
+            BTRMGR_Result_t result = BTRMGR_GetPairedDevices(0, pairedDevices);
+            if (BTRMGR_RESULT_SUCCESS != result)
+            {
+                LOGERR("Failed to get the paired devices");
+                free(pairedDevices);
+                return Core::ERROR_GENERAL;
+            }
+
+            _adminLock.Lock();
+            
+            // Add any paired devices not already in cache.
+
+            for (int i=0; i<pairedDevices->m_numOfDevices; i++)
+            {
+                string deviceId = std::to_string(pairedDevices->m_deviceProperty[i].m_deviceHandle);
+                const char* deviceTypeStr = BTRMGR_GetDeviceTypeAsString(pairedDevices->m_deviceProperty[i].m_deviceType);
+                string deviceType = string(deviceTypeStr ? deviceTypeStr : "UNKNOWN");
+
+                if (_pairedDeviceCache.find(deviceId) != _pairedDeviceCache.end()) {
+                    // Device already exists in cache, ignore.
+                    continue;
+                } else {
+                    // Device found that's not yet cached, add.
+                    LOGINFO("Adding device to cache: deviceID=%s, deviceType=%s\n", deviceId.c_str(), deviceType.c_str());
+                    BluetoothDeviceInfo deviceInfo;
+                    deviceInfo.deviceType = deviceType;
+                    _pairedDeviceCache[deviceId] = std::move(deviceInfo);
+                }
+            }
+
+            // Scrub cache of any devices that are no longer paired with the platform.
+
+            std::vector<std::string> deviceIDsToRemove;
+            for (const auto& entry : _pairedDeviceCache) {
+                const std::string& cachedDeviceId = entry.first;
+
+                auto it = std::find_if(std::begin(pairedDevices->m_deviceProperty), std::end(pairedDevices->m_deviceProperty),
+                    [&cachedDeviceId](const BTRMGR_DevicesProperty_t& deviceProperty) {
+                        return cachedDeviceId == std::to_string(deviceProperty.m_deviceHandle);
+                    });
+
+                if (it == std::end(pairedDevices->m_deviceProperty)) {
+                    // Cached device not found in current paired device list, mark for removal
+                    LOGINFO("Marking device for removal from cache: deviceID=%s\n", cachedDeviceId.c_str());
+                    deviceIDsToRemove.push_back(cachedDeviceId);
+                }
+            }
+
+            for (const auto& deviceID : deviceIDsToRemove) {
+                _pairedDeviceCache.erase(deviceID);
+            }
+
+            _adminLock.Unlock();
+        }
+
         Core::hresult BluetoothDeviceManager::updateStorageFromCache()
         {
             if (_service == nullptr) {
-                LOGERR("Service is null\n");
+                LOGERR("Service is null");
                 return Core::ERROR_GENERAL;
             }
 
             Exchange::IStore* pPersistentStore = _service->QueryInterfaceByCallsign<Exchange::IStore>(PERSISTENT_STORE_CALLSIGN);
 
             if (pPersistentStore == nullptr) {
-                LOGERR("Failed to get PersistentStore interface\n");
+                LOGERR("Failed to get PersistentStore interface");
                 return Core::ERROR_GENERAL;
             }
 
@@ -113,12 +181,12 @@ namespace WPEFramework {
 
             _adminLock.Unlock();
             
-            LOGINFO("Saving device info JSON: %s\n", bluetoothDeviceInfoStr.c_str());
+            LOGINFO("Saving device info JSON: %s", bluetoothDeviceInfoStr.c_str());
 
             Core::hresult result = pPersistentStore->SetValue(PERSISTENT_STORE_NAMESPACE, PERSISTENT_STORE_KEY_DEVICE_INFO, bluetoothDeviceInfoStr);
 
             if (Core::ERROR_NONE != result) {
-                LOGERR("Failed to save device info to PersistentStore, hresult=%d\n", result);
+                LOGERR("Failed to save device info to PersistentStore, hresult=%d", result);
             }
 
             pPersistentStore->Release();
@@ -136,40 +204,7 @@ namespace WPEFramework {
             _service->AddRef();
 
             updateCacheFromStorage();
-
-            if (!_pairedDeviceCache.empty()) {
-                return {};
-            }
-
-            // Device info cache is empty, either due to an error retrieving from storage or simply
-            // because none exists. Fetch any paired device information from BTMgr and re-write cache/storage.
-
-            BTRMGR_PairedDevicesList_t *pairedDevices = (BTRMGR_PairedDevicesList_t*)malloc(sizeof(BTRMGR_PairedDevicesList_t));
-
-            if(pairedDevices == nullptr)
-            {
-                return "Failed to allocate memory";
-            }
-
-            memset (pairedDevices, 0, sizeof(BTRMGR_PairedDevicesList_t));
-
-            BTRMGR_Result_t result = BTRMGR_GetPairedDevices(0, pairedDevices);
-            if (BTRMGR_RESULT_SUCCESS != result)
-            {
-                return "Failed to get the paired devices";
-            }
-
-            for (int i=0; i<pairedDevices->m_numOfDevices; i++)
-            {
-                string deviceId = std::to_string(pairedDevices->m_deviceProperty[i].m_deviceHandle);
-                const char* deviceTypeStr = BTRMGR_GetDeviceTypeAsString(pairedDevices->m_deviceProperty[i].m_deviceType);
-                string deviceType = string(deviceTypeStr ? deviceTypeStr : "UNKNOWN");
-
-                BluetoothDeviceInfo deviceInfo;
-                deviceInfo.deviceType = deviceType;
-                _pairedDeviceCache[deviceId] = std::move(deviceInfo);
-            }
-
+            updateCacheFromDevice();
             updateStorageFromCache();
 
             return {};

@@ -73,6 +73,7 @@ namespace WPEFramework {
 
                 Core::hresult getPairedDeviceInfo(const std::string& deviceID, BluetoothDeviceInfo& deviceInfo);
                 Core::hresult updateCacheFromStorage();
+                Core::hresult updateCacheFromDevice();
                 Core::hresult updateStorageFromCache();
         };
 
