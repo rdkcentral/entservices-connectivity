@@ -278,8 +278,7 @@ namespace WPEFramework {
         Core::hresult BluetoothDeviceManager::addDevice(const std::string& deviceID)
         {
             LOGINFO("deviceID=%s\n", deviceID.c_str());
-            BluetoothDeviceInfo deviceInfo;
-            BTRMgrDeviceHandle deviceHandle = (BTRMgrDeviceHandle) deviceID;
+            BTRMgrDeviceHandle deviceHandle = (BTRMgrDeviceHandle) stoll(deviceID);
 
             BTRMGR_DevicesProperty_t deviceProperty;
             memset (&deviceProperty, 0, sizeof(deviceProperty));
