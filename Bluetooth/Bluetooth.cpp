@@ -645,7 +645,6 @@ namespace WPEFramework
 
         bool Bluetooth::setDevicePairing(long long int deviceID, bool pair)
         {
-            Core::hresult result = Core::ERROR_NONE;
             BTRMgrDeviceHandle deviceHandle = (BTRMgrDeviceHandle) deviceID;
 
             BTRMGR_Result_t rc = pair ? BTRMGR_PairDevice(0, deviceHandle) : BTRMGR_UnpairDevice(0, deviceHandle);
