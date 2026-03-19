@@ -41,7 +41,7 @@ namespace WPEFramework {
         } AutoConnectStatus;
 
         typedef struct _BluetoothDeviceInfo {
-            std::string         deviceType          = "";
+            std::string         deviceType          = "UNKNOWN";
             AutoConnectStatus   autoConnectStatus   = AUTO_CONNECT_STATUS_UNSET;
             std::string         lastConnectTimeUtc  = "";
         } BluetoothDeviceInfo;

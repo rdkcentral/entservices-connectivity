@@ -66,10 +66,10 @@ namespace WPEFramework {
                     deviceInfo.autoConnectStatus = autoConnectStatus;
                     deviceInfo.lastConnectTimeUtc = std::move(lastConnectTimeUtc);
 
-                    _pairedDeviceCache[deviceID] = std::move(deviceInfo);
-
                     LOGINFO("Loaded device info for deviceID=%s, autoConnectStatus=%d, lastConnectTimeUtc=%s\n",
                             deviceID.c_str(), static_cast<int>(autoConnectStatus), deviceInfo.lastConnectTimeUtc.c_str());
+
+                    _pairedDeviceCache[deviceID] = std::move(deviceInfo);
                 }
 
                 _adminLock.Unlock();
@@ -278,8 +278,7 @@ namespace WPEFramework {
             _adminLock.Unlock();
 
             if (Core::ERROR_NONE != result) {
-                LOGERR("Failed to get device info for deviceID=%s, result=%d\n", deviceID.c_str(), result);
-                return;
+                LOGWARN("Device info is not found in cache for deviceID: %s", deviceID.c_str());
             }
 
             auto now = std::chrono::system_clock::now();
