@@ -66,10 +66,12 @@ namespace WPEFramework {
                     deviceInfo.autoConnectStatus = autoConnectStatus;
                     deviceInfo.lastConnectTimeUtc = std::move(lastConnectTimeUtc);
 
-                    LOGINFO("Loaded device info for deviceID=%s, autoConnectStatus=%d, lastConnectTimeUtc=%s\n",
-                            deviceID.c_str(), static_cast<int>(autoConnectStatus), deviceInfo.lastConnectTimeUtc.c_str());
-
                     _pairedDeviceCache[deviceID] = std::move(deviceInfo);
+
+                    LOGINFO("Loaded device info for deviceID=%s, autoConnectStatus=%d, lastConnectTimeUtc=%s\n",
+                            deviceID.c_str(),
+                            static_cast<int>(_pairedDeviceCache[deviceID].autoConnectStatus),
+                            _pairedDeviceCache[deviceID].lastConnectTimeUtc.c_str());
                 }
 
                 _adminLock.Unlock();
