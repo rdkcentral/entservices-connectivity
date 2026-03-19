@@ -64,7 +64,7 @@ protected:
     Core::ProxyType<WorkerPoolImplementation> workerPool;
     NiceMock<FactoriesImplementation> factoriesImplementation;
 
-    BluetoothTest()
+    explicit BluetoothTest(bool callInit = true)
         : plugin(Core::ProxyType<Plugin::Bluetooth>::Create())
         , handler(*(plugin))
         , INIT_CONX(1, 0)
@@ -115,7 +115,9 @@ protected:
 
         dispatcher->Activate(&service);
 
-        EXPECT_EQ(string(""), plugin->Initialize(&service));
+        if (callInit) {
+            EXPECT_EQ(string(""), plugin->Initialize(&service));
+        }
     }
 
     virtual ~BluetoothTest() override
@@ -908,37 +910,13 @@ TEST_F(BluetoothTest, getAutoConnectWrapper_NotFound_Failure)
 
 // Test fixture that pre-populates cache with one HID device via the persistent
 // store so that onPowerModeChanged can exercise the "skip HID" branch.
-class BluetoothPowerModeTest : public ::testing::Test {
+// Derives from BluetoothTest to reuse all lifecycle wiring; only adds
+// HID-specific mock setup before calling Initialize.
+class BluetoothPowerModeTest : public BluetoothTest {
 protected:
-    Core::ProxyType<Plugin::Bluetooth> plugin;
-    Core::JSONRPC::Handler& handler;
-    DECL_CORE_JSONRPC_CONX connection;
-    Core::JSONRPC::Message message;
-    string response;
-    StoreMock *p_storeMock = nullptr;
-    BtmgrImplMock *p_btmgrMock = nullptr;
-    IarmBusImplMock *p_iarmBusImplMock = nullptr;
-    NiceMock<COMLinkMock> comLinkMock;
-    NiceMock<ServiceMock> service;
-    PLUGINHOST_DISPATCHER* dispatcher;
-    Core::ProxyType<WorkerPoolImplementation> workerPool;
-    NiceMock<FactoriesImplementation> factoriesImplementation;
-
-    BluetoothPowerModeTest()
-        : plugin(Core::ProxyType<Plugin::Bluetooth>::Create())
-        , handler(*(plugin))
-        , INIT_CONX(1, 0)
-        , workerPool(Core::ProxyType<WorkerPoolImplementation>::Create(
-            2, Core::Thread::DefaultStackSize(), 16))
+    BluetoothPowerModeTest() : BluetoothTest(false)
     {
         TEST_LOG("BluetoothPowerModeTest ctor");
-
-        p_storeMock = new NiceMock<StoreMock>;
-        p_btmgrMock = new NiceMock<BtmgrImplMock>;
-        Btmgr::setImpl(p_btmgrMock);
-
-        p_iarmBusImplMock = new NiceMock<IarmBusImplMock>;
-        IarmBus::setImpl(p_iarmBusImplMock);
 
         // Pre-populate persistent store with a HID device so that init()
         // loads it into the paired device cache via updateCacheFromStorage().
@@ -961,16 +939,6 @@ protected:
                 ::testing::SetArgPointee<1>(hidPairedDevices),
                 ::testing::Return(BTRMGR_RESULT_SUCCESS)));
 
-        EXPECT_CALL(service, QueryInterfaceByCallsign(::testing::_, ::testing::_))
-            .Times(::testing::AnyNumber())
-            .WillRepeatedly(::testing::Invoke(
-                [&](const uint32_t id, const std::string& name) -> void* {
-                    if (name == "org.rdk.PersistentStore") {
-                        return reinterpret_cast<void*>(p_storeMock);
-                    }
-                    return nullptr;
-                }));
-
         EXPECT_CALL(PowerManagerMock::Mock(), GetPowerState(::testing::_, ::testing::_))
             .Times(::testing::AnyNumber())
             .WillRepeatedly(::testing::Invoke(
@@ -981,55 +949,7 @@ protected:
                     return Core::ERROR_NONE;
                 }));
 
-        ON_CALL(service, COMLink())
-            .WillByDefault(::testing::Invoke(
-                [this]() {
-                    return &comLinkMock;
-                }));
-
-        PluginHost::IFactories::Assign(&factoriesImplementation);
-
-        Core::IWorkerPool::Assign(&(*workerPool));
-        workerPool->Run();
-
-        dispatcher = static_cast<PLUGINHOST_DISPATCHER*>(
-            plugin->QueryInterface(PLUGINHOST_DISPATCHER_ID));
-
-        dispatcher->Activate(&service);
-
         EXPECT_EQ(string(""), plugin->Initialize(&service));
-    }
-
-    virtual ~BluetoothPowerModeTest() override
-    {
-        TEST_LOG("BluetoothPowerModeTest xtor");
-
-        plugin->Deinitialize(&service);
-
-        dispatcher->Deactivate();
-        dispatcher->Release();
-
-        Core::IWorkerPool::Assign(nullptr);
-        workerPool.Release();
-
-        PluginHost::IFactories::Assign(nullptr);
-
-        IarmBus::setImpl(nullptr);
-        if (p_iarmBusImplMock != nullptr) {
-            delete p_iarmBusImplMock;
-            p_iarmBusImplMock = nullptr;
-        }
-
-        Btmgr::setImpl(nullptr);
-        if (p_btmgrMock != nullptr) {
-            delete p_btmgrMock;
-            p_btmgrMock = nullptr;
-        }
-
-        if (p_storeMock != nullptr) {
-            delete p_storeMock;
-            p_storeMock = nullptr;
-        }
     }
 };
 
