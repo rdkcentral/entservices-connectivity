@@ -308,9 +308,12 @@ namespace WPEFramework {
 
         Core::hresult BluetoothDeviceManager::addDevice(const std::string& deviceID)
         {
+            BTRMgrDeviceHandle deviceHandle;
+            
             LOGINFO("deviceID=%s\n", deviceID.c_str());
+            
             try {
-                BTRMgrDeviceHandle deviceHandle = (BTRMgrDeviceHandle) stoll(deviceID);
+                deviceHandle = (BTRMgrDeviceHandle) stoll(deviceID);
             } catch (const std::exception& e) {
                 LOGERR("Failed to parse deviceId: %s\n", e.what());
                 return Core::ERROR_INVALID_PARAMETER;
