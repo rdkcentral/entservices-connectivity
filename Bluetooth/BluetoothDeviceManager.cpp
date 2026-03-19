@@ -381,7 +381,6 @@ namespace WPEFramework {
              try {
                  deviceInfos = _pairedDeviceCache;
              } catch (...) {
-                 _adminLock.Unlock();
                  LOGERR("Failed to copy paired device infos\n");
              }
 

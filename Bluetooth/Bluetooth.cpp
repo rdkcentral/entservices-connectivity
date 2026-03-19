@@ -1991,7 +1991,7 @@ namespace WPEFramework
 
                 std::unordered_map<std::string, BluetoothDeviceInfo> pairedDeviceInfos = m_bluetoothDeviceManager.getPairedDeviceInfos();
 
-                LOGINFO("pairedDeviceInfos.size()=%lu\n", pairedDeviceInfos.size());
+                LOGINFO("pairedDeviceInfos.size()=%zu\n", pairedDeviceInfos.size());
 
                 for (const auto& entry : pairedDeviceInfos) {
                     const std::string& deviceIdStr = entry.first;
