@@ -56,7 +56,7 @@ namespace WPEFramework {
 
                     AutoConnectStatus autoConnectStatus = AUTO_CONNECT_STATUS_UNSET;
                     if (deviceInfoObj.HasLabel("autoconnect")) {
-                        autoConnectStatus = static_cast<AutoConnectStatus>(autoConnectElement.Number());
+                        autoConnectStatus = static_cast<AutoConnectStatus>(deviceInfoObj["autoconnect"].Number());
                     }
                     
                     std::string lastConnectTimeUtc = deviceInfoObj.HasLabel("lastConnectTimeUtc") ? deviceInfoObj["lastConnectTimeUtc"].String() : "";
@@ -273,7 +273,9 @@ namespace WPEFramework {
         void BluetoothDeviceManager::setLastConnectTimeUtc(const std::string& deviceID)
         {
             BluetoothDeviceInfo deviceInfo;
+            _adminLock.Lock();
             Core::hresult result = getPairedDeviceInfo(deviceID, deviceInfo);
+            _adminLock.Unlock();
 
             if (Core::ERROR_NONE != result) {
                 LOGERR("Failed to get device info for deviceID=%s, result=%d\n", deviceID.c_str(), result);
