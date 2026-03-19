@@ -56,15 +56,7 @@ namespace WPEFramework {
 
                     AutoConnectStatus autoConnectStatus = AUTO_CONNECT_STATUS_UNSET;
                     if (deviceInfoObj.HasLabel("autoconnect")) {
-                        auto& autoConnectElement = deviceInfoObj["autoconnect"];
-                        if (autoConnectElement.IsNumber()) {
-                            autoConnectStatus = static_cast<AutoConnectStatus>(autoConnectElement.Number());
-                        } else if (autoConnectElement.IsBoolean()) {
-                            autoConnectStatus = autoConnectElement.Boolean() ? AUTO_CONNECT_STATUS_ENABLED : AUTO_CONNECT_STATUS_DISABLED;
-                        } else {
-                            LOGWARN("Unexpected type for 'autoconnect' in device info for deviceID=%s; leaving status UNSET\n",
-                                    deviceID.c_str());
-                        }
+                        autoConnectStatus = static_cast<AutoConnectStatus>(autoConnectElement.Number());
                     }
                     
                     std::string lastConnectTimeUtc = deviceInfoObj.HasLabel("lastConnectTimeUtc") ? deviceInfoObj["lastConnectTimeUtc"].String() : "";
@@ -243,19 +235,21 @@ namespace WPEFramework {
         {
             LOGINFO("deviceID=%s, enable=%s\n", deviceID.c_str(), enable ? "true" : "false");
 
-            AutoConnectStatus autoConnectStatus = enable ? AUTO_CONNECT_STATUS_ENABLED : AUTO_CONNECT_STATUS_DISABLED;
             BluetoothDeviceInfo deviceInfo;
 
             _adminLock.Lock();
 
-            getPairedDeviceInfo(deviceID, deviceInfo);
-            deviceInfo.autoConnectStatus = autoConnectStatus;
+            Core::hresult result = getPairedDeviceInfo(deviceID, deviceInfo);
 
-            _pairedDeviceCache[deviceID] = std::move(deviceInfo);
+            if (Core::ERROR_NONE == result) {
+                deviceInfo.autoConnectStatus = enable ? AUTO_CONNECT_STATUS_ENABLED : AUTO_CONNECT_STATUS_DISABLED;
+                _pairedDeviceCache[deviceID] = std::move(deviceInfo);
+                _adminLock.Unlock();
+                return updateStorageFromCache();
+            }
 
             _adminLock.Unlock();
-            
-            return updateStorageFromCache();
+            return result;
         }
 
         Core::hresult BluetoothDeviceManager::getAutoConnect(const std::string& deviceID, AutoConnectStatus& status)
@@ -278,6 +272,14 @@ namespace WPEFramework {
 
         void BluetoothDeviceManager::setLastConnectTimeUtc(const std::string& deviceID)
         {
+            BluetoothDeviceInfo deviceInfo;
+            Core::hresult result = getPairedDeviceInfo(deviceID, deviceInfo);
+
+            if (Core::ERROR_NONE != result) {
+                LOGERR("Failed to get device info for deviceID=%s, result=%d\n", deviceID.c_str(), result);
+                return;
+            }
+
             auto now = std::chrono::system_clock::now();
             std::time_t now_c = std::chrono::system_clock::to_time_t(now);
             std::tm utc_tm;
@@ -288,14 +290,10 @@ namespace WPEFramework {
 
             LOGINFO("deviceID=%s, time=%s\n", deviceID.c_str(), currentUtcTime.c_str());
 
-            BluetoothDeviceInfo deviceInfo;
+            deviceInfo.lastConnectTimeUtc = std::move(currentUtcTime);
 
             _adminLock.Lock();
-
-            getPairedDeviceInfo(deviceID, deviceInfo);
-            deviceInfo.lastConnectTimeUtc = std::move(currentUtcTime);
             _pairedDeviceCache[deviceID] = std::move(deviceInfo);
-
             _adminLock.Unlock();
 
             updateStorageFromCache();
