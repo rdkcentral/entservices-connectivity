@@ -17,6 +17,9 @@
 * limitations under the License.
 **/
 
+#include <vector>
+#include <exception>
+
 #include "BluetoothDeviceManager.h"
 #include "btmgr.h"
 
