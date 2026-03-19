@@ -661,9 +661,11 @@ namespace WPEFramework
 
             if (Core::ERROR_NONE == result) {
                 LOGINFO("Successfully done %s ", (pair ? "Pair" : "Unpair"));
+            } else {
+                LOGERR("Failed to update cache: result=%d", result);
             }
 
-            return Core::ERROR_NONE == result;
+            return true;
         }
 
         bool Bluetooth::setBluetoothEnabled(const string &enabled)
@@ -1938,7 +1940,7 @@ namespace WPEFramework
 
                 std::unordered_map<std::string, BluetoothDeviceInfo> pairedDeviceInfos = m_bluetoothDeviceManager.getPairedDeviceInfos();
 
-                LOGINFO("pairedDeviceInfos.size()=%d\n", pairedDeviceInfos.size());
+                LOGINFO("pairedDeviceInfos.size()=%lu\n", pairedDeviceInfos.size());
 
                 for (const auto& entry : pairedDeviceInfos) {
                     const std::string& deviceIdStr = entry.first;
@@ -1956,7 +1958,7 @@ namespace WPEFramework
                         try {
                             long long int deviceId = stoll(deviceIdStr);
                             bool bSuccess = setDeviceConnection(deviceId, false, deviceInfo.deviceType);
-                            LOGINFO("POWER OFF/STANDBY: Disconnecting deviceID=%llu, success=%s\n", deviceId, bSuccess ? "true" : "false");
+                            LOGINFO("POWER OFF/STANDBY: Disconnecting deviceID=%lld, success=%s\n", deviceId, bSuccess ? "true" : "false");
                         } catch (const std::exception& e) {
                             LOGERR("Failed to parse deviceId: %s\n", e.what());
                         }
@@ -1967,9 +1969,9 @@ namespace WPEFramework
             else if (WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_ON == newState ) {
                 std::unordered_map<std::string, BluetoothDeviceInfo> pairedDeviceInfos = m_bluetoothDeviceManager.getPairedDeviceInfos();
 
-                LOGINFO("pairedDeviceInfos.size()=%d\n", pairedDeviceInfos.size());
+                LOGINFO("pairedDeviceInfos.size()=%lu\n", pairedDeviceInfos.size());
 
-                uint16_t pairedDevicvesCount = 0;
+                uint16_t pairedDevicesCount = 0;
 
                 for (const auto& entry : pairedDeviceInfos) {
                     const std::string& deviceIdStr = entry.first;
@@ -1978,12 +1980,11 @@ namespace WPEFramework
                             deviceIdStr.c_str(), deviceInfo.deviceType.c_str(), static_cast<int>(deviceInfo.autoConnectStatus), deviceInfo.lastConnectTimeUtc.c_str());
                     
                     if (deviceInfo.deviceType != "HUMAN INTERFACE DEVICE") {
-                        // <pca> AS doesn't consider RCUs as paired devices, confirm we don't either </pca>
-                        ++pairedDevicvesCount;
+                        ++pairedDevicesCount;
                     }
                 }
 
-                if (pairedDevicvesCount > 0) {
+                if (pairedDevicesCount > 0) {
                     setBluetoothEnabled(ENABLE_BLUETOOTH_ENABLED);
                 }
             }
@@ -1992,7 +1993,7 @@ namespace WPEFramework
 
                 std::unordered_map<std::string, BluetoothDeviceInfo> pairedDeviceInfos = m_bluetoothDeviceManager.getPairedDeviceInfos();
 
-                LOGINFO("pairedDeviceInfos.size()=%d\n", pairedDeviceInfos.size());
+                LOGINFO("pairedDeviceInfos.size()=%lu\n", pairedDeviceInfos.size());
 
                 for (const auto& entry : pairedDeviceInfos) {
                     const std::string& deviceIdStr = entry.first;

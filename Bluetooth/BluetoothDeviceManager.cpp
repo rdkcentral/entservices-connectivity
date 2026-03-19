@@ -18,6 +18,7 @@
 **/
 
 #include "BluetoothDeviceManager.h"
+#include "btmgr.h"
 
 
 namespace WPEFramework {
@@ -56,14 +57,14 @@ namespace WPEFramework {
                     std::string lastConnectTimeUtc = deviceInfoObj["lastConnectTimeUtc"].String();
 
                     BluetoothDeviceInfo deviceInfo;
-                    deviceInfo.deviceType = deviceType;
+                    deviceInfo.deviceType = std::move(deviceType);
                     deviceInfo.autoConnectStatus = autoConnectStatus;
-                    deviceInfo.lastConnectTimeUtc = lastConnectTimeUtc;
+                    deviceInfo.lastConnectTimeUtc = std::move(lastConnectTimeUtc);
 
                     _pairedDeviceCache[deviceID] = std::move(deviceInfo);
 
                     LOGINFO("Loaded device info for deviceID=%s, autoConnectStatus=%d, lastConnectTimeUtc=%s\n",
-                            deviceID.c_str(), static_cast<int>(autoConnectStatus), lastConnectTimeUtc.c_str());
+                            deviceID.c_str(), static_cast<int>(autoConnectStatus), deviceInfo.lastConnectTimeUtc.c_str());
                 }
 
                 _adminLock.Unlock();
@@ -79,22 +80,12 @@ namespace WPEFramework {
 
         Core::hresult BluetoothDeviceManager::updateCacheFromDevice()
         {
-            BTRMGR_PairedDevicesList_t *pairedDevices = (BTRMGR_PairedDevicesList_t*)malloc(sizeof(BTRMGR_PairedDevicesList_t));
+            BTRMGR_PairedDevicesList_t pairedDevices;
 
-            if(pairedDevices == nullptr)
-            {
-                LOGERR("Failed to allocate memory");
-                free(pairedDevices);
-                return Core::ERROR_GENERAL;
-            }
-
-            memset (pairedDevices, 0, sizeof(BTRMGR_PairedDevicesList_t));
-
-            BTRMGR_Result_t result = BTRMGR_GetPairedDevices(0, pairedDevices);
+            BTRMGR_Result_t result = BTRMGR_GetPairedDevices(0, &pairedDevices);
             if (BTRMGR_RESULT_SUCCESS != result)
             {
                 LOGERR("Failed to get the paired devices");
-                free(pairedDevices);
                 return Core::ERROR_GENERAL;
             }
 
@@ -102,10 +93,10 @@ namespace WPEFramework {
             
             // Add any paired devices not already in cache.
 
-            for (int i=0; i<pairedDevices->m_numOfDevices; i++)
+            for (int i=0; i<pairedDevices.m_numOfDevices; i++)
             {
-                string deviceId = std::to_string(pairedDevices->m_deviceProperty[i].m_deviceHandle);
-                const char* deviceTypeStr = BTRMGR_GetDeviceTypeAsString(pairedDevices->m_deviceProperty[i].m_deviceType);
+                string deviceId = std::to_string(pairedDevices.m_deviceProperty[i].m_deviceHandle);
+                const char* deviceTypeStr = BTRMGR_GetDeviceTypeAsString(pairedDevices.m_deviceProperty[i].m_deviceType);
                 string deviceType = string(deviceTypeStr ? deviceTypeStr : "UNKNOWN");
 
                 if (_pairedDeviceCache.find(deviceId) != _pairedDeviceCache.end()) {
@@ -115,7 +106,7 @@ namespace WPEFramework {
                     // Device found that's not yet cached, add.
                     LOGINFO("Adding device to cache: deviceID=%s, deviceType=%s\n", deviceId.c_str(), deviceType.c_str());
                     BluetoothDeviceInfo deviceInfo;
-                    deviceInfo.deviceType = deviceType;
+                    deviceInfo.deviceType = std::move(deviceType);
                     _pairedDeviceCache[deviceId] = std::move(deviceInfo);
                 }
             }
@@ -127,9 +118,9 @@ namespace WPEFramework {
                 const std::string& cachedDeviceId = entry.first;
                 bool bFound = false;
 
-                for (int i=0; i<pairedDevices->m_numOfDevices; i++)
+                for (int i=0; i<pairedDevices.m_numOfDevices; i++)
                 {
-                    string deviceId = std::to_string(pairedDevices->m_deviceProperty[i].m_deviceHandle);
+                    string deviceId = std::to_string(pairedDevices.m_deviceProperty[i].m_deviceHandle);
                     if (cachedDeviceId == deviceId) {
                         bFound = true;
                         break;
@@ -318,10 +309,14 @@ namespace WPEFramework {
         Core::hresult BluetoothDeviceManager::addDevice(const std::string& deviceID)
         {
             LOGINFO("deviceID=%s\n", deviceID.c_str());
-            BTRMgrDeviceHandle deviceHandle = (BTRMgrDeviceHandle) stoll(deviceID);
+            try {
+                BTRMgrDeviceHandle deviceHandle = (BTRMgrDeviceHandle) stoll(deviceID);
+            } catch (const std::exception& e) {
+                LOGERR("Failed to parse deviceId: %s\n", e.what());
+                return Core::ERROR_INVALID_PARAMETER;
+            }
 
             BTRMGR_DevicesProperty_t deviceProperty;
-            memset (&deviceProperty, 0, sizeof(deviceProperty));
 
             BTRMGR_Result_t result = BTRMGR_GetDeviceProperties(0, deviceHandle, &deviceProperty);
             if (BTRMGR_RESULT_SUCCESS != result)
@@ -332,8 +327,9 @@ namespace WPEFramework {
 
             _adminLock.Lock();
 
-            BluetoothDeviceInfo deviceInfo;
-            deviceInfo.deviceType = deviceProperty.m_deviceType;
+            BluetoothDeviceInfo deviceInfo;s
+            const char* deviceTypeStr = BTRMGR_GetDeviceTypeAsString(deviceProperty.m_deviceType);
+            deviceInfo.deviceType = (deviceTypeStr != nullptr) ? deviceTypeStr : "UNKNOWN";
             _pairedDeviceCache[deviceID] = std::move(deviceInfo);
 
             _adminLock.Unlock();
