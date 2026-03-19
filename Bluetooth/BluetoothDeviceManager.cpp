@@ -375,7 +375,16 @@ namespace WPEFramework {
         std::unordered_map<std::string /* deviceID */, BluetoothDeviceInfo /* deviceInfo */> BluetoothDeviceManager::getPairedDeviceInfos()
         {
             _adminLock.Lock();
-            auto deviceInfos = _pairedDeviceCache;
+
+            std::unordered_map<std::string /* deviceID */, BluetoothDeviceInfo /* deviceInfo */> deviceInfos;
+
+             try {
+                 deviceInfos = _pairedDeviceCache;
+             } catch (...) {
+                 _adminLock.Unlock();
+                 LOGERR("Failed to copy paired device infos\n");
+             }
+
             _adminLock.Unlock();
             return deviceInfos;
         }
