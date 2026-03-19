@@ -19,6 +19,7 @@
 
 #include <vector>
 #include <exception>
+#include <unordered_set>
 
 #include "BluetoothDeviceManager.h"
 #include "btmgr.h"
@@ -123,21 +124,16 @@ namespace WPEFramework {
 
             // Scrub cache of any devices that are no longer paired with the platform.
 
+            std::unordered_set<std::string> pairedDeviceIds;
+            pairedDeviceIds.reserve(static_cast<size_t>(pairedDevices.m_numOfDevices));
+            for (int i = 0; i < pairedDevices.m_numOfDevices; ++i) {
+                pairedDeviceIds.emplace(std::to_string(pairedDevices.m_deviceProperty[i].m_deviceHandle));
+            }
+
             std::vector<std::string> deviceIdsToRemove;
             for (const auto& entry : _pairedDeviceCache) {
                 const std::string& cachedDeviceId = entry.first;
-                bool bFound = false;
-
-                for (int i=0; i<pairedDevices.m_numOfDevices; i++)
-                {
-                    string deviceId = std::to_string(pairedDevices.m_deviceProperty[i].m_deviceHandle);
-                    if (cachedDeviceId == deviceId) {
-                        bFound = true;
-                        break;
-                    }
-                }
-
-                if (!bFound) {
+                if (pairedDeviceIds.find(cachedDeviceId) == pairedDeviceIds.end()) {
                     LOGINFO("Marking device for removal from cache: deviceID=%s\n", cachedDeviceId.c_str());
                     deviceIdsToRemove.push_back(cachedDeviceId);
                 }
