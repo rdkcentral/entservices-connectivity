@@ -1967,7 +1967,7 @@ namespace WPEFramework
             else if (WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_ON == newState ) {
                 std::unordered_map<std::string, BluetoothDeviceInfo> pairedDeviceInfos = m_bluetoothDeviceManager.getPairedDeviceInfos();
 
-                LOGINFO("pairedDeviceInfos.size()=%lu\n", pairedDeviceInfos.size());
+                LOGINFO("pairedDeviceInfos.size()=%zu\n", pairedDeviceInfos.size());
 
                 uint16_t pairedDevicesCount = 0;
 
