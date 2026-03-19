@@ -976,6 +976,8 @@ protected:
             .WillRepeatedly(::testing::Invoke(
                 [&](WPEFramework::Exchange::IPowerManager::PowerState& currentState,
                     WPEFramework::Exchange::IPowerManager::PowerState& previousState) -> uint32_t {
+                    currentState = WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_ON;
+                    previousState = WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_ON;
                     return Core::ERROR_NONE;
                 }));
 
