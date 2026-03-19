@@ -53,8 +53,21 @@ namespace WPEFramework {
                     JsonObject deviceInfoObj = deviceInfoArray[i].Object();
                     std::string deviceID = deviceInfoObj["deviceID"].String();
                     std::string deviceType = deviceInfoObj["deviceType"].String();
-                    AutoConnectStatus autoConnectStatus = static_cast<AutoConnectStatus>(deviceInfoObj["autoconnect"].Number());
-                    std::string lastConnectTimeUtc = deviceInfoObj["lastConnectTimeUtc"].String();
+
+                    AutoConnectStatus autoConnectStatus = AUTO_CONNECT_STATUS_UNSET;
+                    if (deviceInfoObj.HasLabel("autoconnect")) {
+                        auto& autoConnectElement = deviceInfoObj["autoconnect"];
+                        if (autoConnectElement.IsNumber()) {
+                            autoConnectStatus = static_cast<AutoConnectStatus>(autoConnectElement.Number());
+                        } else if (autoConnectElement.IsBoolean()) {
+                            autoConnectStatus = autoConnectElement.Boolean() ? AUTO_CONNECT_STATUS_ENABLED : AUTO_CONNECT_STATUS_DISABLED;
+                        } else {
+                            LOGWARN("Unexpected type for 'autoconnect' in device info for deviceID=%s; leaving status UNSET\n",
+                                    deviceID.c_str());
+                        }
+                    }
+                    
+                    std::string lastConnectTimeUtc = deviceInfoObj.HasLabel("lastConnectTimeUtc") ? deviceInfoObj["lastConnectTimeUtc"].String() : "";
 
                     BluetoothDeviceInfo deviceInfo;
                     deviceInfo.deviceType = std::move(deviceType);
@@ -80,7 +93,7 @@ namespace WPEFramework {
 
         Core::hresult BluetoothDeviceManager::updateCacheFromDevice()
         {
-            BTRMGR_PairedDevicesList_t pairedDevices;
+            BTRMGR_PairedDevicesList_t pairedDevices{};
 
             BTRMGR_Result_t result = BTRMGR_GetPairedDevices(0, &pairedDevices);
             if (BTRMGR_RESULT_SUCCESS != result)
@@ -309,7 +322,7 @@ namespace WPEFramework {
         Core::hresult BluetoothDeviceManager::addDevice(const std::string& deviceID)
         {
             BTRMgrDeviceHandle deviceHandle;
-            
+
             LOGINFO("deviceID=%s\n", deviceID.c_str());
             
             try {
@@ -330,7 +343,7 @@ namespace WPEFramework {
 
             _adminLock.Lock();
 
-            BluetoothDeviceInfo deviceInfo;s
+            BluetoothDeviceInfo deviceInfo;
             const char* deviceTypeStr = BTRMGR_GetDeviceTypeAsString(deviceProperty.m_deviceType);
             deviceInfo.deviceType = (deviceTypeStr != nullptr) ? deviceTypeStr : "UNKNOWN";
             _pairedDeviceCache[deviceID] = std::move(deviceInfo);

@@ -1940,8 +1940,6 @@ namespace WPEFramework
 
                 std::unordered_map<std::string, BluetoothDeviceInfo> pairedDeviceInfos = m_bluetoothDeviceManager.getPairedDeviceInfos();
 
-                LOGINFO("pairedDeviceInfos.size()=%lu\n", pairedDeviceInfos.size());
-
                 for (const auto& entry : pairedDeviceInfos) {
                     const std::string& deviceIdStr = entry.first;
                     const BluetoothDeviceInfo& deviceInfo = entry.second;
@@ -2009,7 +2007,7 @@ namespace WPEFramework
                     try {
                         long long int deviceId = std::stoll(deviceIdStr);
                         bool bSuccess = setDeviceConnection(deviceId, false, deviceInfo.deviceType);
-                        LOGINFO("POWER_STATE_STANDBY_DEEP_SLEEP: Disconnecting deviceId=%llu, success=%s\n", deviceId, bSuccess ? "true" : "false");
+                        LOGINFO("POWER_STATE_STANDBY_DEEP_SLEEP: Disconnecting deviceId=%lld, success=%s\n", deviceId, bSuccess ? "true" : "false");
                     } catch (const std::exception& e) {
                         LOGERR("Failed to parse deviceId: %s\n", e.what());
                     }
