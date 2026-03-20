@@ -164,7 +164,7 @@ protected:
     void setupDevice()
     {
         // Helper function to set up a paired device in the cache and storage for testing.
-        const std::string deviceID = "12345";
+        const std::string deviceID = "123";
         WPEFramework::Plugin::BluetoothDeviceInfo deviceInfo;
         deviceInfo.deviceType = "HEADPHONES";
 
@@ -173,6 +173,9 @@ protected:
 
         EXPECT_CALL(*p_btmgrMock, BTRMGR_GetDeviceTypeAsString(::testing::_))
             .WillOnce(::testing::Return("HEADPHONES"));
+
+        EXPECT_CALL(*p_storeMock, SetValue(::testing::_, ::testing::_, ::testing::_))
+            .WillOnce(::testing::Return(Core::ERROR_NONE));
 
         plugin->m_bluetoothDeviceManager.addDevice(deviceID);
 
