@@ -170,7 +170,7 @@ protected:
 
         EXPECT_CALL(*p_btmgrMock, BTRMGR_GetDeviceProperties(::testing::_, ::testing::_, ::testing::_))
             .WillOnce(::testing::DoAll(
-                ::testing::SetArgPointee<1>(deviceProperty),
+                ::testing::SetArgPointee<2>(deviceProperty),
                 ::testing::Return(BTRMGR_RESULT_SUCCESS)));
 
         EXPECT_CALL(*p_btmgrMock, BTRMGR_GetDeviceTypeAsString(::testing::_))
