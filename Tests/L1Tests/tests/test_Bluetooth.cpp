@@ -164,7 +164,7 @@ void setupDevice()
 {
     // Helper function to set up a paired device in the cache and storage for testing.
     const std::string deviceID = "12345";
-    BluetoothDeviceManager::BluetoothDeviceInfo deviceInfo;
+    WPEFramework::Plugin::BluetoothDeviceInfo deviceInfo;
     deviceInfo.deviceType = "HEADPHONES";
 
     EXPECT_CALL(*p_btmgrMock, BTRMGR_GetDeviceProperties(::testing::_, ::testing::_, ::testing::_))
@@ -1130,7 +1130,7 @@ TEST_F(BluetoothTest, onPowerModeChanged_OnToDeepSleep_NonHidDevice_AlwaysDiscon
         .WillOnce(::testing::Return(Core::ERROR_NONE));
 
     setupDevice();
-    
+
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
         _T("{\"deviceID\":\"123\",\"enable\":true}"), response));
 
