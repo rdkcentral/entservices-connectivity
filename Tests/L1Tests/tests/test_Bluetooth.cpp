@@ -84,13 +84,6 @@ protected:
                 }
                 return nullptr;
         }));
-
-        EXPECT_CALL(PowerManagerMock::Mock(), GetPowerState(::testing::_, ::testing::_))
-        .Times(::testing::AnyNumber())
-        .WillRepeatedly(::testing::Invoke(
-            [&](WPEFramework::Exchange::IPowerManager::PowerState& currentState, WPEFramework::Exchange::IPowerManager::PowerState& previousState) -> uint32_t {
-                return Core::ERROR_NONE;
-            }));
         
         p_btmgrMock = new NiceMock<BtmgrImplMock>;
         Btmgr::setImpl(p_btmgrMock);
@@ -174,7 +167,7 @@ protected:
         #ifdef BTRMGR_DEVICE_TYPE_UNKNOWN
         deviceProperty.m_deviceType = BTRMGR_DEVICE_TYPE_UNKNOWN;
         #endif
-        
+
         EXPECT_CALL(*p_btmgrMock, BTRMGR_GetDeviceProperties(::testing::_, ::testing::_, ::testing::_))
             .WillOnce(::testing::DoAll(
                 ::testing::SetArgPointee<1>(deviceProperty),
