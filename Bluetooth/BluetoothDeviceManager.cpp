@@ -243,7 +243,9 @@ namespace WPEFramework {
             Core::hresult result = getPairedDeviceInfo(deviceID, deviceInfo);
 
             if (Core::ERROR_NONE != result) {
-                LOGWARN("Device info is not found in cache for deviceID: %s", deviceID.c_str());
+                LOGERR("Device info is not found in cache for deviceID: %s", deviceID.c_str());
+                    _adminLock.Unlock();
+                    return Core::ERROR_NOT_EXIST;
             }
 
             deviceInfo.autoConnectStatus = enable ? AUTO_CONNECT_STATUS_ENABLED : AUTO_CONNECT_STATUS_DISABLED;
@@ -284,7 +286,8 @@ namespace WPEFramework {
             _adminLock.Unlock();
 
             if (Core::ERROR_NONE != result) {
-                LOGWARN("Device info is not found in cache for deviceID: %s", deviceID.c_str());
+                LOGERR("Device info is not found in cache for deviceID: %s", deviceID.c_str());
+                return;
             }
 
             auto now = std::chrono::system_clock::now();

@@ -160,6 +160,23 @@ protected:
     }
 };
 
+void setupDevice()
+{
+    // Helper function to set up a paired device in the cache and storage for testing.
+    const std::string deviceID = "12345";
+    BluetoothDeviceManager::BluetoothDeviceInfo deviceInfo;
+    deviceInfo.deviceType = "HEADPHONES";
+
+    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetDeviceProperties(::testing::_, ::testing::_, ::testing::_))
+        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
+
+    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetDeviceTypeAsString(::testing::_))
+        .WillOnce(::testing::Return("HEADPHONES"));
+
+    plugin->m_bluetoothDeviceManager.addDevice(deviceID);
+
+}
+
 TEST_F(BluetoothTest, getApiVersionNumber_Success)
 {
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getApiVersionNumber"), _T("{}"), response));
@@ -853,6 +870,8 @@ TEST_F(BluetoothTest, setAutoConnectWrapper_Enable_Success)
 {
     EXPECT_CALL(*p_storeMock, SetValue(::testing::_, ::testing::_, ::testing::_))
         .WillOnce(::testing::Return(Core::ERROR_NONE));
+
+    setupDevice();
     
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"), _T("{\"deviceID\":\"123\",\"enable\":true}"), response));
 }
@@ -861,6 +880,8 @@ TEST_F(BluetoothTest, setAutoConnectWrapper_Disable_Success)
 {
     EXPECT_CALL(*p_storeMock, SetValue(::testing::_, ::testing::_, ::testing::_))
         .WillOnce(::testing::Return(Core::ERROR_NONE));
+
+    setupDevice();
     
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"), _T("{\"deviceID\":\"123\",\"enable\":false}"), response));
 }
@@ -875,6 +896,8 @@ TEST_F(BluetoothTest, getAutoConnectWrapper_Enabled_Success)
     EXPECT_CALL(*p_storeMock, SetValue(::testing::_, ::testing::_, ::testing::_))
         .WillOnce(::testing::Return(Core::ERROR_NONE));
     
+    setupDevice();
+    
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"), _T("{\"deviceID\":\"123\",\"enable\":true}"), response));
     
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getAutoConnect"), _T("{\"deviceID\":\"123\"}"), response));
@@ -886,6 +909,8 @@ TEST_F(BluetoothTest, getAutoConnectWrapper_Disabled_Success)
 {
     EXPECT_CALL(*p_storeMock, SetValue(::testing::_, ::testing::_, ::testing::_))
         .WillOnce(::testing::Return(Core::ERROR_NONE));
+    
+    setupDevice();
     
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"), _T("{\"deviceID\":\"123\",\"enable\":false}"), response));
     
@@ -972,6 +997,9 @@ TEST_F(BluetoothTest, onPowerModeChanged_OnToStandby_NonHidDevice_AutoConnectDis
 {
     EXPECT_CALL(*p_storeMock, SetValue(::testing::_, ::testing::_, ::testing::_))
         .WillOnce(::testing::Return(Core::ERROR_NONE));
+
+    setupDevice();
+
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
         _T("{\"deviceID\":\"123\",\"enable\":false}"), response));
 
@@ -987,6 +1015,9 @@ TEST_F(BluetoothTest, onPowerModeChanged_UnknownToStandby_NonHidDevice_AutoConne
 {
     EXPECT_CALL(*p_storeMock, SetValue(::testing::_, ::testing::_, ::testing::_))
         .WillOnce(::testing::Return(Core::ERROR_NONE));
+
+    setupDevice();
+
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
         _T("{\"deviceID\":\"123\",\"enable\":false}"), response));
 
@@ -1002,6 +1033,9 @@ TEST_F(BluetoothTest, onPowerModeChanged_OnToStandbyLightSleep_NonHidDevice_Auto
 {
     EXPECT_CALL(*p_storeMock, SetValue(::testing::_, ::testing::_, ::testing::_))
         .WillOnce(::testing::Return(Core::ERROR_NONE));
+
+    setupDevice();
+
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
         _T("{\"deviceID\":\"123\",\"enable\":false}"), response));
 
@@ -1017,6 +1051,9 @@ TEST_F(BluetoothTest, onPowerModeChanged_OnToStandby_NonHidDevice_AutoConnectEna
 {
     EXPECT_CALL(*p_storeMock, SetValue(::testing::_, ::testing::_, ::testing::_))
         .WillOnce(::testing::Return(Core::ERROR_NONE));
+
+    setupDevice();
+
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
         _T("{\"deviceID\":\"123\",\"enable\":true}"), response));
 
@@ -1058,6 +1095,9 @@ TEST_F(BluetoothTest, onPowerModeChanged_StandbyToOn_WithNonHidPairedDevices_Ena
 {
     EXPECT_CALL(*p_storeMock, SetValue(::testing::_, ::testing::_, ::testing::_))
         .WillOnce(::testing::Return(Core::ERROR_NONE));
+
+    setupDevice();
+
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
         _T("{\"deviceID\":\"123\",\"enable\":true}"), response));
 
@@ -1088,6 +1128,9 @@ TEST_F(BluetoothTest, onPowerModeChanged_OnToDeepSleep_NonHidDevice_AlwaysDiscon
     // when entering deep sleep (autoConnectStatus is not checked for deep sleep).
     EXPECT_CALL(*p_storeMock, SetValue(::testing::_, ::testing::_, ::testing::_))
         .WillOnce(::testing::Return(Core::ERROR_NONE));
+
+    setupDevice();
+    
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
         _T("{\"deviceID\":\"123\",\"enable\":true}"), response));
 
