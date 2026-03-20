@@ -158,24 +158,26 @@ protected:
     virtual void SetUp()
     {
     }
+
+    public:
+
+    void setupDevice()
+    {
+        // Helper function to set up a paired device in the cache and storage for testing.
+        const std::string deviceID = "12345";
+        WPEFramework::Plugin::BluetoothDeviceInfo deviceInfo;
+        deviceInfo.deviceType = "HEADPHONES";
+
+        EXPECT_CALL(*p_btmgrMock, BTRMGR_GetDeviceProperties(::testing::_, ::testing::_, ::testing::_))
+            .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
+
+        EXPECT_CALL(*p_btmgrMock, BTRMGR_GetDeviceTypeAsString(::testing::_))
+            .WillOnce(::testing::Return("HEADPHONES"));
+
+        plugin->m_bluetoothDeviceManager.addDevice(deviceID);
+
+    }
 };
-
-void setupDevice()
-{
-    // Helper function to set up a paired device in the cache and storage for testing.
-    const std::string deviceID = "12345";
-    WPEFramework::Plugin::BluetoothDeviceInfo deviceInfo;
-    deviceInfo.deviceType = "HEADPHONES";
-
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetDeviceProperties(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetDeviceTypeAsString(::testing::_))
-        .WillOnce(::testing::Return("HEADPHONES"));
-
-    plugin->m_bluetoothDeviceManager.addDevice(deviceID);
-
-}
 
 TEST_F(BluetoothTest, getApiVersionNumber_Success)
 {
