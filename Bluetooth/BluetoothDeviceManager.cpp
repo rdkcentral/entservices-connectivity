@@ -343,7 +343,7 @@ namespace WPEFramework {
                 return Core::ERROR_INVALID_PARAMETER;
             }
 
-            BTRMGR_DevicesProperty_t deviceProperty;
+            BTRMGR_DevicesProperty_t deviceProperty{};
 
             BTRMGR_Result_t result = BTRMGR_GetDeviceProperties(0, deviceHandle, &deviceProperty);
             if (BTRMGR_RESULT_SUCCESS != result)

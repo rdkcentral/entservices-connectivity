@@ -169,8 +169,16 @@ protected:
         EXPECT_CALL(*p_btmgrMock, BTRMGR_PairDevice(::testing::_, static_cast<BTRMgrDeviceHandle>(std::stoll(deviceID))))
             .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
 
-         EXPECT_CALL(*p_btmgrMock, BTRMGR_GetDeviceProperties(::testing::_, ::testing::_, ::testing::_))
-            .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
+        BTRMGR_DevicesProperty_t deviceProperty = {};
+
+        #ifdef BTRMGR_DEVICE_TYPE_UNKNOWN
+        deviceProperty.m_deviceType = BTRMGR_DEVICE_TYPE_UNKNOWN;
+        #endif
+        
+        EXPECT_CALL(*p_btmgrMock, BTRMGR_GetDeviceProperties(::testing::_, ::testing::_, ::testing::_))
+            .WillOnce(::testing::DoAll(
+                ::testing::SetArgPointee<1>(deviceProperty),
+                ::testing::Return(BTRMGR_RESULT_SUCCESS)));
 
         EXPECT_CALL(*p_btmgrMock, BTRMGR_GetDeviceTypeAsString(::testing::_))
             .WillOnce(::testing::Return("HEADPHONES"));
