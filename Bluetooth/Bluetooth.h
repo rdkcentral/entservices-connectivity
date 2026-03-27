@@ -152,6 +152,8 @@ namespace WPEFramework {
             JsonArray getDiscoveredDevices();
             JsonArray getPairedDevices();
             JsonArray getConnectedDevices();
+            void disconnectExternallyConnectedDevices();
+
             bool setDeviceConnection(long long int deviceID, bool connect, const string &deviceType = "UNKNOWN DEVICE");
             bool setAudioStream(long long int deviceID, const string &audioStreamName);
             bool setDevicePairing(long long int deviceID, bool pair);

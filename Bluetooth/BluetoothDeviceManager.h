@@ -41,6 +41,7 @@ namespace WPEFramework {
         } AutoConnectStatus;
 
         typedef struct _BluetoothDeviceInfo {
+            std::string         deviceType          = "UNKNOWN";
             AutoConnectStatus   autoConnectStatus   = AUTO_CONNECT_STATUS_UNSET;
             std::string         lastConnectTimeUtc  = "";
         } BluetoothDeviceInfo;
@@ -52,23 +53,27 @@ namespace WPEFramework {
                 BluetoothDeviceManager() = default;
                 ~BluetoothDeviceManager() = default;
 
-                const string init(PluginHost::IShell* service);
+                Core::hresult init(PluginHost::IShell* service);
                 void deinit();
 
                 Core::hresult setAutoConnect(const std::string& deviceID, bool enable);
                 Core::hresult getAutoConnect(const std::string& deviceID, AutoConnectStatus& status);
                 void setLastConnectTimeUtc(const std::string& deviceID);
                 Core::hresult getLastConnectTimeUtc(const std::string& deviceID, std::string& lastConnectTimeUtc);
+                Core::hresult addDevice(const std::string& deviceID);
+                Core::hresult removeDevice(const std::string& deviceID);
+                std::unordered_map<std::string /* deviceID */, BluetoothDeviceInfo /* deviceInfo */> getPairedDeviceInfos();
 
             private:
 
                 mutable Core::CriticalSection _adminLock;
                 PluginHost::IShell* _service = nullptr;
-                std::unordered_map<std::string /* deviceID */, BluetoothDeviceInfo /* deviceInfo */> _bluetoothDeviceInfoCache;
+                std::unordered_map<std::string /* deviceID */, BluetoothDeviceInfo /* deviceInfo */> _pairedDeviceCache;
 
-                Core::hresult getBluetoothDeviceInfo(const std::string& deviceID, BluetoothDeviceInfo& deviceInfo);
-                Core::hresult updateBluetoothDeviceInfoCache();
-                Core::hresult updateBluetoothDeviceInfoPersistentStore();
+                Core::hresult getPairedDeviceInfo(const std::string& deviceID, BluetoothDeviceInfo& deviceInfo);
+                Core::hresult updateCacheFromStorage();
+                Core::hresult updateCacheFromDevice();
+                Core::hresult updateStorageFromCache();
         };
 
     } // Plugin
