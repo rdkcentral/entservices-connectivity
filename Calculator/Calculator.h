@@ -8,6 +8,7 @@
 
 #include "Module.h"
 #include <cmath>
+#include <interfaces/IDeviceInfo.h>
 
 namespace WPEFramework {
 namespace Plugin {
@@ -28,6 +29,7 @@ private:
     uint32_t modulusWrapper(const JsonObject& parameters, JsonObject& response);
     uint32_t powerWrapper(const JsonObject& parameters, JsonObject& response);
     uint32_t sqrtWrapper(const JsonObject& parameters, JsonObject& response);
+    uint32_t getMacDetailsWrapper(const JsonObject& parameters, JsonObject& response);
 
 private: // Internal logic
     double add(double a, double b);
@@ -51,11 +53,12 @@ public:
     static const string METHOD_POWER;
     static const string METHOD_SQRT;
     static const string METHOD_GET_API_VERSION_NUMBER;
+    static const string METHOD_GET_MAC_DETAILS;
 
     Calculator();
     virtual ~Calculator();
 
-    virtual const string Initialize(PluginHost::IShell* shell) override { return {}; }
+    virtual const string Initialize(PluginHost::IShell* shell) override;
     virtual void Deinitialize(PluginHost::IShell* service) override;
     virtual string Information() const override;
 
@@ -66,6 +69,7 @@ public:
 
 private:
     uint32_t m_apiVersionNumber;
+    PluginHost::IShell* _service;
 };
 
 } // Plugin

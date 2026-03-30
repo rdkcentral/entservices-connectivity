@@ -44,12 +44,14 @@ const string Calculator::METHOD_MODULUS = "modulus";
 const string Calculator::METHOD_POWER = "power";
 const string Calculator::METHOD_SQRT = "sqrt";
 const string Calculator::METHOD_GET_API_VERSION_NUMBER = "getApiVersionNumber";
+const string Calculator::METHOD_GET_MAC_DETAILS = "getMacDetails";
  
 ////////////////////////////////////////////////////////////
  
 Calculator::Calculator()
     : PluginHost::JSONRPC()
     , m_apiVersionNumber(API_VERSION_NUMBER_MAJOR)
+    , _service(nullptr)
 {
     Register(METHOD_GET_API_VERSION_NUMBER, &Calculator::getApiVersionNumber, this);
     Register(METHOD_ADD, &Calculator::addWrapper, this);
@@ -59,20 +61,72 @@ Calculator::Calculator()
     Register(METHOD_MODULUS, &Calculator::modulusWrapper, this);
     Register(METHOD_POWER, &Calculator::powerWrapper, this);
     Register(METHOD_SQRT, &Calculator::sqrtWrapper, this);
+    Register(METHOD_GET_MAC_DETAILS, &Calculator::getMacDetailsWrapper, this);
 }
  
 Calculator::~Calculator() {}
  
 ////////////////////////////////////////////////////////////
  
+const string Calculator::Initialize(PluginHost::IShell* shell)
+{
+    ASSERT(shell != nullptr);
+    _service = shell;
+    _service->AddRef();
+    return {};
+}
+ 
 void Calculator::Deinitialize(PluginHost::IShell* service)
 {
-    //nothing to deinitialize
+    if (_service != nullptr) {
+        _service->Release();
+        _service = nullptr;
+    }
 }
  
 string Calculator::Information() const
 {
     return "{\"service\": \"" + SERVICE_NAME + "\"}";
+}
+ 
+////////////////////////////////////////////////////////////
+/////////////////// MAC DETAILS ////////////////////////////
+////////////////////////////////////////////////////////////
+ 
+uint32_t Calculator::getMacDetailsWrapper(const JsonObject& parameters, JsonObject& response)
+{
+    if (_service == nullptr) {
+        response["success"] = false;
+        response["message"] = "Plugin not initialized";
+        return Core::ERROR_GENERAL;
+    }
+
+    Exchange::IDeviceInfo* deviceInfo =
+        _service->QueryInterfaceByCallsign<Exchange::IDeviceInfo>("org.rdk.DeviceInfo");
+
+    if (deviceInfo == nullptr) {
+        response["success"] = false;
+        response["message"] = "DeviceInfo plugin not available";
+        return Core::ERROR_UNAVAILABLE;
+    }
+
+    Exchange::IDeviceInfo::EthernetMac ethMac;
+    Exchange::IDeviceInfo::StbMac stbMac;
+    Exchange::IDeviceInfo::WiFiMac wifiMac;
+
+    if (deviceInfo->EthMac(ethMac) == Core::ERROR_NONE) {
+        response["ethMac"] = ethMac.ethMac;
+    }
+    if (deviceInfo->EstbMac(stbMac) == Core::ERROR_NONE) {
+        response["stbMac"] = stbMac.estbMac;
+    }
+    if (deviceInfo->WifiMac(wifiMac) == Core::ERROR_NONE) {
+        response["wifiMac"] = wifiMac.wifiMac;
+    }
+
+    deviceInfo->Release();
+    response["success"] = true;
+    return Core::ERROR_NONE;
 }
  
 ////////////////////////////////////////////////////////////
