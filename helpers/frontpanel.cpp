@@ -135,6 +135,8 @@ namespace WPEFramework
                 {
                     _powerManagerPlugin = PowerManagerInterfaceBuilder(_T("org.rdk.PowerManager"))
                                       .withIShell(service)
+                                      .withRetryIntervalMS(200)
+                                      .withRetryCount(25)
                                       .createInterface();
                 }
                 if (!s_instance)
@@ -158,7 +160,7 @@ namespace WPEFramework
 
 #if defined(HAS_API_POWERSTATE)
                     {
-                        uint32_t res = Core::ERROR_GENERAL;
+                        Core::hresult res = Core::ERROR_GENERAL;
                         PowerState pwrStateCur = WPEFramework::Exchange::IPowerManager::POWER_STATE_UNKNOWN;
                         PowerState pwrStatePrev = WPEFramework::Exchange::IPowerManager::POWER_STATE_UNKNOWN;
                         ASSERT (_powerManagerPlugin);

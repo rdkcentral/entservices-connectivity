@@ -28,6 +28,8 @@ curl --header "Content-Type: application/json" --request POST --data '{"jsonrpc"
 curl --header "Content-Type: application/json" --request POST --data '{"jsonrpc":"2.0","id": "3", "method":"org.rdk.Bluetooth.1.respondToEvent", "params": {"deviceID": "256168644324480", "eventType": "onPairingRequest", "responseValue": "ACCEPTED"}}' http://127.0.0.1:9998/jsonrpc
 curl --header "Content-Type: application/json" --request POST --data '{"jsonrpc":"2.0", "id":"3", "method":"org.rdk.Bluetooth.1.setDeviceVolumeMuteInfo", "params": {"deviceID": "256168644324480", "profile": "WEARABLE HEADSET", "volume": "255", "mute": "1"}}' http://127.0.0.1:9998/jsonrpc
 curl --header "Content-Type: application/json" --request POST --data '{"jsonrpc":"2.0", "id":"3", "method":"org.rdk.Bluetooth.1.getDeviceVolumeMuteInfo", "params": {"deviceID": "256168644324480", "profile": "WEARABLE HEADSET"}}' http://127.0.0.1:9998/jsonrpc
+curl --header "Content-Type: application/json" --request POST --data '{"jsonrpc":"2.0", "id":"3", "method":"org.rdk.Bluetooth.1.setAutoConnect", "params": {"deviceID": "256168644324480", "enable": true}}' http://127.0.0.1:9998/jsonrpc
+curl --header "Content-Type: application/json" --request POST --data '{"jsonrpc":"2.0", "id":"3", "method":"org.rdk.Bluetooth.1.getAutoConnect", "params": {"deviceID": "256168644324480"}}' http://127.0.0.1:9998/jsonrpc
 ```
 
 ## Responses:
@@ -100,6 +102,12 @@ setDeviceVolumeMuteInfo:
 
 getDeviceVolumeMuteInfo:
 {"jsonrpc":"2.0","id":3,"result":{"volumeInfo":{"volume":"255","mute":false},"success":true}}
+
+setAutoConnect:
+{"jsonrpc":"2.0","id":3,"result":{"success":true}}
+
+getAutoConnect:
+{"jsonrpc":"2.0","id":3,"result":{"autoconnect":true,"success":true}}
 ```
 
 ## Events

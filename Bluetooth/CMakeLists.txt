@@ -15,6 +15,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+project(Bluetooth)
+
+set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 set(PLUGIN_NAME Bluetooth)
 set(MODULE_NAME ${NAMESPACE}${PLUGIN_NAME})
 
@@ -24,20 +29,14 @@ find_package(${NAMESPACE}Plugins REQUIRED)
 
 add_library(${MODULE_NAME} SHARED
         Bluetooth.cpp
+        BluetoothDeviceManager.cpp
         Module.cpp
 )
-
-set_target_properties(${MODULE_NAME} PROPERTIES
-        CXX_STANDARD 11
-        CXX_STANDARD_REQUIRED YES)
 
 list(APPEND CMAKE_MODULE_PATH
         "${CMAKE_CURRENT_SOURCE_DIR}/cmake/")
 
 if (RDK_SERVICE_L2_TEST)
-#     target_compile_definitions(${MODULE_NAME} PRIVATE MODULE_NAME=Plugin_${PLUGIN_NAME})
-#     target_compile_options(${MODULE_NAME} PRIVATE -Wno-error)
-
     find_library(TESTMOCKLIB_LIBRARIES NAMES TestMocklib)
     if (TESTMOCKLIB_LIBRARIES)
         message ("linking mock libraries ${TESTMOCKLIB_LIBRARIES} library")
@@ -45,7 +44,7 @@ if (RDK_SERVICE_L2_TEST)
     else (TESTMOCKLIB_LIBRARIES)
         message ("Require ${TESTMOCKLIB_LIBRARIES} library")
     endif (TESTMOCKLIB_LIBRARIES)
-endif (RDK_SERVICES_L2_TEST)
+endif (RDK_SERVICE_L2_TEST)
 
 find_package(BTMGR)
 if(BTMGR_FOUND)
@@ -58,7 +57,11 @@ find_package(IARMBus)
 target_include_directories(${MODULE_NAME} PRIVATE ../helpers ${IARMBUS_INCLUDE_DIRS})
 target_link_libraries(${MODULE_NAME} PRIVATE ${NAMESPACE}Plugins::${NAMESPACE}Plugins ${IARMBUS_LIBRARIES})
 
+if (NOT RDK_SERVICES_L1_TEST)
+    target_compile_options(${MODULE_NAME} PRIVATE -Wno-error=deprecated)
+endif ()
+
 install(TARGETS ${MODULE_NAME}
         DESTINATION lib/${STORAGE_DIRECTORY}/plugins)
 
-write_config(${PLUGIN_NAME})
+write_config(PLUGINS ${PLUGIN_NAME})

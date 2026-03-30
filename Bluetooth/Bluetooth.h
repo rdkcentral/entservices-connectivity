@@ -22,7 +22,11 @@
 #include <thread>
 
 #include "Module.h"
+#include <interfaces/IPowerManager.h>
+#include "PowerManagerInterface.h"
 #include "UtilsThreadRAII.h"
+#include "BluetoothDeviceManager.h"
+#include <type_traits>
 
 #include "btmgr.h" //TODO: can we move it to the module? Required by notifyEventWrapper()
 
@@ -66,7 +70,43 @@ namespace WPEFramework {
         };
 
         class Bluetooth : public PluginHost::IPlugin, public PluginHost::JSONRPC {
+
         private:
+
+            class PowerManagerNotification : public WPEFramework::Exchange::IPowerManager::IModeChangedNotification {
+
+            private:
+
+                PowerManagerNotification(const PowerManagerNotification&) = delete;
+                PowerManagerNotification& operator=(const PowerManagerNotification&) = delete;
+
+                Bluetooth& _bluetooth;
+
+            public:
+
+                explicit PowerManagerNotification(Bluetooth& bluetooth)
+                    : _bluetooth(bluetooth)
+                {
+                }
+                ~PowerManagerNotification() override = default;
+
+                void OnPowerModeChanged(const WPEFramework::Exchange::IPowerManager::PowerState currentState, const WPEFramework::Exchange::IPowerManager::PowerState newState) override
+                {
+                    _bluetooth.onPowerModeChanged(currentState, newState);
+                }
+
+                template <typename T>
+                T* baseInterface()
+                {
+                    static_assert(std::is_base_of<T, PowerManagerNotification>(), "base type mismatch");
+                    return static_cast<T*>(this);
+                }
+
+                BEGIN_INTERFACE_MAP(PowerManagerNotification)
+                INTERFACE_ENTRY(WPEFramework::Exchange::IPowerManager::IModeChangedNotification)
+                END_INTERFACE_MAP
+
+            };
 
             // We do not allow this plugin to be copied !!
             Bluetooth(const Bluetooth&) = delete;
@@ -97,6 +137,8 @@ namespace WPEFramework {
             uint32_t getMediaTrackInfoWrapper(const JsonObject& parameters, JsonObject& response);
             uint32_t getDeviceVolumeMuteInfoWrapper(const JsonObject& parameters, JsonObject& response);
             uint32_t setDeviceVolumeMuteInfoWrapper(const JsonObject& parameters, JsonObject& response);
+            uint32_t setAutoConnectWrapper(const JsonObject& parameters, JsonObject& response);
+            uint32_t getAutoConnectWrapper(const JsonObject& parameters, JsonObject& response);
             // Registered methods end
 
         private: /*internal methods*/
@@ -110,7 +152,7 @@ namespace WPEFramework {
             JsonArray getDiscoveredDevices();
             JsonArray getPairedDevices();
             JsonArray getConnectedDevices();
-            bool setDeviceConnection(long long int deviceID, const string &enable, const string &deviceType = "UNKNOWN DEVICE");
+            bool setDeviceConnection(long long int deviceID, bool connect, const string &deviceType = "UNKNOWN DEVICE");
             bool setAudioStream(long long int deviceID, const string &audioStreamName);
             bool setDevicePairing(long long int deviceID, bool pair);
             bool setBluetoothEnabled(const string &enabled);
@@ -124,10 +166,11 @@ namespace WPEFramework {
             bool setDeviceVolumeMuteProperties(long long int  deviceID, const string &deviceProfile, unsigned char ui8volume, unsigned char mute);
             JsonObject getDeviceVolumeMuteProperties(long long int  deviceID, const string &deviceProfile);
             BTRMGR_DeviceOperationType_t btmgrDeviceOperationTypeFromString(const string &deviceProfile);
-
+            void notifyAutoConnectStatusChanged(const string& deviceID, const bool enable);
 
         public:
             static const string SERVICE_NAME;
+            
             static const string METHOD_START_SCAN;
             static const string METHOD_STOP_SCAN;
             static const string METHOD_IS_DISCOVERABLE;
@@ -151,6 +194,9 @@ namespace WPEFramework {
             static const string METHOD_GET_API_VERSION_NUMBER;
             static const string METHOD_GET_DEVICE_VOLUME_MUTE_INFO;
             static const string METHOD_SET_DEVICE_VOLUME_MUTE_INFO;
+            static const string METHOD_SET_AUTO_CONNECT;
+            static const string METHOD_GET_AUTO_CONNECT_STATUS;
+
             static const string EVT_STATUS_CHANGED;
             static const string EVT_PAIRING_REQUEST;
             static const string EVT_REQUEST_FAILED;
@@ -172,7 +218,7 @@ namespace WPEFramework {
 
             Bluetooth();
             virtual ~Bluetooth();
-            virtual const string Initialize(PluginHost::IShell* shell) override { return {}; }
+            virtual const string Initialize(PluginHost::IShell* service) override;
             virtual void Deinitialize(PluginHost::IShell* service) override;
             virtual string Information() const override;
 
@@ -184,6 +230,7 @@ namespace WPEFramework {
         public:
             static Bluetooth* _instance;
             void notifyEventWrapper (BTRMGR_EventMessage_t &eventMsg);
+            void onPowerModeChanged(const WPEFramework::Exchange::IPowerManager::PowerState currentState, const WPEFramework::Exchange::IPowerManager::PowerState newState);
 
         private:
             static const string STATUS_NO_BLUETOOTH_HARDWARE;
@@ -207,6 +254,7 @@ namespace WPEFramework {
             static const string STATUS_DISCOVERY_COMPLETED;
             static const string STATUS_PAIRING_FAILED;
             static const string STATUS_CONNECTION_FAILED;
+            static const string STATUS_AUTOCONNECT_STATUS_CHANGE;
 
             static const string CMD_AUDIO_CTRL_PLAY;
             static const string CMD_AUDIO_CTRL_STOP;
@@ -228,6 +276,10 @@ namespace WPEFramework {
             bool m_discoveryRunning;
             DiscoveryTimer m_discoveryTimer;
             friend class DiscoveryTimer;
+            PowerManagerInterfaceRef m_powerManagerPlugin;
+            Core::Sink<PowerManagerNotification> m_powerManagerNotification;
+            BluetoothDeviceManager m_bluetoothDeviceManager;
         };
-	} // Plugin
+
+    } // Plugin
 } // WPEFramework
