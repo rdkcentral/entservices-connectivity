@@ -44,7 +44,7 @@ const string Calculator::METHOD_MODULUS = "modulus";
 const string Calculator::METHOD_POWER = "power";
 const string Calculator::METHOD_SQRT = "sqrt";
 const string Calculator::METHOD_GET_API_VERSION_NUMBER = "getApiVersionNumber";
-const string Calculator::METHOD_GET_FIRM_DETAILS = "getFirmWareinfo";
+const string Calculator::METHOD_GET_STATE = "getState";
  
 ////////////////////////////////////////////////////////////
  
@@ -61,7 +61,7 @@ Calculator::Calculator()
     Register(METHOD_MODULUS, &Calculator::modulusWrapper, this);
     Register(METHOD_POWER, &Calculator::powerWrapper, this);
     Register(METHOD_SQRT, &Calculator::sqrtWrapper, this);
-    Register(METHOD_GET_FIRM_DETAILS, &Calculator::getFirmWareinfo, this);
+    Register(METHOD_GET_STATE, &Calculator::getState, this);
 }
  
 Calculator::~Calculator() {}
@@ -90,10 +90,10 @@ string Calculator::Information() const
 }
  
 ////////////////////////////////////////////////////////////
-/////////////////// MAC DETAILS ////////////////////////////
+/////////////////// SYSTEM STATE ///////////////////////////
 ////////////////////////////////////////////////////////////
  
-uint32_t Calculator::getFirmWareinfo(const JsonObject& parameters, JsonObject& response)
+uint32_t Calculator::getState(const JsonObject& parameters, JsonObject& response)
 {
     if (_service == nullptr) {
         response["success"] = false;
@@ -101,8 +101,7 @@ uint32_t Calculator::getFirmWareinfo(const JsonObject& parameters, JsonObject& r
         return Core::ERROR_GENERAL;
     }
 
-    Exchange::ISystemMode* systemMode =
-        _service->QueryInterfaceByCallsign<Exchange::ISystemMode>("org.rdk.SystemMode");
+    Exchange::ISystemMode* systemMode = _service->QueryInterfaceByCallsign<Exchange::ISystemMode>("org.rdk.SystemMode");
 
     if (systemMode == nullptr) {
         response["success"] = false;
@@ -111,11 +110,11 @@ uint32_t Calculator::getFirmWareinfo(const JsonObject& parameters, JsonObject& r
     }
 
     JsonObject FWresponse;
-    uint32_t status = systemMode->getDownloadedFirmwareInfo(FWresponse);
+    uint32_t status = systemMode->getState(FWresponse);
 
     if(status != Core::ERROR_NONE) {
         response["success"] = false;
-        response["message"] = "Failed to get firmware info";
+        response["message"] = "Failed to get State for the requested System Property";
         systemMode->Release();
         return status;
     }
@@ -124,11 +123,7 @@ uint32_t Calculator::getFirmWareinfo(const JsonObject& parameters, JsonObject& r
     //Handling the response from SystemMode plugin and adding it to our response
     JsonObject result = FWresponse["result"].Object();
 
-    response["currentFWVersion"] = result["currentFWVersion"].String();
-    response["downloadedFWVersion"] = result["downloadedFWVersion"].String();
-    response["downloadedFWLocation"] = result["downloadedFWLocation"].String();
-    response["isRebootDeferred"] = result["isRebootDeferred"].Boolean();
-    response["success"] = result["success"].Boolean();
+    response["state"] = result["state"].String();
 
     systemMode->Release();
     return Core::ERROR_NONE;

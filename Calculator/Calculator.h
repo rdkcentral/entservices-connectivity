@@ -8,7 +8,8 @@
 
 #include "Module.h"
 #include <cmath>
-#include <interfaces/IDeviceInfo.h>
+#include <interfaces/ISystemMode.h>
+
 
 namespace WPEFramework {
 namespace Plugin {
@@ -29,7 +30,7 @@ private:
     uint32_t modulusWrapper(const JsonObject& parameters, JsonObject& response);
     uint32_t powerWrapper(const JsonObject& parameters, JsonObject& response);
     uint32_t sqrtWrapper(const JsonObject& parameters, JsonObject& response);
-    uint32_t getFirmWareinfo(const JsonObject& parameters, JsonObject& response);
+    uint32_t getState(const JsonObject& parameters, JsonObject& response);
 
 private: // Internal logic
     double add(double a, double b);
@@ -53,7 +54,7 @@ public:
     static const string METHOD_POWER;
     static const string METHOD_SQRT;
     static const string METHOD_GET_API_VERSION_NUMBER;
-    static const string METHOD_GET_FIRM_DETAILS;
+    static const string METHOD_GET_STATE;
 
     Calculator();
     virtual ~Calculator();
