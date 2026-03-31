@@ -109,21 +109,18 @@ uint32_t Calculator::getState(const JsonObject& parameters, JsonObject& response
         return Core::ERROR_UNAVAILABLE;
     }
 
-    JsonObject FWresponse;
-    uint32_t status = systemMode->getState(FWresponse);
+    Exchange::ISystemMode::GetStateResult getStateResult{};
+    Core::hresult status = systemMode->GetState(Exchange::ISystemMode::DEVICE_OPTIMIZE, getStateResult);
 
-    if(status != Core::ERROR_NONE) {
+    if (status != Core::ERROR_NONE) {
         response["success"] = false;
         response["message"] = "Failed to get State for the requested System Property";
         systemMode->Release();
         return status;
     }
 
-
-    //Handling the response from SystemMode plugin and adding it to our response
-    JsonObject result = FWresponse["result"].Object();
-
-    response["state"] = result["state"].String();
+    response["state"] = static_cast<uint32_t>(getStateResult.state);
+    response["success"] = true;
 
     systemMode->Release();
     return Core::ERROR_NONE;
