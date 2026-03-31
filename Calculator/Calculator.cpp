@@ -44,7 +44,7 @@ const string Calculator::METHOD_MODULUS = "modulus";
 const string Calculator::METHOD_POWER = "power";
 const string Calculator::METHOD_SQRT = "sqrt";
 const string Calculator::METHOD_GET_API_VERSION_NUMBER = "getApiVersionNumber";
-const string Calculator::METHOD_GET_MAC_DETAILS = "getMacDetails";
+const string Calculator::METHOD_GET_FIRM_DETAILS = "getFirmWareinfo";
  
 ////////////////////////////////////////////////////////////
  
@@ -61,7 +61,7 @@ Calculator::Calculator()
     Register(METHOD_MODULUS, &Calculator::modulusWrapper, this);
     Register(METHOD_POWER, &Calculator::powerWrapper, this);
     Register(METHOD_SQRT, &Calculator::sqrtWrapper, this);
-    Register(METHOD_GET_MAC_DETAILS, &Calculator::getMacDetailsWrapper, this);
+    Register(METHOD_GET_FIRM_DETAILS, &Calculator::getFirmWareinfo, this);
 }
  
 Calculator::~Calculator() {}
@@ -93,7 +93,7 @@ string Calculator::Information() const
 /////////////////// MAC DETAILS ////////////////////////////
 ////////////////////////////////////////////////////////////
  
-uint32_t Calculator::getMacDetailsWrapper(const JsonObject& parameters, JsonObject& response)
+uint32_t Calculator::getFirmWareinfo(const JsonObject& parameters, JsonObject& response)
 {
     if (_service == nullptr) {
         response["success"] = false;
@@ -101,31 +101,36 @@ uint32_t Calculator::getMacDetailsWrapper(const JsonObject& parameters, JsonObje
         return Core::ERROR_GENERAL;
     }
 
-    Exchange::IDeviceInfo* deviceInfo =
-        _service->QueryInterfaceByCallsign<Exchange::IDeviceInfo>("org.rdk.DeviceInfo");
+    Exchange::ISystemMode* systemMode =
+        _service->QueryInterfaceByCallsign<Exchange::ISystemMode>("org.rdk.SystemMode");
 
-    if (deviceInfo == nullptr) {
+    if (systemMode == nullptr) {
         response["success"] = false;
-        response["message"] = "DeviceInfo plugin not available";
+        response["message"] = "SystemMode plugin not available";
         return Core::ERROR_UNAVAILABLE;
     }
 
-    Exchange::IDeviceInfo::EthernetMac ethMac;
-    Exchange::IDeviceInfo::StbMac stbMac;
-    Exchange::IDeviceInfo::WiFiMac wifiMac;
+    JsonObject FWresponse;
+    uint32_t status = systemMode->getDownloadedFirmwareInfo(FWresponse);
 
-    if (deviceInfo->EthMac(ethMac) == Core::ERROR_NONE) {
-        response["ethMac"] = ethMac.ethMac;
-    }
-    if (deviceInfo->EstbMac(stbMac) == Core::ERROR_NONE) {
-        response["stbMac"] = stbMac.estbMac;
-    }
-    if (deviceInfo->WifiMac(wifiMac) == Core::ERROR_NONE) {
-        response["wifiMac"] = wifiMac.wifiMac;
+    if(status != Core::ERROR_NONE) {
+        response["success"] = false;
+        response["message"] = "Failed to get firmware info";
+        systemMode->Release();
+        return status;
     }
 
-    deviceInfo->Release();
-    response["success"] = true;
+
+    //Handling the response from SystemMode plugin and adding it to our response
+    JsonObject result = FWresponse["result"].Object();
+
+    response["currentFWVersion"] = result["currentFWVersion"].String();
+    response["downloadedFWVersion"] = result["downloadedFWVersion"].String();
+    response["downloadedFWLocation"] = result["downloadedFWLocation"].String();
+    response["isRebootDeferred"] = result["isRebootDeferred"].Boolean();
+    response["success"] = result["success"].Boolean();
+
+    systemMode->Release();
     return Core::ERROR_NONE;
 }
  
