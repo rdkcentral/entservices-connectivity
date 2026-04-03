@@ -63,8 +63,9 @@ protected:
     PLUGINHOST_DISPATCHER* dispatcher;
     Core::ProxyType<WorkerPoolImplementation> workerPool;
     NiceMock<FactoriesImplementation> factoriesImplementation;
+    WrapsImplMock *p_wrapsImplMock = nullptr;
 
-    BluetoothTest()
+    explicit BluetoothTest(bool callInit = true)
         : plugin(Core::ProxyType<Plugin::Bluetooth>::Create())
         , handler(*(plugin))
         , INIT_CONX(1, 0)
@@ -75,6 +76,9 @@ protected:
 
         p_storeMock  = new NiceMock <StoreMock>;
 
+        p_wrapsImplMock  = new NiceMock <WrapsImplMock>;
+        Wraps::setImpl(p_wrapsImplMock);
+
         EXPECT_CALL(service, QueryInterfaceByCallsign(::testing::_, ::testing::_))
           .Times(::testing::AnyNumber())
           .WillRepeatedly(::testing::Invoke(
@@ -84,13 +88,6 @@ protected:
                 }
                 return nullptr;
         }));
-
-        EXPECT_CALL(PowerManagerMock::Mock(), GetPowerState(::testing::_, ::testing::_))
-        .Times(::testing::AnyNumber())
-        .WillRepeatedly(::testing::Invoke(
-            [&](WPEFramework::Exchange::IPowerManager::PowerState& currentState, WPEFramework::Exchange::IPowerManager::PowerState& previousState) -> uint32_t {
-                return Core::ERROR_NONE;
-            }));
         
         p_btmgrMock = new NiceMock<BtmgrImplMock>;
         Btmgr::setImpl(p_btmgrMock);
@@ -115,7 +112,9 @@ protected:
 
         dispatcher->Activate(&service);
 
-        EXPECT_EQ(string(""), plugin->Initialize(&service));
+        if (callInit) {
+            EXPECT_EQ(string(""), plugin->Initialize(&service));
+        }
     }
 
     virtual ~BluetoothTest() override
@@ -151,10 +150,49 @@ protected:
             delete p_storeMock;
             p_storeMock = nullptr;
         }
+
+        Wraps::setImpl(nullptr);
+        if (p_wrapsImplMock != nullptr)
+        {
+            delete p_wrapsImplMock;
+            p_wrapsImplMock = nullptr;
+        }
     }
 
     virtual void SetUp()
     {
+    }
+
+    public:
+
+    void setupDevice()
+    {
+        // Helper function to set up a paired device in the cache and storage for testing.
+        const std::string deviceID = "123";
+
+        EXPECT_CALL(*p_btmgrMock, BTRMGR_PairDevice(::testing::_, static_cast<BTRMgrDeviceHandle>(std::stoll(deviceID))))
+            .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
+
+        BTRMGR_DevicesProperty_t deviceProperty = {};
+
+        #ifdef BTRMGR_DEVICE_TYPE_UNKNOWN
+        deviceProperty.m_deviceType = BTRMGR_DEVICE_TYPE_UNKNOWN;
+        #endif
+
+        EXPECT_CALL(*p_btmgrMock, BTRMGR_GetDeviceProperties(::testing::_, ::testing::_, ::testing::_))
+            .WillOnce(::testing::DoAll(
+                ::testing::SetArgPointee<2>(deviceProperty),
+                ::testing::Return(BTRMGR_RESULT_SUCCESS)));
+
+        EXPECT_CALL(*p_btmgrMock, BTRMGR_GetDeviceTypeAsString(::testing::_))
+            .WillOnce(::testing::Return("HEADPHONES"));
+
+        EXPECT_CALL(*p_storeMock, SetValue(::testing::_, ::testing::_, ::testing::_))
+            .WillRepeatedly(::testing::Return(Core::ERROR_NONE));
+
+        EXPECT_EQ(Core::ERROR_NONE,
+            handler.Invoke(connection, _T("pair"),
+                std::string("{\"deviceID\":\"") + deviceID + "\"}", response));
     }
 };
 
@@ -320,7 +358,7 @@ TEST_F(BluetoothTest, getPairedDevicesWrapper_Success)
     BTRMGR_PairedDevicesList_t pairedDevices;
     memset(&pairedDevices, 0, sizeof(pairedDevices));
     pairedDevices.m_numOfDevices = 1;
-    pairedDevices.m_deviceProperty[0].m_deviceHandle = 456;
+    pairedDevices.m_deviceProperty[0].m_deviceHandle = 123;
     strcpy(pairedDevices.m_deviceProperty[0].m_name, "PairedDevice");
     pairedDevices.m_deviceProperty[0].m_deviceType = BTRMGR_DEVICE_TYPE_SMARTPHONE;
     pairedDevices.m_deviceProperty[0].m_isConnected = 1;
@@ -346,7 +384,7 @@ TEST_F(BluetoothTest, getConnectedDevicesWrapper_Success)
     BTRMGR_ConnectedDevicesList_t connectedDevices;
     memset(&connectedDevices, 0, sizeof(connectedDevices));
     connectedDevices.m_numOfDevices = 1;
-    connectedDevices.m_deviceProperty[0].m_deviceHandle = 789;
+    connectedDevices.m_deviceProperty[0].m_deviceHandle = 123;
     strcpy(connectedDevices.m_deviceProperty[0].m_name, "ConnectedDevice");
     connectedDevices.m_deviceProperty[0].m_deviceType = BTRMGR_DEVICE_TYPE_HEADPHONES;
     connectedDevices.m_deviceProperty[0].m_powerStatus = BTRMGR_DEVICE_POWER_ACTIVE;
@@ -371,8 +409,8 @@ TEST_F(BluetoothTest, connectWrapper_Smartphone_Success)
 {
     EXPECT_CALL(*p_btmgrMock, BTRMGR_StartAudioStreamingIn(::testing::_, ::testing::_, BTRMGR_DEVICE_OP_TYPE_AUDIO_INPUT))
         .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(Core::ERROR_NONE));
+
+    setupDevice();
     
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("connect"), _T("{\"deviceID\":\"123\",\"deviceType\":\"SMARTPHONE\"}"), response));
 }
@@ -381,30 +419,30 @@ TEST_F(BluetoothTest, connectWrapper_AudioDevice_Success)
 {
     EXPECT_CALL(*p_btmgrMock, BTRMGR_StartAudioStreamingOut(::testing::_, ::testing::_, BTRMGR_DEVICE_OP_TYPE_AUDIO_OUTPUT))
         .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(Core::ERROR_NONE));
+
+    setupDevice();
     
-    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("connect"), _T("{\"deviceID\":\"456\",\"deviceType\":\"HEADPHONES\"}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("connect"), _T("{\"deviceID\":\"123\",\"deviceType\":\"HEADPHONES\"}"), response));
 }
 
 TEST_F(BluetoothTest, connectWrapper_HIDDevice_Success)
 {
     EXPECT_CALL(*p_btmgrMock, BTRMGR_ConnectToDevice(::testing::_, ::testing::_, BTRMGR_DEVICE_OP_TYPE_HID))
         .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(Core::ERROR_NONE));
     
-    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("connect"), _T("{\"deviceID\":\"789\",\"deviceType\":\"KEYBOARD\"}"), response));
+    setupDevice();
+    
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("connect"), _T("{\"deviceID\":\"123\",\"deviceType\":\"KEYBOARD\"}"), response));
 }
 
 TEST_F(BluetoothTest, connectWrapper_LEDevice_Success)
 {
     EXPECT_CALL(*p_btmgrMock, BTRMGR_ConnectToDevice(::testing::_, ::testing::_, BTRMGR_DEVICE_OP_TYPE_LE))
         .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(Core::ERROR_NONE));
+
+    setupDevice();
     
-    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("connect"), _T("{\"deviceID\":\"101\",\"deviceType\":\"LE TILE\"}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("connect"), _T("{\"deviceID\":\"123\",\"deviceType\":\"LE TILE\"}"), response));
 }
 
 TEST_F(BluetoothTest, connectWrapper_MissingDeviceID_Failure)
@@ -433,7 +471,7 @@ TEST_F(BluetoothTest, disconnectWrapper_AudioDevice_Success)
     EXPECT_CALL(*p_btmgrMock, BTRMGR_StopAudioStreamingOut(::testing::_, ::testing::_))
         .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
     
-    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("disconnect"), _T("{\"deviceID\":\"456\",\"deviceType\":\"HEADPHONES\"}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("disconnect"), _T("{\"deviceID\":\"123\",\"deviceType\":\"HEADPHONES\"}"), response));
 }
 
 TEST_F(BluetoothTest, disconnectWrapper_HIDDevice_Success)
@@ -441,7 +479,7 @@ TEST_F(BluetoothTest, disconnectWrapper_HIDDevice_Success)
     EXPECT_CALL(*p_btmgrMock, BTRMGR_DisconnectFromDevice(::testing::_, ::testing::_))
         .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
     
-    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("disconnect"), _T("{\"deviceID\":\"789\",\"deviceType\":\"KEYBOARD\"}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("disconnect"), _T("{\"deviceID\":\"123\",\"deviceType\":\"KEYBOARD\"}"), response));
 }
 
 TEST_F(BluetoothTest, disconnectWrapper_MissingDeviceID_Failure)
@@ -454,7 +492,7 @@ TEST_F(BluetoothTest, disconnectWrapper_Failed)
     EXPECT_CALL(*p_btmgrMock, BTRMGR_StopAudioStreamingOut(::testing::_, ::testing::_))
         .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
     
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("disconnect"), _T("{\"deviceID\":\"456\"}"), response));
+    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("disconnect"), _T("{\"deviceID\":\"123\"}"), response));
 }
 
 TEST_F(BluetoothTest, setAudioStreamWrapper_Primary_Success)
@@ -849,16 +887,14 @@ TEST_F(BluetoothTest, setDeviceVolumeMuteInfoWrapper_Failed)
 
 TEST_F(BluetoothTest, setAutoConnectWrapper_Enable_Success)
 {
-    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(Core::ERROR_NONE));
+    setupDevice();
     
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"), _T("{\"deviceID\":\"123\",\"enable\":true}"), response));
 }
 
 TEST_F(BluetoothTest, setAutoConnectWrapper_Disable_Success)
 {
-    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(Core::ERROR_NONE));
+    setupDevice();
     
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"), _T("{\"deviceID\":\"123\",\"enable\":false}"), response));
 }
@@ -870,8 +906,7 @@ TEST_F(BluetoothTest, setAutoConnectWrapper_MissingParameters_Failure)
 
 TEST_F(BluetoothTest, getAutoConnectWrapper_Enabled_Success)
 {
-    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(Core::ERROR_NONE));
+    setupDevice();
     
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"), _T("{\"deviceID\":\"123\",\"enable\":true}"), response));
     
@@ -882,8 +917,7 @@ TEST_F(BluetoothTest, getAutoConnectWrapper_Enabled_Success)
 
 TEST_F(BluetoothTest, getAutoConnectWrapper_Disabled_Success)
 {
-    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(Core::ERROR_NONE));
+    setupDevice();
     
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"), _T("{\"deviceID\":\"123\",\"enable\":false}"), response));
     
@@ -900,4 +934,224 @@ TEST_F(BluetoothTest, getAutoConnectWrapper_MissingDeviceID_Failure)
 TEST_F(BluetoothTest, getAutoConnectWrapper_NotFound_Failure)
 {
     EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("getAutoConnect"), _T("{\"deviceID\":\"999\"}"), response));
+}
+
+// ============================================================================
+// Power mode changed tests
+// ============================================================================
+
+// Test fixture that pre-populates cache with one HID device via the persistent
+// store so that onPowerModeChanged can exercise the "skip HID" branch.
+// Derives from BluetoothTest to reuse all lifecycle wiring; only adds
+// HID-specific mock setup before calling Initialize.
+class BluetoothPowerModeTest : public BluetoothTest {
+protected:
+    BluetoothPowerModeTest() : BluetoothTest(false)
+    {
+        TEST_LOG("BluetoothPowerModeTest ctor");
+
+        // Pre-populate persistent store with a HID device so that init()
+        // loads it into the paired device cache via updateCacheFromStorage().
+        const std::string hidDeviceJson =
+            "[{\"deviceID\":\"123\",\"deviceType\":\"HUMAN INTERFACE DEVICE\","
+            "\"autoconnect\":0,\"lastConnectTimeUtc\":\"\"}]";
+        ON_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
+            .WillByDefault(::testing::DoAll(
+                ::testing::SetArgReferee<2>(hidDeviceJson),
+                ::testing::Return(Core::ERROR_NONE)));
+
+        // Return device handle 123 from BTRMGR so the device is not scrubbed
+        // during updateCacheFromDevice().
+        BTRMGR_PairedDevicesList_t hidPairedDevices;
+        memset(&hidPairedDevices, 0, sizeof(hidPairedDevices));
+        hidPairedDevices.m_numOfDevices = 1;
+        hidPairedDevices.m_deviceProperty[0].m_deviceHandle = 123;
+        ON_CALL(*p_btmgrMock, BTRMGR_GetPairedDevices(::testing::_, ::testing::_))
+            .WillByDefault(::testing::DoAll(
+                ::testing::SetArgPointee<1>(hidPairedDevices),
+                ::testing::Return(BTRMGR_RESULT_SUCCESS)));
+
+        EXPECT_CALL(PowerManagerMock::Mock(), GetPowerState(::testing::_, ::testing::_))
+            .Times(::testing::AnyNumber())
+            .WillRepeatedly(::testing::Invoke(
+                [&](WPEFramework::Exchange::IPowerManager::PowerState& currentState,
+                    WPEFramework::Exchange::IPowerManager::PowerState& previousState) -> uint32_t {
+                    currentState = WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_ON;
+                    previousState = WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_ON;
+                    return Core::ERROR_NONE;
+                }));
+
+        EXPECT_EQ(string(""), plugin->Initialize(&service));
+    }
+};
+
+// --- onPowerModeChanged: unchanged state ---
+
+TEST_F(BluetoothTest, onPowerModeChanged_SameState_NoAction)
+{
+    EXPECT_CALL(*p_btmgrMock, BTRMGR_StopAudioStreamingOut(::testing::_, ::testing::_)).Times(0);
+    EXPECT_CALL(*p_btmgrMock, BTRMGR_DisconnectFromDevice(::testing::_, ::testing::_)).Times(0);
+    EXPECT_CALL(*p_btmgrMock, BTRMGR_SetAdapterPowerStatus(::testing::_, ::testing::_)).Times(0);
+
+    plugin->onPowerModeChanged(
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_ON,
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_ON);
+}
+
+// --- onPowerModeChanged: ON → STANDBY with non-HID devices ---
+
+TEST_F(BluetoothTest, onPowerModeChanged_OnToStandby_NonHidDevice_AutoConnectDisabled_Disconnects)
+{
+    setupDevice();
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
+        _T("{\"deviceID\":\"123\",\"enable\":false}"), response));
+
+    EXPECT_CALL(*p_btmgrMock, BTRMGR_StopAudioStreamingOut(::testing::_, 123))
+        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
+
+    plugin->onPowerModeChanged(
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_ON,
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY);
+}
+
+TEST_F(BluetoothTest, onPowerModeChanged_UnknownToStandby_NonHidDevice_AutoConnectDisabled_Disconnects)
+{
+    setupDevice();
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
+        _T("{\"deviceID\":\"123\",\"enable\":false}"), response));
+
+    EXPECT_CALL(*p_btmgrMock, BTRMGR_StopAudioStreamingOut(::testing::_, 123))
+        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
+
+    plugin->onPowerModeChanged(
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_UNKNOWN,
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY);
+}
+
+TEST_F(BluetoothTest, onPowerModeChanged_OnToStandbyLightSleep_NonHidDevice_AutoConnectDisabled_Disconnects)
+{
+    setupDevice();
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
+        _T("{\"deviceID\":\"123\",\"enable\":false}"), response));
+
+    EXPECT_CALL(*p_btmgrMock, BTRMGR_StopAudioStreamingOut(::testing::_, 123))
+        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
+
+    plugin->onPowerModeChanged(
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_ON,
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY_LIGHT_SLEEP);
+}
+
+TEST_F(BluetoothTest, onPowerModeChanged_OnToStandby_NonHidDevice_AutoConnectEnabled_NoDisconnect)
+{
+    setupDevice();
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
+        _T("{\"deviceID\":\"123\",\"enable\":true}"), response));
+
+    EXPECT_CALL(*p_btmgrMock, BTRMGR_StopAudioStreamingOut(::testing::_, ::testing::_)).Times(0);
+    EXPECT_CALL(*p_btmgrMock, BTRMGR_DisconnectFromDevice(::testing::_, ::testing::_)).Times(0);
+
+    plugin->onPowerModeChanged(
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_ON,
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY);
+}
+
+TEST_F(BluetoothTest, onPowerModeChanged_OnToStandby_EmptyCache_NoDisconnect)
+{
+    EXPECT_CALL(*p_btmgrMock, BTRMGR_StopAudioStreamingOut(::testing::_, ::testing::_)).Times(0);
+    EXPECT_CALL(*p_btmgrMock, BTRMGR_DisconnectFromDevice(::testing::_, ::testing::_)).Times(0);
+
+    plugin->onPowerModeChanged(
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_ON,
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY);
+}
+
+// --- onPowerModeChanged: ON → STANDBY with HID device (should be skipped) ---
+
+TEST_F(BluetoothPowerModeTest, onPowerModeChanged_OnToStandby_HidDevice_AutoConnectDisabled_NoDisconnect)
+{
+    // Device 123 is HID (pre-loaded in cache) with AUTO_CONNECT_STATUS_DISABLED.
+    // HID devices must be skipped on power off/standby so they can wake the device.
+    EXPECT_CALL(*p_btmgrMock, BTRMGR_StopAudioStreamingOut(::testing::_, ::testing::_)).Times(0);
+    EXPECT_CALL(*p_btmgrMock, BTRMGR_DisconnectFromDevice(::testing::_, ::testing::_)).Times(0);
+
+    plugin->onPowerModeChanged(
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_ON,
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY);
+}
+
+// --- onPowerModeChanged: X → ON ---
+
+TEST_F(BluetoothTest, onPowerModeChanged_StandbyToOn_WithNonHidPairedDevices_EnablesBluetooth)
+{
+    setupDevice();
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
+        _T("{\"deviceID\":\"123\",\"enable\":true}"), response));
+
+    EXPECT_CALL(*p_btmgrMock, BTRMGR_SetAdapterPowerStatus(0, 1))
+        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
+
+    plugin->onPowerModeChanged(
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY,
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_ON);
+}
+
+TEST_F(BluetoothPowerModeTest, onPowerModeChanged_StandbyToOn_OnlyHidDevices_NoBluetoothEnable)
+{
+    // Only HID device (123) is in cache; non-HID device count = 0.
+    // setBluetoothEnabled must NOT be called.
+    EXPECT_CALL(*p_btmgrMock, BTRMGR_SetAdapterPowerStatus(::testing::_, ::testing::_)).Times(0);
+
+    plugin->onPowerModeChanged(
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY,
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_ON);
+}
+
+// --- onPowerModeChanged: X → DEEP_SLEEP ---
+
+TEST_F(BluetoothTest, onPowerModeChanged_OnToDeepSleep_NonHidDevice_AlwaysDisconnects)
+{
+    // Non-HID device with AUTO_CONNECT_STATUS_ENABLED must still be disconnected
+    // when entering deep sleep (autoConnectStatus is not checked for deep sleep).
+    setupDevice();
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
+        _T("{\"deviceID\":\"123\",\"enable\":true}"), response));
+
+    EXPECT_CALL(*p_btmgrMock, BTRMGR_StopAudioStreamingOut(::testing::_, 123))
+        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
+
+    plugin->onPowerModeChanged(
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_ON,
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY_DEEP_SLEEP);
+}
+
+TEST_F(BluetoothPowerModeTest, onPowerModeChanged_OnToDeepSleep_HidDevice_NoDisconnect)
+{
+    // HID device must be skipped when entering deep sleep.
+    EXPECT_CALL(*p_btmgrMock, BTRMGR_StopAudioStreamingOut(::testing::_, ::testing::_)).Times(0);
+    EXPECT_CALL(*p_btmgrMock, BTRMGR_DisconnectFromDevice(::testing::_, ::testing::_)).Times(0);
+
+    plugin->onPowerModeChanged(
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_ON,
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY_DEEP_SLEEP);
+}
+
+// --- onPowerModeChanged: unhandled transition ---
+
+TEST_F(BluetoothTest, onPowerModeChanged_UnhandledTransition_NoAction)
+{
+    EXPECT_CALL(*p_btmgrMock, BTRMGR_StopAudioStreamingOut(::testing::_, ::testing::_)).Times(0);
+    EXPECT_CALL(*p_btmgrMock, BTRMGR_DisconnectFromDevice(::testing::_, ::testing::_)).Times(0);
+    EXPECT_CALL(*p_btmgrMock, BTRMGR_SetAdapterPowerStatus(::testing::_, ::testing::_)).Times(0);
+
+    // STANDBY → STANDBY_LIGHT_SLEEP: does not match any if/else-if branch.
+    plugin->onPowerModeChanged(
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY,
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY_LIGHT_SLEEP);
 }
