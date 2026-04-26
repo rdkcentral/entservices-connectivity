@@ -112,6 +112,11 @@ set_source_files_properties(
         tests/test_Bluetooth.cpp
         PROPERTIES COMPILE_FLAGS "-fexceptions")
 
+if (BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION)
+    set_property(SOURCE tests/test_Bluetooth.cpp
+        APPEND PROPERTY COMPILE_DEFINITIONS BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION=1)
+endif ()
+
 include_directories(${TEST_INC})
 
 target_link_directories(${MODULE_NAME} PUBLIC ${CMAKE_INSTALL_PREFIX}/lib ${CMAKE_INSTALL_PREFIX}/lib/wpeframework/plugins)
