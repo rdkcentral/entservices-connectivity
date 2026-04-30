@@ -30,6 +30,8 @@ if(COMCAST_CONFIG)
     include(services.cmake)
 endif()
 
+option(BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION "Enable legacy bluetooth migration and filesystem persistence synchronization support" ON)
+
 # Library installation section
 string(TOLOWER ${NAMESPACE} STORAGE_DIRECTORY)
 

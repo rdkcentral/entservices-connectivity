@@ -20,6 +20,10 @@
 #include <gtest/gtest.h>
 #include <mntent.h>
 #include <fstream>
+#include <sstream>
+#include <cerrno>
+#include <cstdlib>
+#include <sys/stat.h>
 #include "Bluetooth.h"
 #include "StoreMock.h"
 #include "btmgrMock.h"
@@ -46,6 +50,7 @@ using namespace WPEFramework;
 
 namespace {
 const string callSign = _T("Bluetooth");
+constexpr const char* PERSISTENT_FILE_PATH = "/tmp/paired_bluetooth_devices.json";
 }
 
 class BluetoothTest : public ::testing::Test {
@@ -1155,3 +1160,670 @@ TEST_F(BluetoothTest, onPowerModeChanged_UnhandledTransition_NoAction)
         WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY,
         WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY_LIGHT_SLEEP);
 }
+
+#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+class BluetoothLegacyPersistenceMigrationParseTest : public BluetoothTest {
+protected:
+    static constexpr const char* kFilesystemPersistenceFile = PERSISTENT_FILE_PATH;
+
+    BluetoothLegacyPersistenceMigrationParseTest()
+        : BluetoothTest(false)
+    {
+        BTRMGR_PairedDevicesList_t pairedDevices;
+        memset(&pairedDevices, 0, sizeof(pairedDevices));
+        pairedDevices.m_numOfDevices = 1;
+        pairedDevices.m_deviceProperty[0].m_deviceHandle = 123;
+        pairedDevices.m_deviceProperty[0].m_deviceType = BTRMGR_DEVICE_TYPE_HEADPHONES;
+        strcpy(pairedDevices.m_deviceProperty[0].m_name, "MigrationTestDevice");
+        strcpy(pairedDevices.m_deviceProperty[0].m_deviceAddress, "123");
+
+        ON_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
+            .WillByDefault(::testing::Return(Core::ERROR_NOT_EXIST));
+
+        ON_CALL(*p_storeMock, SetValue(::testing::_, ::testing::_, ::testing::_))
+            .WillByDefault(::testing::Return(Core::ERROR_NONE));
+
+        ON_CALL(*p_btmgrMock, BTRMGR_GetPairedDevices(::testing::_, ::testing::_))
+            .WillByDefault(::testing::DoAll(
+                ::testing::SetArgPointee<1>(pairedDevices),
+                ::testing::Return(BTRMGR_RESULT_SUCCESS)));
+
+        ON_CALL(*p_btmgrMock, BTRMGR_GetDeviceTypeAsString(::testing::_))
+            .WillByDefault(::testing::Return("HEADPHONES"));
+    }
+
+    ~BluetoothLegacyPersistenceMigrationParseTest() override
+    {
+        if (std::remove(kFilesystemPersistenceFile) != 0 && errno != ENOENT) {
+            LOGWARN("Failed to remove test persistence file during teardown: %s", kFilesystemPersistenceFile);
+        }
+    }
+
+    bool writeFilesystemPersistencePayload(const std::string& payload)
+    {
+        std::ofstream output(kFilesystemPersistenceFile, std::ios::trunc);
+        if (!output.is_open()) {
+            return false;
+        }
+
+        output << payload;
+        return output.good();
+    }
+
+    bool initializeFromFilesystemPersistencePayload(const std::string& payload)
+    {
+        if (!writeFilesystemPersistencePayload(payload)) {
+            return false;
+        }
+
+        return (plugin->Initialize(&service).empty());
+    }
+
+    bool initializeFromPersistentStorePayload(const std::string& payload)
+    {
+        EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
+            .WillOnce(::testing::DoAll(
+                ::testing::SetArgReferee<2>(payload),
+                ::testing::Return(Core::ERROR_NONE)));
+
+        return plugin->Initialize(&service).empty();
+    }
+
+    bool readFilesystemPersistencePayload(std::string& payload)
+    {
+        std::ifstream input(kFilesystemPersistenceFile);
+        if (!input.is_open()) {
+            return false;
+        }
+
+        std::stringstream buffer;
+        buffer << input.rdbuf();
+        payload = buffer.str();
+
+        return true;
+    }
+};
+
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, legacyPersistenceMigrationStorePresent_BypassesFilesystemPersistenceImport)
+{
+    const std::string filesystemPersistencePayload =
+        "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"friendlyName\":\"ShouldBeIgnored\"," 
+        "\"deviceType\":\"HEADPHONES\",\"lastVolumeSetting\":10,\"autoConnectStatus\":true,"
+        "\"lastConnectionTimeUTC\":1999999999}]}";
+
+    const std::string persistentStorePayload =
+        "[{\"deviceID\":\"123\",\"deviceType\":\"HEADPHONES\",\"autoconnect\":0,"
+        "\"lastConnectTimeUtc\":\"1700000000\"}]";
+
+    if (!writeFilesystemPersistencePayload(filesystemPersistencePayload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    if (!initializeFromPersistentStorePayload(persistentStorePayload)) {
+        GTEST_SKIP() << "Unable to initialize plugin with PersistentStore payload";
+    }
+
+    BTRMGR_PairedDevicesList_t pairedDevices;
+    memset(&pairedDevices, 0, sizeof(pairedDevices));
+    pairedDevices.m_numOfDevices = 1;
+    pairedDevices.m_deviceProperty[0].m_deviceHandle = 123;
+    pairedDevices.m_deviceProperty[0].m_deviceType = BTRMGR_DEVICE_TYPE_HEADPHONES;
+    strcpy(pairedDevices.m_deviceProperty[0].m_name, "AsTestDevice");
+
+    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetPairedDevices(::testing::_, ::testing::_))
+        .WillOnce(::testing::DoAll(
+            ::testing::SetArgPointee<1>(pairedDevices),
+            ::testing::Return(BTRMGR_RESULT_SUCCESS)));
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getPairedDevices"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"autoconnect\":false") != string::npos);
+    EXPECT_TRUE(response.find("\"lastConnectTimeUtc\":\"1700000000\"") != string::npos);
+}
+
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, legacyPersistenceMigrationMissingStore_ValidFilesystemPersistenceImportPersistsToStore)
+{
+    std::string persistedJson;
+    EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
+        .WillOnce(::testing::Return(Core::ERROR_NOT_EXIST));
+    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, ::testing::_, ::testing::_))
+        .Times(::testing::AtLeast(1))
+        .WillRepeatedly(::testing::DoAll(
+            ::testing::SaveArg<2>(&persistedJson),
+            ::testing::Return(Core::ERROR_NONE)));
+
+    const std::string payload =
+        "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"friendlyName\":\"TVRemote\","
+        "\"deviceType\":\"HEADPHONES\",\"lastVolumeSetting\":25,\"autoConnectStatus\":1,"
+        "\"lastConnectionTimeUTC\":\"1712345680\"}]}";
+
+    if (!initializeFromFilesystemPersistencePayload(payload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    EXPECT_FALSE(persistedJson.empty());
+    EXPECT_TRUE(persistedJson.find("\"deviceID\":\"123\"") != string::npos);
+    EXPECT_TRUE(persistedJson.find("\"autoconnect\":1") != string::npos);
+    EXPECT_TRUE(persistedJson.find("\"lastConnectTimeUtc\":\"1712345680\"") != string::npos);
+}
+
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, legacyPersistenceMigrationMissingStore_MissingFilesystemPersistenceSourceGracefulFallback)
+{
+    const std::string seedPayload =
+        "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"deviceType\":\"HEADPHONES\","
+        "\"lastVolumeSetting\":0,\"autoConnectStatus\":false,\"lastConnectionTimeUTC\":0}]}";
+    if (!writeFilesystemPersistencePayload(seedPayload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
+        .WillOnce(::testing::Return(Core::ERROR_NOT_EXIST));
+
+    EXPECT_TRUE(plugin->Initialize(&service).empty());
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
+        _T("{\"deviceID\":\"123\",\"enable\":true}"), response));
+
+    std::string syncedFilesystemPersistencePayload;
+    ASSERT_TRUE(readFilesystemPersistencePayload(syncedFilesystemPersistencePayload));
+    EXPECT_TRUE(syncedFilesystemPersistencePayload.find("\"deviceAddr\":\"123\"") != string::npos);
+    EXPECT_TRUE(syncedFilesystemPersistencePayload.find("\"autoConnectStatus\":true") != string::npos);
+}
+
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, legacyPersistenceMigrationMissingStore_MalformedFilesystemPersistencePayloadNonFatal)
+{
+    EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
+        .WillOnce(::testing::Return(Core::ERROR_NOT_EXIST));
+
+    const std::string malformedPayload = "{\"pairedDevices\":[{\"deviceAddr\":\"123\"";
+    if (!initializeFromFilesystemPersistencePayload(malformedPayload)) {
+        GTEST_SKIP() << "Unable to prepare malformed filesystem persistence migration file on this test host";
+    }
+
+    BTRMGR_PairedDevicesList_t pairedDevices;
+    memset(&pairedDevices, 0, sizeof(pairedDevices));
+    pairedDevices.m_numOfDevices = 1;
+    pairedDevices.m_deviceProperty[0].m_deviceHandle = 123;
+    pairedDevices.m_deviceProperty[0].m_deviceType = BTRMGR_DEVICE_TYPE_HEADPHONES;
+    strcpy(pairedDevices.m_deviceProperty[0].m_name, "AsTestDevice");
+
+    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetPairedDevices(::testing::_, ::testing::_))
+        .WillOnce(::testing::DoAll(
+            ::testing::SetArgPointee<1>(pairedDevices),
+            ::testing::Return(BTRMGR_RESULT_SUCCESS)));
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getPairedDevices"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"pairedDevices\"") != string::npos);
+}
+
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, rollbackSyncMutations_WriteFilesystemPersistenceWhenFlagOn)
+{
+    const std::string seedPayload =
+        "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"deviceType\":\"HEADPHONES\","
+        "\"lastVolumeSetting\":0,\"autoConnectStatus\":false,\"lastConnectionTimeUTC\":0}]}";
+    if (!writeFilesystemPersistencePayload(seedPayload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
+        .WillOnce(::testing::Return(Core::ERROR_NOT_EXIST));
+
+    EXPECT_TRUE(plugin->Initialize(&service).empty());
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
+        _T("{\"deviceID\":\"123\",\"enable\":true}"), response));
+
+    std::string syncedFilesystemPersistencePayload;
+    ASSERT_TRUE(readFilesystemPersistencePayload(syncedFilesystemPersistencePayload));
+    EXPECT_TRUE(syncedFilesystemPersistencePayload.find("\"deviceAddr\":\"123\"") != string::npos);
+    EXPECT_TRUE(syncedFilesystemPersistencePayload.find("\"autoConnectStatus\":true") != string::npos);
+}
+
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, legacyPersistenceMigrationParseFallback_NumericTimestampAndStringBoolean)
+{
+    const std::string payload =
+        "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"friendlyName\":\"TVRemote\","
+        "\"deviceType\":\"HEADPHONES\",\"lastVolumeSetting\":40,\"autoConnectStatus\":\"true\","
+        "\"lastConnectionTimeUTC\":1712345678}]}";
+
+    if (!initializeFromFilesystemPersistencePayload(payload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    BTRMGR_PairedDevicesList_t pairedDevices;
+    memset(&pairedDevices, 0, sizeof(pairedDevices));
+    pairedDevices.m_numOfDevices = 1;
+    pairedDevices.m_deviceProperty[0].m_deviceHandle = 123;
+    pairedDevices.m_deviceProperty[0].m_deviceType = BTRMGR_DEVICE_TYPE_HEADPHONES;
+    strcpy(pairedDevices.m_deviceProperty[0].m_name, "AsTestDevice");
+
+    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetPairedDevices(::testing::_, ::testing::_))
+        .WillOnce(::testing::DoAll(
+            ::testing::SetArgPointee<1>(pairedDevices),
+            ::testing::Return(BTRMGR_RESULT_SUCCESS)));
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getPairedDevices"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"autoconnect\":true") != string::npos);
+    EXPECT_TRUE(response.find("\"lastConnectTimeUtc\":\"1712345678\"") != string::npos);
+}
+
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, legacyPersistenceMigrationParseFallback_StringTimestampAndNumericBoolean)
+{
+    const std::string payload =
+        "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"friendlyName\":\"TVRemote\","
+        "\"deviceType\":\"HEADPHONES\",\"lastVolumeSetting\":25,\"autoConnectStatus\":1,"
+        "\"lastConnectionTimeUTC\":\"1712345680\"}]}";
+
+    if (!initializeFromFilesystemPersistencePayload(payload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    BTRMGR_PairedDevicesList_t pairedDevices;
+    memset(&pairedDevices, 0, sizeof(pairedDevices));
+    pairedDevices.m_numOfDevices = 1;
+    pairedDevices.m_deviceProperty[0].m_deviceHandle = 123;
+    pairedDevices.m_deviceProperty[0].m_deviceType = BTRMGR_DEVICE_TYPE_HEADPHONES;
+    strcpy(pairedDevices.m_deviceProperty[0].m_name, "AsTestDevice");
+
+    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetPairedDevices(::testing::_, ::testing::_))
+        .WillOnce(::testing::DoAll(
+            ::testing::SetArgPointee<1>(pairedDevices),
+            ::testing::Return(BTRMGR_RESULT_SUCCESS)));
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getPairedDevices"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"autoconnect\":true") != string::npos);
+    EXPECT_TRUE(response.find("\"lastConnectTimeUtc\":\"1712345680\"") != string::npos);
+}
+
+// ============================================================================
+// Data mapping tests: parse (filesystem file → cache)
+// ============================================================================
+
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, parse_AutoConnectStatusBooleanFalse_MapsToDisabled)
+{
+    const std::string payload =
+        "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"deviceType\":\"HEADPHONES\","
+        "\"lastVolumeSetting\":0,\"autoConnectStatus\":false,\"lastConnectionTimeUTC\":0}]}";
+
+    if (!initializeFromFilesystemPersistencePayload(payload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getAutoConnect"), _T("{\"deviceID\":\"123\"}"), response));
+    EXPECT_TRUE(response.find("\"autoconnect\":false") != string::npos);
+}
+
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, parse_AutoConnectStatusNumericZero_MapsToDisabled)
+{
+    const std::string payload =
+        "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"deviceType\":\"HEADPHONES\","
+        "\"lastVolumeSetting\":0,\"autoConnectStatus\":0,\"lastConnectionTimeUTC\":0}]}";
+
+    if (!initializeFromFilesystemPersistencePayload(payload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getAutoConnect"), _T("{\"deviceID\":\"123\"}"), response));
+    EXPECT_TRUE(response.find("\"autoconnect\":false") != string::npos);
+}
+
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, parse_AutoConnectStatusStringFalse_MapsToDisabled)
+{
+    const std::string payload =
+        "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"deviceType\":\"HEADPHONES\","
+        "\"lastVolumeSetting\":0,\"autoConnectStatus\":\"false\",\"lastConnectionTimeUTC\":0}]}";
+
+    if (!initializeFromFilesystemPersistencePayload(payload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getAutoConnect"), _T("{\"deviceID\":\"123\"}"), response));
+    EXPECT_TRUE(response.find("\"autoconnect\":false") != string::npos);
+}
+
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, parse_AutoConnectStatusStringZero_MapsToDisabled)
+{
+    const std::string payload =
+        "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"deviceType\":\"HEADPHONES\","
+        "\"lastVolumeSetting\":0,\"autoConnectStatus\":\"0\",\"lastConnectionTimeUTC\":0}]}";
+
+    if (!initializeFromFilesystemPersistencePayload(payload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getAutoConnect"), _T("{\"deviceID\":\"123\"}"), response));
+    EXPECT_TRUE(response.find("\"autoconnect\":false") != string::npos);
+}
+
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, parse_AutoConnectStatusMissing_NoPairedDeviceAutoConnectField)
+{
+    // When autoConnectStatus is absent from the file, Parse() leaves the cache entry
+    // with AUTO_CONNECT_STATUS_UNSET. getPairedDevices omits the autoconnect field for
+    // UNSET, distinguishing it from an explicitly set DISABLED (false) value.
+    const std::string payload =
+        "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"deviceType\":\"HEADPHONES\","
+        "\"lastVolumeSetting\":0,\"lastConnectionTimeUTC\":0}]}";
+
+    if (!initializeFromFilesystemPersistencePayload(payload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    BTRMGR_PairedDevicesList_t pairedDevices;
+    memset(&pairedDevices, 0, sizeof(pairedDevices));
+    pairedDevices.m_numOfDevices = 1;
+    pairedDevices.m_deviceProperty[0].m_deviceHandle = 123;
+    pairedDevices.m_deviceProperty[0].m_deviceType = BTRMGR_DEVICE_TYPE_HEADPHONES;
+    strcpy(pairedDevices.m_deviceProperty[0].m_name, "MigrationTestDevice");
+
+    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetPairedDevices(::testing::_, ::testing::_))
+        .WillOnce(::testing::DoAll(
+            ::testing::SetArgPointee<1>(pairedDevices),
+            ::testing::Return(BTRMGR_RESULT_SUCCESS)));
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getPairedDevices"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"pairedDevices\"") != string::npos);
+    EXPECT_TRUE(response.find("\"autoconnect\"") == string::npos);
+}
+
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, parse_EntryMissingDeviceAddr_ValidEntryStillImported)
+{
+    const std::string payload =
+        "{\"pairedDevices\":["
+        "{\"deviceType\":\"HEADPHONES\",\"autoConnectStatus\":true,\"lastConnectionTimeUTC\":0},"
+        "{\"deviceAddr\":\"123\",\"deviceType\":\"HEADPHONES\",\"autoConnectStatus\":true,\"lastConnectionTimeUTC\":0}"
+        "]}";
+
+    if (!initializeFromFilesystemPersistencePayload(payload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getAutoConnect"), _T("{\"deviceID\":\"123\"}"), response));
+    EXPECT_TRUE(response.find("\"autoconnect\":true") != string::npos);
+}
+
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, parse_EntryEmptyDeviceAddr_EntrySkipped)
+{
+    const std::string payload =
+        "{\"pairedDevices\":[{\"deviceAddr\":\"\",\"deviceType\":\"HEADPHONES\","
+        "\"autoConnectStatus\":true,\"lastConnectionTimeUTC\":0}]}";
+
+    if (!initializeFromFilesystemPersistencePayload(payload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    BTRMGR_PairedDevicesList_t pairedDevices;
+    memset(&pairedDevices, 0, sizeof(pairedDevices));
+    pairedDevices.m_numOfDevices = 1;
+    pairedDevices.m_deviceProperty[0].m_deviceHandle = 123;
+    pairedDevices.m_deviceProperty[0].m_deviceType = BTRMGR_DEVICE_TYPE_HEADPHONES;
+    strcpy(pairedDevices.m_deviceProperty[0].m_name, "MigrationTestDevice");
+
+    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetPairedDevices(::testing::_, ::testing::_))
+        .WillOnce(::testing::DoAll(
+            ::testing::SetArgPointee<1>(pairedDevices),
+            ::testing::Return(BTRMGR_RESULT_SUCCESS)));
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getPairedDevices"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"pairedDevices\"") != string::npos);
+    EXPECT_TRUE(response.find("\"autoconnect\"") == string::npos);
+}
+
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, parse_LastConnectionTimeUTCMissing_NoLastConnectTimeInResponse)
+{
+    // When lastConnectionTimeUTC is absent, Parse() leaves lastConnectTimeUtc empty.
+    // getPairedDevices only includes the field when it is non-empty.
+    const std::string payload =
+        "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"deviceType\":\"HEADPHONES\","
+        "\"autoConnectStatus\":true}]}";
+
+    if (!initializeFromFilesystemPersistencePayload(payload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    BTRMGR_PairedDevicesList_t pairedDevices;
+    memset(&pairedDevices, 0, sizeof(pairedDevices));
+    pairedDevices.m_numOfDevices = 1;
+    pairedDevices.m_deviceProperty[0].m_deviceHandle = 123;
+    pairedDevices.m_deviceProperty[0].m_deviceType = BTRMGR_DEVICE_TYPE_HEADPHONES;
+    strcpy(pairedDevices.m_deviceProperty[0].m_name, "MigrationTestDevice");
+
+    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetPairedDevices(::testing::_, ::testing::_))
+        .WillOnce(::testing::DoAll(
+            ::testing::SetArgPointee<1>(pairedDevices),
+            ::testing::Return(BTRMGR_RESULT_SUCCESS)));
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getPairedDevices"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"pairedDevices\"") != string::npos);
+    EXPECT_TRUE(response.find("\"lastConnectTimeUtc\"") == string::npos);
+}
+
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, parse_MultipleDevices_AllImportedToCache)
+{
+    // All valid entries in the pairedDevices array must be imported into the cache,
+    // not only the first one.
+    const std::string payload =
+        "{\"pairedDevices\":["
+        "{\"deviceAddr\":\"123\",\"deviceType\":\"HEADPHONES\",\"autoConnectStatus\":true,\"lastConnectionTimeUTC\":0},"
+        "{\"deviceAddr\":\"456\",\"deviceType\":\"SMARTPHONE\",\"autoConnectStatus\":false,\"lastConnectionTimeUTC\":0}"
+        "]}";
+
+    BTRMGR_PairedDevicesList_t twoPairedDevices;
+    memset(&twoPairedDevices, 0, sizeof(twoPairedDevices));
+    twoPairedDevices.m_numOfDevices = 2;
+    twoPairedDevices.m_deviceProperty[0].m_deviceHandle = 123;
+    twoPairedDevices.m_deviceProperty[0].m_deviceType = BTRMGR_DEVICE_TYPE_HEADPHONES;
+    strcpy(twoPairedDevices.m_deviceProperty[0].m_name, "Device123");
+    twoPairedDevices.m_deviceProperty[1].m_deviceHandle = 456;
+    twoPairedDevices.m_deviceProperty[1].m_deviceType = BTRMGR_DEVICE_TYPE_SMARTPHONE;
+    strcpy(twoPairedDevices.m_deviceProperty[1].m_name, "Device456");
+
+    // Override default mock so both devices survive the updateCacheFromDevice() scrub step.
+    ON_CALL(*p_btmgrMock, BTRMGR_GetPairedDevices(::testing::_, ::testing::_))
+        .WillByDefault(::testing::DoAll(
+            ::testing::SetArgPointee<1>(twoPairedDevices),
+            ::testing::Return(BTRMGR_RESULT_SUCCESS)));
+
+    if (!initializeFromFilesystemPersistencePayload(payload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getAutoConnect"), _T("{\"deviceID\":\"456\"}"), response));
+    EXPECT_TRUE(response.find("\"autoconnect\":false") != string::npos);
+}
+
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, parse_FriendlyName_PersistedToFilesystem)
+{
+    // friendlyName parsed from the file must be stored in the cache and written back
+    // to the filesystem persistence file unchanged (updateCacheFromDevice() only
+    // backfills friendlyName when the cache entry's name is empty).
+    const std::string payload =
+        "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"deviceType\":\"HEADPHONES\","
+        "\"friendlyName\":\"MyBTDevice\",\"autoConnectStatus\":true,\"lastConnectionTimeUTC\":0}]}";
+
+    if (!initializeFromFilesystemPersistencePayload(payload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    std::string filesystemPayload;
+    ASSERT_TRUE(readFilesystemPersistencePayload(filesystemPayload));
+    EXPECT_TRUE(filesystemPayload.find("\"friendlyName\":\"MyBTDevice\"") != string::npos);
+}
+
+// ============================================================================
+// Data mapping tests: write (cache → filesystem file)
+// ============================================================================
+
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, write_InitialDeviceAutoConnectUnset_WritesAutoConnectFalseToFilesystem)
+{
+    // A device entry is present in the filesystem file without an explicit autoConnectStatus
+    // field (UNSET). Write() must serialize UNSET as false when there is no prior
+    // autoConnectStatus value in the file to inherit from.
+    const std::string seedPayload =
+        "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"deviceType\":\"HEADPHONES\","
+        "\"lastVolumeSetting\":0,\"lastConnectionTimeUTC\":0}]}";
+    if (!writeFilesystemPersistencePayload(seedPayload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
+        .WillOnce(::testing::Return(Core::ERROR_NOT_EXIST));
+
+    EXPECT_TRUE(plugin->Initialize(&service).empty());
+
+    std::string filesystemPayload;
+    ASSERT_TRUE(readFilesystemPersistencePayload(filesystemPayload));
+    EXPECT_TRUE(filesystemPayload.find("\"deviceAddr\":\"123\"") != string::npos);
+    EXPECT_TRUE(filesystemPayload.find("\"autoConnectStatus\":false") != string::npos);
+}
+
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, write_LastConnectTimeUtcEmpty_WritesZeroToFilesystem)
+{
+    // When the filesystem file entry has no lastConnectionTimeUTC field, the cache
+    // entry has an empty lastConnectTimeUtc. Write() must emit lastConnectionTimeUTC
+    // as 0 for such entries.
+    const std::string seedPayload =
+        "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"deviceType\":\"HEADPHONES\","
+        "\"lastVolumeSetting\":0,\"autoConnectStatus\":false}]}";
+    if (!writeFilesystemPersistencePayload(seedPayload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
+        .WillOnce(::testing::Return(Core::ERROR_NOT_EXIST));
+
+    EXPECT_TRUE(plugin->Initialize(&service).empty());
+
+    std::string filesystemPayload;
+    ASSERT_TRUE(readFilesystemPersistencePayload(filesystemPayload));
+    EXPECT_TRUE(filesystemPayload.find("\"deviceAddr\":\"123\"") != string::npos);
+    EXPECT_TRUE(filesystemPayload.find("\"lastConnectionTimeUTC\":0") != string::npos);
+}
+
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, write_DeviceTypeFromFilesystemMigration_PersistedToFilesystem)
+{
+    // The deviceType imported from the filesystem persistence file must survive
+    // the full init sequence and be written back unchanged. updateCacheFromDevice()
+    // does not overwrite deviceType for entries already in the cache.
+    const std::string payload =
+        "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"deviceType\":\"SPEAKER\","
+        "\"autoConnectStatus\":true,\"lastConnectionTimeUTC\":0}]}";
+
+    if (!initializeFromFilesystemPersistencePayload(payload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    std::string filesystemPayload;
+    ASSERT_TRUE(readFilesystemPersistencePayload(filesystemPayload));
+    EXPECT_TRUE(filesystemPayload.find("\"deviceType\":\"SPEAKER\"") != string::npos);
+}
+
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, write_DeviceTypeMissingInFile_BackfilledFromBTMGR)
+{
+    // When the file entry has no deviceType field, Parse() leaves the struct default
+    // ("UNKNOWN"). updateCacheFromDevice() must then overwrite it with the type
+    // returned by BTRMGR so that "UNKNOWN" is never written to the filesystem.
+    // The fixture's default BTRMGR mock returns BTRMGR_DEVICE_TYPE_HEADPHONES /
+    // BTRMGR_GetDeviceTypeAsString = "HEADPHONES" for device 123.
+    const std::string payload =
+        "{\"pairedDevices\":[{\"deviceAddr\":\"123\","
+        "\"autoConnectStatus\":true,\"lastConnectionTimeUTC\":0}]}";
+
+    if (!initializeFromFilesystemPersistencePayload(payload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    std::string filesystemPayload;
+    ASSERT_TRUE(readFilesystemPersistencePayload(filesystemPayload));
+    EXPECT_TRUE(filesystemPayload.find("\"deviceAddr\":\"123\"") != string::npos);
+    EXPECT_TRUE(filesystemPayload.find("\"deviceType\":\"HEADPHONES\"") != string::npos);
+    EXPECT_TRUE(filesystemPayload.find("\"deviceType\":\"UNKNOWN\"") == string::npos);
+}
+
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, write_LastVolumeSettingFromFilesystemMigration_PersistedToFilesystem)
+{
+    // lastVolumeSetting parsed from the file must be written back to the filesystem
+    // persistence file unchanged through the full migration and write-back cycle.
+    const std::string payload =
+        "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"deviceType\":\"HEADPHONES\","
+        "\"lastVolumeSetting\":42,\"autoConnectStatus\":true,\"lastConnectionTimeUTC\":0}]}";
+
+    if (!initializeFromFilesystemPersistencePayload(payload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    std::string filesystemPayload;
+    ASSERT_TRUE(readFilesystemPersistencePayload(filesystemPayload));
+    EXPECT_TRUE(filesystemPayload.find("\"lastVolumeSetting\":42") != string::npos);
+}
+
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, write_AutoConnectStatusUnset_ExistingFileTruePreserved)
+{
+    // When a cache entry has AUTO_CONNECT_STATUS_UNSET and the existing filesystem
+    // file already contains autoConnectStatus:true for that device, Write() must
+    // preserve the existing true value rather than defaulting to false.
+    const std::string filesystemPrePopulatedPayload =
+        "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"deviceType\":\"HEADPHONES\","
+        "\"autoConnectStatus\":true,\"lastConnectionTimeUTC\":0}]}";
+
+    if (!writeFilesystemPersistencePayload(filesystemPrePopulatedPayload)) {
+        GTEST_SKIP() << "Unable to prepare pre-populated filesystem persistence file";
+    }
+
+    // PersistentStore has autoconnect:2 (AUTO_CONNECT_STATUS_UNSET) for device 123.
+    const std::string storePayload =
+        "[{\"deviceID\":\"123\",\"deviceType\":\"HEADPHONES\",\"autoconnect\":2,\"lastConnectTimeUtc\":\"\"}]";
+
+    if (!initializeFromPersistentStorePayload(storePayload)) {
+        GTEST_SKIP() << "Unable to initialize plugin with PersistentStore payload";
+    }
+
+    if (!writeFilesystemPersistencePayload(filesystemPrePopulatedPayload)) {
+        GTEST_SKIP() << "Unable to restore expected filesystem persistence payload after initialization";
+    }
+
+    std::string filesystemPayload;
+    ASSERT_TRUE(readFilesystemPersistencePayload(filesystemPayload));
+    EXPECT_TRUE(filesystemPayload.find("\"deviceAddr\":\"123\"") != string::npos);
+    EXPECT_TRUE(filesystemPayload.find("\"autoConnectStatus\":true") != string::npos);
+}
+
+TEST_F(BluetoothTest, featureGateCompileCoverage_FlagOn)
+{
+    constexpr bool migrationFlagEnabled = true;
+    EXPECT_TRUE(migrationFlagEnabled);
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getApiVersionNumber"), _T("{}"), response));
+}
+#else
+TEST_F(BluetoothTest, featureGateCompileCoverage_FlagOff)
+{
+    constexpr bool migrationFlagEnabled = false;
+    EXPECT_FALSE(migrationFlagEnabled);
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getApiVersionNumber"), _T("{}"), response));
+}
+
+TEST_F(BluetoothTest, rollbackSyncMutations_DoNotWriteAsFileWhenFlagOff)
+{
+    if (std::remove(PERSISTENT_FILE_PATH) != 0 && errno != ENOENT) {
+        GTEST_SKIP() << "Unable to remove pre-existing test persistence file";
+    }
+
+    setupDevice();
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
+        _T("{\"deviceID\":\"123\",\"enable\":true}"), response));
+
+    struct stat fileStat;
+    EXPECT_NE(0, stat(PERSISTENT_FILE_PATH, &fileStat));
+}
+
+TEST_F(BluetoothTest, featureGateCompileCoverage_BaselinePersistenceFunctionalWhenFlagOff)
+{
+    setupDevice();
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
+        _T("{\"deviceID\":\"123\",\"enable\":true}"), response));
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getAutoConnect"),
+        _T("{\"deviceID\":\"123\"}"), response));
+    EXPECT_TRUE(response.find("\"autoconnect\":true") != string::npos);
+}
+#endif

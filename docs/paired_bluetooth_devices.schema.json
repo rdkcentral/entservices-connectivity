@@ -1,0 +1,48 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Paired Bluetooth Devices",
+    "description": "Source-of-truth schema for persisted paired Bluetooth device metadata.",
+    "$comment": "This schema is authoritative. Implementation may temporarily diverge and will be aligned in future code changes.",
+    "type": "object",
+    "required": [
+        "pairedDevices"
+    ],
+    "properties": {
+        "pairedDevices": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": [
+                    "deviceAddr",
+                    "friendlyName",
+                    "deviceType",
+                    "lastVolumeSetting",
+                    "autoConnectStatus",
+                    "lastConnectionTimeUTC"
+                ],
+                "properties": {
+                    "deviceAddr": {
+                        "type": "string"
+                    },
+                    "friendlyName": {
+                        "type": "string"
+                    },
+                    "deviceType": {
+                        "type": "string"
+                    },
+                    "lastVolumeSetting": {
+                        "type": "integer"
+                    },
+                    "autoConnectStatus": {
+                        "type": "boolean"
+                    },
+                    "lastConnectionTimeUTC": {
+                        "type": "integer"
+                    }
+                },
+                "additionalProperties": true
+            }
+        }
+    },
+    "additionalProperties": true
+}

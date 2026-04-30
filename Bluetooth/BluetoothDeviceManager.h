@@ -41,7 +41,10 @@ namespace WPEFramework {
         } AutoConnectStatus;
 
         typedef struct _BluetoothDeviceInfo {
+            std::string         deviceAddr          = "";
             std::string         deviceType          = "UNKNOWN";
+            std::string         friendlyName        = "";
+            long long           lastVolumeSetting   = 0;
             AutoConnectStatus   autoConnectStatus   = AUTO_CONNECT_STATUS_UNSET;
             std::string         lastConnectTimeUtc  = "";
         } BluetoothDeviceInfo;
@@ -73,7 +76,12 @@ namespace WPEFramework {
                 Core::hresult getPairedDeviceInfo(const std::string& deviceID, BluetoothDeviceInfo& deviceInfo);
                 Core::hresult updateCacheFromStorage();
                 Core::hresult updateCacheFromDevice();
-                Core::hresult updateStorageFromCache();
+                Core::hresult writeStorageFromCache();
+        #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+                Core::hresult writeCacheFromFilesystemPersistence();
+                void writeFilesystemPersistenceFromCache();
+                std::size_t _lastFilesystemPersistenceHash = 0;
+        #endif
         };
 
     } // Plugin

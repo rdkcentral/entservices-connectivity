@@ -27,11 +27,24 @@ set(PLUGIN_BLUETOOTH_STARTUPORDER "" CACHE STRING "To configure startup order of
 
 find_package(${NAMESPACE}Plugins REQUIRED)
 
-add_library(${MODULE_NAME} SHARED
+set(BLUETOOTH_PLUGIN_SOURCES
         Bluetooth.cpp
         BluetoothDeviceManager.cpp
         Module.cpp
 )
+
+if (BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION)
+    list(APPEND BLUETOOTH_PLUGIN_SOURCES BluetoothPersistenceAdapter.cpp)
+endif ()
+
+add_library(${MODULE_NAME} SHARED ${BLUETOOTH_PLUGIN_SOURCES})
+
+if (BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION)
+    target_compile_definitions(${MODULE_NAME} PRIVATE BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION=1)
+    if (BLUETOOTH_PERSISTENT_FILE_PATH)
+        target_compile_definitions(${MODULE_NAME} PRIVATE BLUETOOTH_PERSISTENT_FILE_PATH="${BLUETOOTH_PERSISTENT_FILE_PATH}")
+    endif ()
+endif ()
 
 list(APPEND CMAKE_MODULE_PATH
         "${CMAKE_CURRENT_SOURCE_DIR}/cmake/")
