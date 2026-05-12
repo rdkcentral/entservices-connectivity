@@ -341,6 +341,22 @@ namespace WPEFramework {
 
         Core::hresult BluetoothDeviceManager::init(PluginHost::IShell* service)
         {
+            LOGINFO("BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION is %s",
+#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+                "enabled"
+#else
+                "disabled"
+#endif
+        );
+
+             LOGINFO("BLUETOOTH_PERSISTENT_FILE_PATH is '%s'",
+#ifdef BLUETOOTH_PERSISTENT_FILE_PATH
+                BLUETOOTH_PERSISTENT_FILE_PATH
+#else
+             "unavailable"
+#endif
+            );
+
             if (service == nullptr) {
                 return Core::ERROR_GENERAL;
             }

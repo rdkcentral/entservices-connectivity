@@ -11,14 +11,23 @@
 
 | # | Item |
 |---|------|
-| P1 | Device running build with `BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION=ON` |
-| P2 | Access to device shell (SSH/serial) |
-| P3 | At least 2 Bluetooth audio devices available for pairing |
-| P4 | "Old" firmware image (pre-migration, AS-managed persistence) available for rollback test |
-| P5 | "New" firmware image (migration-enabled build) available |
-| P6 | Ability to reboot device and flash firmware |
+| P1 | Verify that upon start-up, logs indicate `BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION` is enabled for test cases that require the migration build|
+| P2 | Verify that upon start-up, logs indicate `BLUETOOTH_PERSISTENT_FILE_PATH` is `/opt/persistent/sky/sky-asperipherals-bluetoothdevices.json` |
+| P3 | Access to device shell (SSH/serial) |
+| P4 | At least 2 Bluetooth audio devices available for pairing |
+| P5 | "Old" firmware image (pre-migration, AS-managed persistence) available for rollback test |
+| P6 | "New" firmware image (migration-enabled build) available |
+| P7 | Ability to reboot device and flash firmware |
 
 ---
+
+## IMPORTANT NOTE:
+
+For any test cases requiring a change in the bluetooth device's auto-connect status, the guide UI should **NOT** be used. The UI isn't currently using the new Bluetooth thunder plug-in APIs to set the auto-connect status, and as such would not be reflected in PersistentStore. If the thunder API was not used for a given bluetooth device, PersistentStore would contain an `autoconnect` value of `2`, representing "unset". Use the following command to set auto-connect:
+
+```bash
+curl -d '{"jsonrpc":"2.0","id":1,"method":"org.rdk.Bluetooth.setAutoConnect","params":{"deviceID":"<ID>","enable":<true/false>}}' http://localhost:9998/jsonrpc
+```
 
 ## Section 1: Migration (First Boot — No Prior PersistentStore Data)
 
@@ -51,6 +60,14 @@
 - Devices with `autoConnectStatus: true` auto-connect after boot.
 - Filesystem file remains unchanged (it is read, not deleted).
 
+**Expected Log Entries:**
+- `[INFO] Migration attempted: PersistentStore device info is missing; trying filesystem persistence import.`
+- `[INFO] Filesystem persistence sync succeeded: Persistence payload updated from cache, cache_size=N` (emitted during the migration persist step)
+- `[INFO] Migration succeeded: Filesystem persistence data imported and persisted to PersistentStore.`
+- After BTRMGR reconciliation, one of:
+  - `[INFO] Filesystem persistence sync skipped: cache unchanged since last write, cache_size=N` (if reconciliation made no changes to the cache), or
+  - `[INFO] Filesystem persistence sync succeeded: Persistence payload updated from cache, cache_size=N` (if reconciliation added or backfilled device fields)
+
 ---
 
 ### TC-MIG-02: Migration skipped when PersistentStore data already exists
@@ -69,46 +86,10 @@
 **Expected Results:**
 - PersistentStore data is unchanged (migration is NOT re-run).
 - The fake device entry added to the filesystem file is NOT imported.
-- Log shows: "Migration attempted" is NOT logged (store data was found).
 
----
-
-### TC-MIG-03: Migration graceful failure — missing filesystem file
-
-**Precondition:** PersistentStore has no `Bluetooth/deviceInfo`. The filesystem file does NOT exist.
-
-**Steps:**
-1. Delete PersistentStore Bluetooth data.
-2. Remove the filesystem file:
-   ```bash
-   rm /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
-   ```
-3. Reboot the device.
-4. Confirm plugin activates successfully.
-
-**Expected Results:**
-- Plugin initializes without error.
-- Log shows: "Migration skipped: Filesystem persistence source not found."
-- New device pairs create fresh PersistentStore entries.
-
----
-
-### TC-MIG-04: Migration graceful failure — malformed filesystem file
-
-**Precondition:** PersistentStore has no `Bluetooth/deviceInfo`. Filesystem file contains invalid JSON.
-
-**Steps:**
-1. Delete PersistentStore Bluetooth data.
-2. Write invalid content to the file:
-   ```bash
-   echo "NOT VALID JSON{{{" > /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
-   ```
-3. Reboot the device.
-
-**Expected Results:**
-- Plugin initializes without crashing.
-- Log shows: "Migration failed: Filesystem persistence source is invalid"
-- Device continues to operate normally; new pairings work.
+**Expected Log Entries:**
+- `[INFO] Migration attempted: ...` is **NOT** present — the migration block is only entered when PersistentStore has no data.
+- `[INFO] Filesystem persistence sync skipped: cache unchanged since last write, cache_size=N` (emitted during final init write, since the cache loaded from PersistentStore matches what was already written to the filesystem file).
 
 ---
 
@@ -135,6 +116,9 @@
 - New device appears in filesystem file with `deviceAddr`, `friendlyName`, `deviceType`, `autoConnectStatus`, `lastVolumeSetting`, `lastConnectionTimeUTC` fields.
 - Schema of filesystem file remains valid per `docs/paired_bluetooth_devices.schema.json`.
 
+**Expected Log Entries:**
+- `[INFO] Filesystem persistence sync succeeded: Persistence payload updated from cache, cache_size=N`
+
 ---
 
 ### TC-RB-02: AutoConnect change updates both stores
@@ -150,6 +134,9 @@
 **Expected Results:**
 - Both stores consistently reflect the autoConnect change.
 
+**Expected Log Entries:**
+- `[INFO] Filesystem persistence sync succeeded: Persistence payload updated from cache, cache_size=N`
+
 ---
 
 ### TC-RB-03: Device removal updates both stores
@@ -162,34 +149,12 @@
 **Expected Results:**
 - Device is absent from both stores.
 
----
-
-### TC-RB-04: Filesystem sync failure does not roll back PersistentStore success
-
-**Precondition:** Simulate filesystem write failure.
-
-**Steps:**
-1. Make the filesystem file read-only:
-   ```bash
-   chmod 444 /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
-   ```
-2. Pair a new device.
-3. Check PersistentStore — new device should be present.
-4. Check filesystem file — it should NOT have the new device (write blocked).
-5. Restore permissions:
-   ```bash
-   chmod 644 /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
-   ```
-
-**Expected Results:**
-- PersistentStore write succeeds and new device is persisted there.
-- Filesystem write fails silently (error logged).
-- PersistentStore data is NOT rolled back.
-- Log shows: "Filesystem persistence sync failed"
+**Expected Log Entries:**
+- `[INFO] Filesystem persistence sync succeeded: Persistence payload updated from cache, cache_size=N`
 
 ---
 
-### TC-RB-05: HID devices excluded from filesystem sync
+### TC-RB-04: HID devices excluded from filesystem sync
 
 **Steps:**
 1. Pair a Human Interface Device (e.g., BT keyboard/remote identified as "HUMAN INTERFACE DEVICE").
@@ -198,6 +163,9 @@
 
 **Expected Results:**
 - HID devices are in PersistentStore but excluded from the filesystem file (matching legacy AS behavior).
+
+**Expected Log Entries:**
+- `[INFO] Filesystem persistence sync skipped: cache unchanged since last write, cache_size=N` — HID devices are filtered out before hash computation, so pairing a HID device does not alter the non-HID content written to the filesystem file.
 
 ---
 
@@ -221,6 +189,9 @@
 - Devices auto-connect according to their saved `autoConnectStatus`.
 - No device data is lost during the downgrade.
 
+**Expected Log Entries (steps 2–3, on new firmware before downgrade):**
+- `[INFO] Filesystem persistence sync succeeded: Persistence payload updated from cache, cache_size=N` (once per new device paired)
+
 ---
 
 ### TC-ROLL-02: Round-trip — upgrade → pair → downgrade → upgrade again
@@ -241,6 +212,14 @@
 - Subsequent upgrades skip migration because PersistentStore already has data.
 - Devices paired on old firmware are reconciled into the cache via BTRMGR on new firmware init.
 
+**Expected Log Entries (step 2 — first upgrade to new firmware):**
+- Same as TC-MIG-01 log entries.
+
+**Expected Log Entries (step 6 — second upgrade back to new firmware):**
+- `[INFO] Migration attempted: ...` is **NOT** present — PersistentStore already contains data from step 2.
+- `[INFO] Adding device to cache: deviceID=..., deviceType=...` (for the device paired on old firmware in step 5, reconciled by `updateCacheFromDevice()`)
+- `[INFO] Filesystem persistence sync succeeded: Persistence payload updated from cache, cache_size=N` (cache changed due to reconciled device)
+
 ---
 
 ## Section 4: Reboot Persistence Validation
@@ -257,6 +236,10 @@
 **Expected Results:**
 - All data survives reboot.
 - autoConnect and lastConnectionTimeUTC are preserved.
+
+**Expected Log Entries:**
+- `[INFO] Migration attempted: ...` is **NOT** present — PersistentStore contains data from before the reboot.
+- `[INFO] Filesystem persistence sync skipped: cache unchanged since last write, cache_size=N` (data loaded from PersistentStore on boot matches what was already written to the filesystem file)
 
 ---
 
@@ -276,9 +259,14 @@
 - Migration completes with zero devices imported.
 - Plugin continues normally.
 
+**Expected Log Entries:**
+- `[INFO] Migration attempted: PersistentStore device info is missing; trying filesystem persistence import.`
+- `[INFO] Filesystem persistence sync succeeded: Persistence payload updated from cache, cache_size=0`
+- `[INFO] Migration succeeded: Filesystem persistence data imported and persisted to PersistentStore.`
+
 ---
 
-### TC-EDGE-03: Device in filesystem but no longer paired in BTRMGR
+### TC-EDGE-02: Device in filesystem but no longer paired in BTRMGR
 
 **Steps:**
 1. Filesystem file has a device entry with address "AA:BB:CC:DD:EE:FF".
@@ -287,21 +275,10 @@
 
 **Expected Results:**
 - Device is skipped during import (no matching BTRMGR handle).
-- Log shows: "No paired device handle found for addr=AA:BB:CC:DD:EE:FF during filesystem persistence import, skipping"
 - Other devices import normally.
 
----
-
-## Log Verification Checklist
-
-During all test execution, verify these log patterns in device logs:
-
-| Scenario | Expected Log |
-|----------|-------------|
-| Successful migration | "Migration succeeded: Filesystem persistence data imported and persisted to PersistentStore" |
-| Migration skipped (store exists) | No "Migration attempted" log |
-| No filesystem file | "Migration skipped: Filesystem persistence source not found" |
-| Invalid filesystem file | "Migration failed: Filesystem persistence source is invalid" |
-| Filesystem sync success | "Filesystem persistence sync succeeded: Persistence payload updated from cache" |
-| Filesystem sync skipped (no change) | "Filesystem persistence sync skipped: cache unchanged since last write" |
-| Filesystem sync failure | "Filesystem persistence sync failed" |
+**Expected Log Entries:**
+- `[INFO] Migration attempted: PersistentStore device info is missing; trying filesystem persistence import.`
+- `[WARN] No paired device handle found for addr=AA:BB:CC:DD:EE:FF during filesystem persistence import, skipping`
+- `[INFO] Migration succeeded: Filesystem persistence data imported and persisted to PersistentStore.`
+- `[INFO] Filesystem persistence sync succeeded: Persistence payload updated from cache, cache_size=N`
