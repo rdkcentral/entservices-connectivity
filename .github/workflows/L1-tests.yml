@@ -9,8 +9,7 @@ on:
         type: string
     secrets:
       RDKCM_RDKE:
-        required: true
-        
+        required: true 
 
 env:
   BUILD_TYPE: Debug
