@@ -322,6 +322,7 @@ namespace WPEFramework {
             _adminLock.Unlock();
             
             LOGINFO("Saving device info JSON: %s", bluetoothDeviceInfoStr.c_str());
+            LOGINFO("*** _DEBUG: Saving device info JSON: %s", bluetoothDeviceInfoStr.c_str());
 
             Core::hresult result = pPersistentStore->SetValue(PERSISTENT_STORE_NAMESPACE, PERSISTENT_STORE_KEY_DEVICE_INFO, bluetoothDeviceInfoStr);
 
@@ -341,6 +342,15 @@ namespace WPEFramework {
 
         Core::hresult BluetoothDeviceManager::init(PluginHost::IShell* service)
         {
+            printf("*** _DEBUG: BluetoothDeviceManager::init called\n");
+            LOGINFO("*** _DEBUG: BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION is %s",
+#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+                "enabled"
+#else
+                "disabled"
+#endif
+        );
+
             LOGINFO("BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION is %s",
 #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
                 "enabled"
