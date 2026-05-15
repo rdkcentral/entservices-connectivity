@@ -322,7 +322,6 @@ namespace WPEFramework {
             _adminLock.Unlock();
             
             LOGINFO("Saving device info JSON: %s", bluetoothDeviceInfoStr.c_str());
-            LOGINFO("*** _DEBUG: Saving device info JSON: %s", bluetoothDeviceInfoStr.c_str());
 
             Core::hresult result = pPersistentStore->SetValue(PERSISTENT_STORE_NAMESPACE, PERSISTENT_STORE_KEY_DEVICE_INFO, bluetoothDeviceInfoStr);
 
@@ -342,15 +341,6 @@ namespace WPEFramework {
 
         Core::hresult BluetoothDeviceManager::init(PluginHost::IShell* service)
         {
-            printf("*** _DEBUG: BluetoothDeviceManager::init called\n");
-            LOGINFO("*** _DEBUG: BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION is %s",
-#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
-                "enabled"
-#else
-                "disabled"
-#endif
-        );
-
             LOGINFO("BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION is %s",
 #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
                 "enabled"
@@ -512,6 +502,34 @@ namespace WPEFramework {
             if (Core::ERROR_NONE != result) {
                 LOGERR("Failed to update storage from cache after setting lastConnectTimeUtc for deviceID=%s", deviceID.c_str());
             }
+        }
+
+        Core::hresult BluetoothDeviceManager::setLastVolumeSetting(const std::string& deviceID, long long volumeSetting)
+        {
+            LOGINFO("deviceID=%s, volumeSetting=%lld\n", deviceID.c_str(), volumeSetting);
+
+            BluetoothDeviceInfo deviceInfo;
+
+            _adminLock.Lock();
+
+            Core::hresult result = getPairedDeviceInfo(deviceID, deviceInfo);
+
+            if (Core::ERROR_NONE != result) {
+                LOGERR("Device info is not found in cache for deviceID: %s", deviceID.c_str());
+                _adminLock.Unlock();
+                return Core::ERROR_NOT_EXIST;
+            }
+
+            deviceInfo.lastVolumeSetting = volumeSetting;
+            _pairedDeviceCache[deviceID] = std::move(deviceInfo);
+            _adminLock.Unlock();
+
+            result = writeStorageFromCache();
+            if (Core::ERROR_NONE != result) {
+                LOGERR("Failed to update storage from cache after setting lastVolumeSetting for deviceID=%s", deviceID.c_str());
+            }
+
+            return result;
         }
 
         Core::hresult BluetoothDeviceManager::getLastConnectTimeUtc(const std::string& deviceID, std::string& lastConnectTimeUtc)
