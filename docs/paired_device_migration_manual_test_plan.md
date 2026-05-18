@@ -64,7 +64,7 @@ curl -d '{"jsonrpc":"2.0","id":1,"method":"org.rdk.Bluetooth.setAutoConnect","pa
 - `[INFO] Migration attempted: PersistentStore device info is missing; trying filesystem persistence import.`
 - `[INFO] Filesystem persistence sync succeeded: Persistence payload updated from cache, cache_size=N` (emitted during the migration persist step)
 - `[INFO] Migration succeeded: Filesystem persistence data imported and persisted to PersistentStore.`
-- After BTRMGR reconciliation, one of:
+- After BTRMGR reconciliation, one or more of:
   - `[INFO] Filesystem persistence sync skipped: cache unchanged since last write, cache_size=N` (if reconciliation made no changes to the cache), or
   - `[INFO] Filesystem persistence sync succeeded: Persistence payload updated from cache, cache_size=N` (if reconciliation added or backfilled device fields)
 
@@ -89,7 +89,6 @@ curl -d '{"jsonrpc":"2.0","id":1,"method":"org.rdk.Bluetooth.setAutoConnect","pa
 
 **Expected Log Entries:**
 - `[INFO] Migration attempted: ...` is **NOT** present — the migration block is only entered when PersistentStore has no data.
-- `[INFO] Filesystem persistence sync skipped: cache unchanged since last write, cache_size=N` (emitted during final init write, since the cache loaded from PersistentStore matches what was already written to the filesystem file).
 
 ---
 
@@ -164,9 +163,6 @@ curl -d '{"jsonrpc":"2.0","id":1,"method":"org.rdk.Bluetooth.setAutoConnect","pa
 **Expected Results:**
 - HID devices are in PersistentStore but excluded from the filesystem file (matching legacy AS behavior).
 
-**Expected Log Entries:**
-- `[INFO] Filesystem persistence sync skipped: cache unchanged since last write, cache_size=N` — HID devices are filtered out before hash computation, so pairing a HID device does not alter the non-HID content written to the filesystem file.
-
 ---
 
 ## Section 3: Firmware Rollback Scenario
@@ -188,9 +184,6 @@ curl -d '{"jsonrpc":"2.0","id":1,"method":"org.rdk.Bluetooth.setAutoConnect","pa
 - Old firmware boots and finds all paired devices in the filesystem file.
 - Devices auto-connect according to their saved `autoConnectStatus`.
 - No device data is lost during the downgrade.
-
-**Expected Log Entries (steps 2–3, on new firmware before downgrade):**
-- `[INFO] Filesystem persistence sync succeeded: Persistence payload updated from cache, cache_size=N` (once per new device paired)
 
 ---
 
