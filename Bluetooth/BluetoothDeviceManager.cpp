@@ -354,9 +354,9 @@ namespace WPEFramework {
 #else
                 "disabled"
 #endif
-        );
+            );
 
-             LOGINFO("BLUETOOTH_PERSISTENT_FILE_PATH is '%s'",
+            LOGINFO("BLUETOOTH_PERSISTENT_FILE_PATH is '%s'",
 #ifdef BLUETOOTH_PERSISTENT_FILE_PATH
                 BLUETOOTH_PERSISTENT_FILE_PATH
 #else
