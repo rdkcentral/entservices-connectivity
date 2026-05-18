@@ -1280,11 +1280,24 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, legacyPersistenceMigrationS
     EXPECT_TRUE(response.find("\"lastConnectTimeUtc\":\"1700000000\"") != string::npos);
 }
 
-TEST_F(BluetoothLegacyPersistenceMigrationParseTest, legacyPersistenceMigrationMissingStore_ValidFilesystemPersistenceImportPersistsToStore_ERROR_NOT_EXIST)
+class BluetoothLegacyPersistenceMigrationParseParamTest
+    : public BluetoothLegacyPersistenceMigrationParseTest
+    , public ::testing::WithParamInterface<uint32_t> {
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    StoreKeyNotFound,
+    BluetoothLegacyPersistenceMigrationParseParamTest,
+    ::testing::Values(Core::ERROR_NOT_EXIST, Core::ERROR_UNKNOWN_KEY),
+    [](const ::testing::TestParamInfo<uint32_t>& info) {
+        return info.param == Core::ERROR_NOT_EXIST ? "ERROR_NOT_EXIST" : "ERROR_UNKNOWN_KEY";
+    });
+
+TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, legacyPersistenceMigrationMissingStore_ValidFilesystemPersistenceImportPersistsToStore)
 {
     std::string persistedJson;
     EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(Core::ERROR_NOT_EXIST));
+        .WillOnce(::testing::Return(GetParam()));
     EXPECT_CALL(*p_storeMock, SetValue(::testing::_, ::testing::_, ::testing::_))
         .Times(::testing::AtLeast(1))
         .WillRepeatedly(::testing::DoAll(
@@ -1306,33 +1319,7 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, legacyPersistenceMigrationM
     EXPECT_TRUE(persistedJson.find("\"lastConnectTimeUtc\":\"1712345680\"") != string::npos);
 }
 
-TEST_F(BluetoothLegacyPersistenceMigrationParseTest, legacyPersistenceMigrationMissingStore_ValidFilesystemPersistenceImportPersistsToStore_ERROR_UNKNOWN_KEY)
-{
-    std::string persistedJson;
-    EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(Core::ERROR_UNKNOWN_KEY));
-    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, ::testing::_, ::testing::_))
-        .Times(::testing::AtLeast(1))
-        .WillRepeatedly(::testing::DoAll(
-            ::testing::SaveArg<2>(&persistedJson),
-            ::testing::Return(Core::ERROR_NONE)));
-
-    const std::string payload =
-        "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"friendlyName\":\"TVRemote\","
-        "\"deviceType\":\"HEADPHONES\",\"lastVolumeSetting\":25,\"autoConnectStatus\":1,"
-        "\"lastConnectionTimeUTC\":\"1712345680\"}]}";
-
-    if (!initializeFromFilesystemPersistencePayload(payload)) {
-        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
-    }
-
-    EXPECT_FALSE(persistedJson.empty());
-    EXPECT_TRUE(persistedJson.find("\"deviceID\":\"123\"") != string::npos);
-    EXPECT_TRUE(persistedJson.find("\"autoconnect\":1") != string::npos);
-    EXPECT_TRUE(persistedJson.find("\"lastConnectTimeUtc\":\"1712345680\"") != string::npos);
-}
-
-TEST_F(BluetoothLegacyPersistenceMigrationParseTest, legacyPersistenceMigrationMissingStore_MissingFilesystemPersistenceSourceGracefulFallback_ERROR_NOT_EXIST)
+TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, legacyPersistenceMigrationMissingStore_MissingFilesystemPersistenceSourceGracefulFallback)
 {
     const std::string seedPayload =
         "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"deviceType\":\"HEADPHONES\","
@@ -1342,7 +1329,7 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, legacyPersistenceMigrationM
     }
 
     EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(Core::ERROR_NOT_EXIST));
+        .WillOnce(::testing::Return(GetParam()));
 
     EXPECT_TRUE(plugin->Initialize(&service).empty());
 
@@ -1355,33 +1342,10 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, legacyPersistenceMigrationM
     EXPECT_TRUE(syncedFilesystemPersistencePayload.find("\"autoConnectStatus\":true") != string::npos);
 }
 
-TEST_F(BluetoothLegacyPersistenceMigrationParseTest, legacyPersistenceMigrationMissingStore_MissingFilesystemPersistenceSourceGracefulFallback_ERROR_UNKNOWN_KEY)
-{
-    const std::string seedPayload =
-        "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"deviceType\":\"HEADPHONES\","
-        "\"lastVolumeSetting\":0,\"autoConnectStatus\":false,\"lastConnectionTimeUTC\":0}]}";
-    if (!writeFilesystemPersistencePayload(seedPayload)) {
-        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
-    }
-
-    EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(Core::ERROR_UNKNOWN_KEY));
-
-    EXPECT_TRUE(plugin->Initialize(&service).empty());
-
-    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
-        _T("{\"deviceID\":\"123\",\"enable\":true}"), response));
-
-    std::string syncedFilesystemPersistencePayload;
-    ASSERT_TRUE(readFilesystemPersistencePayload(syncedFilesystemPersistencePayload));
-    EXPECT_TRUE(syncedFilesystemPersistencePayload.find("\"deviceAddr\":\"123\"") != string::npos);
-    EXPECT_TRUE(syncedFilesystemPersistencePayload.find("\"autoConnectStatus\":true") != string::npos);
-}
-
-TEST_F(BluetoothLegacyPersistenceMigrationParseTest, legacyPersistenceMigrationMissingStore_MalformedFilesystemPersistencePayloadNonFatal_ERROR_NOT_EXIST)
+TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, legacyPersistenceMigrationMissingStore_MalformedFilesystemPersistencePayloadNonFatal)
 {
     EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(Core::ERROR_NOT_EXIST));
+        .WillOnce(::testing::Return(GetParam()));
 
     const std::string malformedPayload = "{\"pairedDevices\":[{\"deviceAddr\":\"123\"";
     if (!initializeFromFilesystemPersistencePayload(malformedPayload)) {
@@ -1404,33 +1368,7 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, legacyPersistenceMigrationM
     EXPECT_TRUE(response.find("\"pairedDevices\"") != string::npos);
 }
 
-TEST_F(BluetoothLegacyPersistenceMigrationParseTest, legacyPersistenceMigrationMissingStore_MalformedFilesystemPersistencePayloadNonFatal_ERROR_UNKNOWN_KEY)
-{
-    EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(Core::ERROR_UNKNOWN_KEY));
-
-    const std::string malformedPayload = "{\"pairedDevices\":[{\"deviceAddr\":\"123\"";
-    if (!initializeFromFilesystemPersistencePayload(malformedPayload)) {
-        GTEST_SKIP() << "Unable to prepare malformed filesystem persistence migration file on this test host";
-    }
-
-    BTRMGR_PairedDevicesList_t pairedDevices;
-    memset(&pairedDevices, 0, sizeof(pairedDevices));
-    pairedDevices.m_numOfDevices = 1;
-    pairedDevices.m_deviceProperty[0].m_deviceHandle = 123;
-    pairedDevices.m_deviceProperty[0].m_deviceType = BTRMGR_DEVICE_TYPE_HEADPHONES;
-    strcpy(pairedDevices.m_deviceProperty[0].m_name, "AsTestDevice");
-
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetPairedDevices(::testing::_, ::testing::_))
-        .WillOnce(::testing::DoAll(
-            ::testing::SetArgPointee<1>(pairedDevices),
-            ::testing::Return(BTRMGR_RESULT_SUCCESS)));
-
-    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getPairedDevices"), _T("{}"), response));
-    EXPECT_TRUE(response.find("\"pairedDevices\"") != string::npos);
-}
-
-TEST_F(BluetoothLegacyPersistenceMigrationParseTest, rollbackSyncMutations_WriteFilesystemPersistenceWhenFlagOn_ERROR_NOT_EXIST)
+TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, rollbackSyncMutations_WriteFilesystemPersistenceWhenFlagOn)
 {
     const std::string seedPayload =
         "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"deviceType\":\"HEADPHONES\","
@@ -1440,30 +1378,7 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, rollbackSyncMutations_Write
     }
 
     EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(Core::ERROR_NOT_EXIST));
-
-    EXPECT_TRUE(plugin->Initialize(&service).empty());
-
-    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
-        _T("{\"deviceID\":\"123\",\"enable\":true}"), response));
-
-    std::string syncedFilesystemPersistencePayload;
-    ASSERT_TRUE(readFilesystemPersistencePayload(syncedFilesystemPersistencePayload));
-    EXPECT_TRUE(syncedFilesystemPersistencePayload.find("\"deviceAddr\":\"123\"") != string::npos);
-    EXPECT_TRUE(syncedFilesystemPersistencePayload.find("\"autoConnectStatus\":true") != string::npos);
-}
-
-TEST_F(BluetoothLegacyPersistenceMigrationParseTest, rollbackSyncMutations_WriteFilesystemPersistenceWhenFlagOn_ERROR_UNKNOWN_KEY)
-{
-    const std::string seedPayload =
-        "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"deviceType\":\"HEADPHONES\","
-        "\"lastVolumeSetting\":0,\"autoConnectStatus\":false,\"lastConnectionTimeUTC\":0}]}";
-    if (!writeFilesystemPersistencePayload(seedPayload)) {
-        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
-    }
-
-    EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(Core::ERROR_UNKNOWN_KEY));
+        .WillOnce(::testing::Return(GetParam()));
 
     EXPECT_TRUE(plugin->Initialize(&service).empty());
 
@@ -1750,7 +1665,7 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, parse_FriendlyName_Persiste
 // Data mapping tests: write (cache → filesystem file)
 // ============================================================================
 
-TEST_F(BluetoothLegacyPersistenceMigrationParseTest, write_InitialDeviceAutoConnectUnset_WritesAutoConnectFalseToFilesystem_ERROR_NOT_EXIST)
+TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, write_InitialDeviceAutoConnectUnset_WritesAutoConnectFalseToFilesystem)
 {
     // A device entry is present in the filesystem file without an explicit autoConnectStatus
     // field (UNSET). Write() must serialize UNSET as false when there is no prior
@@ -1763,7 +1678,7 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, write_InitialDeviceAutoConn
     }
 
     EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(Core::ERROR_NOT_EXIST));
+        .WillOnce(::testing::Return(GetParam()));
 
     EXPECT_TRUE(plugin->Initialize(&service).empty());
 
@@ -1773,30 +1688,7 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, write_InitialDeviceAutoConn
     EXPECT_TRUE(filesystemPayload.find("\"autoConnectStatus\":false") != string::npos);
 }
 
-TEST_F(BluetoothLegacyPersistenceMigrationParseTest, write_InitialDeviceAutoConnectUnset_WritesAutoConnectFalseToFilesystem_ERROR_UNKNOWN_KEY)
-{
-    // A device entry is present in the filesystem file without an explicit autoConnectStatus
-    // field (UNSET). Write() must serialize UNSET as false when there is no prior
-    // autoConnectStatus value in the file to inherit from.
-    const std::string seedPayload =
-        "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"deviceType\":\"HEADPHONES\","
-        "\"lastVolumeSetting\":0,\"lastConnectionTimeUTC\":0}]}";
-    if (!writeFilesystemPersistencePayload(seedPayload)) {
-        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
-    }
-
-    EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(Core::ERROR_UNKNOWN_KEY));
-
-    EXPECT_TRUE(plugin->Initialize(&service).empty());
-
-    std::string filesystemPayload;
-    ASSERT_TRUE(readFilesystemPersistencePayload(filesystemPayload));
-    EXPECT_TRUE(filesystemPayload.find("\"deviceAddr\":\"123\"") != string::npos);
-    EXPECT_TRUE(filesystemPayload.find("\"autoConnectStatus\":false") != string::npos);
-}
-
-TEST_F(BluetoothLegacyPersistenceMigrationParseTest, write_LastConnectTimeUtcEmpty_WritesZeroToFilesystem_ERROR_NOT_EXIST)
+TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, write_LastConnectTimeUtcEmpty_WritesZeroToFilesystem)
 {
     // When the filesystem file entry has no lastConnectionTimeUTC field, the cache
     // entry has an empty lastConnectTimeUtc. Write() must emit lastConnectionTimeUTC
@@ -1809,30 +1701,7 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, write_LastConnectTimeUtcEmp
     }
 
     EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(Core::ERROR_NOT_EXIST));
-
-    EXPECT_TRUE(plugin->Initialize(&service).empty());
-
-    std::string filesystemPayload;
-    ASSERT_TRUE(readFilesystemPersistencePayload(filesystemPayload));
-    EXPECT_TRUE(filesystemPayload.find("\"deviceAddr\":\"123\"") != string::npos);
-    EXPECT_TRUE(filesystemPayload.find("\"lastConnectionTimeUTC\":0") != string::npos);
-}
-
-TEST_F(BluetoothLegacyPersistenceMigrationParseTest, write_LastConnectTimeUtcEmpty_WritesZeroToFilesystem_ERROR_UNKNOWN_KEY)
-{
-    // When the filesystem file entry has no lastConnectionTimeUTC field, the cache
-    // entry has an empty lastConnectTimeUtc. Write() must emit lastConnectionTimeUTC
-    // as 0 for such entries.
-    const std::string seedPayload =
-        "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"deviceType\":\"HEADPHONES\","
-        "\"lastVolumeSetting\":0,\"autoConnectStatus\":false}]}";
-    if (!writeFilesystemPersistencePayload(seedPayload)) {
-        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
-    }
-
-    EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(Core::ERROR_UNKNOWN_KEY));
+        .WillOnce(::testing::Return(GetParam()));
 
     EXPECT_TRUE(plugin->Initialize(&service).empty());
 
