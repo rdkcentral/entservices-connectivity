@@ -25,6 +25,7 @@
 
 #include "BluetoothDeviceManager.h"
 #include "btmgr.h"
+
 #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
 #include "BluetoothPersistenceAdapter.h"
 #endif
@@ -33,7 +34,13 @@
 namespace WPEFramework {
     namespace Plugin {
 
+        inline bool missingFromPersistentStore(Core::hresult result)
+        {
+            return (Core::ERROR_NOT_EXIST == result) || (Core::ERROR_UNKNOWN_KEY == result);
+        }
+
 #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+
         Core::hresult BluetoothDeviceManager::writeCacheFromFilesystemPersistence()
         {
             BluetoothPersistenceAdapter adapter;
@@ -202,7 +209,7 @@ namespace WPEFramework {
 
                 _adminLock.Unlock();
                 
-            } else if (Core::ERROR_NOT_EXIST != result) {
+            } else if (!missingFromPersistentStore(result)) {
                 LOGERR("Failed to load device info from PersistentStore, hresult=%d\n", result);
             }
 
@@ -365,13 +372,13 @@ namespace WPEFramework {
             _service->AddRef();
 
             const Core::hresult storageResult = updateCacheFromStorage();
-            if ((Core::ERROR_NONE != storageResult) && (Core::ERROR_NOT_EXIST != storageResult)) {
+            if ((Core::ERROR_NONE != storageResult) && !missingFromPersistentStore(storageResult)) {
                 LOGERR("PersistentStore read failed (hresult=%d); aborting init to avoid data loss", storageResult);
                 return storageResult;
             }
 
 #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
-            if (Core::ERROR_NOT_EXIST == storageResult) {
+            if (missingFromPersistentStore(storageResult)) {
                 LOGINFO("Migration attempted: PersistentStore device info is missing; trying filesystem persistence import.");
 
                 const Core::hresult migrationResult = writeCacheFromFilesystemPersistence();
