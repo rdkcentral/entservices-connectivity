@@ -199,7 +199,7 @@ namespace WPEFramework
 
         const string Bluetooth::Initialize(PluginHost::IShell* service)
         {
-            printf("*** _DEBUG: Bluetooth::Initialize: Build 2\n");
+            printf("*** _DEBUG: Bluetooth::Initialize: Build 20260520a\n");
             string message = "";
 
             Register(METHOD_GET_API_VERSION_NUMBER, &Bluetooth::getApiVersionNumber, this);
