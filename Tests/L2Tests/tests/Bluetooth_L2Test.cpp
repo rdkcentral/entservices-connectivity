@@ -30,9 +30,11 @@
  * the BTRMGR_EventCallback function pointer that the plugin registers at startup.
  *
  * NOTE: BluetoothDeviceManager::init() queries PersistentStore via
- * IShell::QueryInterfaceByCallsign. PersistentStore must therefore be available in
- * the Thunder instance that hosts these tests. If PersistentStore is not running,
- * ActivateService("org.rdk.Bluetooth") will fail and all TEST_F bodies will be skipped.
+ * IShell::QueryInterfaceByCallsign to restore previously paired device info.
+ * If PersistentStore is not running, BluetoothDeviceManager treats the interface
+ * being unavailable as empty storage (Core::ERROR_NOT_EXIST) and proceeds with
+ * an empty in-memory cache. Bluetooth activation therefore succeeds regardless
+ * of PersistentStore availability.
  */
 
 #include "L2Tests.h"
@@ -192,9 +194,12 @@ Bluetooth_L2Test::Bluetooth_L2Test()
                 return BTRMGR_RESULT_SUCCESS;
             }));
 
-    /* PersistentStore is required by BluetoothDeviceManager::init().
-     * Activate it first; if it is already running this is a no-op. */
-    ActivateService("org.rdk.PersistentStore");
+    /* PersistentStore is required by BluetoothDeviceManager::init() to restore
+     * previously paired device info. The Bluetooth plugin will abort its
+     * initialisation if PersistentStore is unavailable, so it must be
+     * activated before activating Bluetooth. */
+    status = ActivateService("org.rdk.PersistentStore");
+    EXPECT_EQ(Core::ERROR_NONE, status);
 
     /* Activate the Bluetooth plugin under test */
     status = ActivateService("org.rdk.Bluetooth");
@@ -213,6 +218,9 @@ Bluetooth_L2Test::~Bluetooth_L2Test()
         .WillByDefault(::testing::Return(BTRMGR_RESULT_SUCCESS));
 
     status = DeactivateService("org.rdk.Bluetooth");
+    EXPECT_EQ(Core::ERROR_NONE, status);
+
+    status = DeactivateService("org.rdk.PersistentStore");
     EXPECT_EQ(Core::ERROR_NONE, status);
 }
 
