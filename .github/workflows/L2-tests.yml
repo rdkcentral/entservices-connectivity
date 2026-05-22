@@ -235,6 +235,7 @@ jobs:
           rdk/ds/dsUtl.h
           rdk/ds/AudioStereoMode.hpp
           rdk/ds/VideoDFC.hpp
+          rdk/ds/pixelResolution.hpp
           rdk/iarmbus/libIARM.h
           rdk/iarmbus/libIBus.h
           rdk/iarmbus/libIBusDaemon.h
