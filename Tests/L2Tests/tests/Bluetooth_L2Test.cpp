@@ -110,14 +110,10 @@ public:
  * Bluetooth_L2Test fixture
  * ---------------------------------------------------------------------- */
 class Bluetooth_L2Test : public L2TestMocks {
-protected:
-    Bluetooth_L2Test();
-    virtual ~Bluetooth_L2Test() override;
-
-    /* Inject a synthetic BTRMGR event into the running plugin */
-    void injectBtEvent(BTRMGR_EventMessage_t& msg);
-
-    /* Event relay methods — called via EXPECT_CALL WillOnce(Invoke(this, ...)) */
+public:
+    /* Event relay methods — called via EXPECT_CALL WillOnce(Invoke(this, ...)).
+     * Must be public so that TEST_F-generated subclasses can form a
+     * pointer-to-member (e.g. &Bluetooth_L2Test::onStatusChanged). */
     void onStatusChanged(const JsonObject& message);
     void onDeviceFound(const JsonObject& message);
     void onDeviceLost(const JsonObject& message);
@@ -130,6 +126,13 @@ protected:
     void onPlaybackNewTrack(const JsonObject& message);
     void onDeviceMediaStatus(const JsonObject& message);
     void onRequestFailed(const JsonObject& message);
+
+protected:
+    Bluetooth_L2Test();
+    virtual ~Bluetooth_L2Test() override;
+
+    /* Inject a synthetic BTRMGR event into the running plugin */
+    void injectBtEvent(BTRMGR_EventMessage_t& msg);
 
     uint32_t WaitForRequestStatus(uint32_t timeout_ms,
                                   BluetoothL2test_async_events_t expected_status);
@@ -400,7 +403,7 @@ TEST_F(Bluetooth_L2Test, BluetoothEnableFailure)
         .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
 
     params["enabled"] = "true";
-    uint32_t status = InvokeServiceMethod("org.rdk.Bluetooth.1", "enable", params, result);
+    InvokeServiceMethod("org.rdk.Bluetooth.1", "enable", params, result);
     /* Plugin returns success=false in the JSON body; the RPC transport itself succeeds */
     EXPECT_FALSE(result["success"].Boolean());
 }
