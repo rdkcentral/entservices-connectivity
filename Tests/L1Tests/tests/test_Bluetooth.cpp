@@ -1289,8 +1289,8 @@ INSTANTIATE_TEST_SUITE_P(
     StoreKeyNotFound,
     BluetoothLegacyPersistenceMigrationParseParamTest,
     ::testing::Values(Core::ERROR_NOT_EXIST, Core::ERROR_UNKNOWN_KEY),
-    [](const ::testing::TestParamInfo<uint32_t>& info) {
-        return info.param == Core::ERROR_NOT_EXIST ? "ERROR_NOT_EXIST" : "ERROR_UNKNOWN_KEY";
+    [](const ::testing::TestParamInfo<uint32_t>& paramInfo) {
+        return paramInfo.param == Core::ERROR_NOT_EXIST ? "ERROR_NOT_EXIST" : "ERROR_UNKNOWN_KEY";
     });
 
 TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, legacyPersistenceMigrationMissingStore_ValidFilesystemPersistenceImportPersistsToStore)
