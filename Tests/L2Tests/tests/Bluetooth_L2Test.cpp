@@ -194,10 +194,18 @@ Bluetooth_L2Test::Bluetooth_L2Test()
                 return BTRMGR_RESULT_SUCCESS;
             }));
 
-    /* PersistentStore is required by BluetoothDeviceManager::init() to restore
-     * previously paired device info. The Bluetooth plugin will abort its
-     * initialisation if PersistentStore is unavailable, so it must be
-     * activated before activating Bluetooth. */
+    /* PersistentStore is activated so that BluetoothDeviceManager::init() can
+     * query it for previously paired device info.  If the IStore COM-RPC
+     * interface is not reachable (e.g. the L2 test environment does not
+     * expose it), updateCacheFromStorage() returns Core::ERROR_NOT_EXIST and
+     * init proceeds with an empty in-memory cache — Bluetooth activation
+     * therefore succeeds regardless of PersistentStore availability.
+     *
+     * NOTE: org.rdk.PowerManager is not available in the L2 test build.
+     * PowerManagerInterfaceBuilder retries 25 × 200 ms (= 5 s) before
+     * giving up. Its absence is non-fatal for Bluetooth init, but each test
+     * will be ~5 s slower than necessary until PowerManager is included in
+     * the L2 test artefact. */
     status = ActivateService("org.rdk.PersistentStore");
     EXPECT_EQ(Core::ERROR_NONE, status);
 
