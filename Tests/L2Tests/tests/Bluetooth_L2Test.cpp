@@ -77,6 +77,10 @@ public:
     {
     }
 
+    void TestBody() override
+    {
+    }
+
     uint32_t Activate(const char* callsign)
     {
         return ActivateService(callsign);
