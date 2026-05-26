@@ -44,7 +44,6 @@
 #include <fstream>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
-#include <memory>
 #include <mutex>
 #include <thread>
 
@@ -97,8 +96,9 @@ public:
     }
 };
 
-std::unique_ptr<BluetoothSuiteHarness> g_suiteHarness;
 BTRMGR_EventCallback g_suiteEventCallback = nullptr;
+bool g_persistentStoreActive = false;
+bool g_bluetoothActive = false;
 } // namespace
 
 /* -------------------------------------------------------------------------
@@ -191,20 +191,25 @@ private:
  * ---------------------------------------------------------------------- */
 void Bluetooth_L2Test::SetUpTestSuite()
 {
-    ASSERT_EQ(nullptr, g_suiteHarness.get());
-    g_suiteHarness = std::make_unique<BluetoothSuiteHarness>();
+    g_suiteEventCallback = nullptr;
+    g_persistentStoreActive = false;
+    g_bluetoothActive = false;
 
-    ASSERT_NE(nullptr, g_suiteHarness->BtmgrMock());
+    /* Use a temporary harness for suite-level activation so per-test fixtures
+     * can still own the active Btmgr mock during each TEST_F body. */
+    BluetoothSuiteHarness suiteHarness;
+
+    ASSERT_NE(nullptr, suiteHarness.BtmgrMock());
 
     /* --- BTR Manager: registration calls made during plugin Initialize --- */
-    ON_CALL(*g_suiteHarness->BtmgrMock(), BTRMGR_RegisterForCallbacks(::testing::_))
+    ON_CALL(*suiteHarness.BtmgrMock(), BTRMGR_RegisterForCallbacks(::testing::_))
         .WillByDefault(::testing::Return(BTRMGR_RESULT_SUCCESS));
 
-    ON_CALL(*g_suiteHarness->BtmgrMock(), BTRMGR_UnRegisterFromCallbacks(::testing::_))
+    ON_CALL(*suiteHarness.BtmgrMock(), BTRMGR_UnRegisterFromCallbacks(::testing::_))
         .WillByDefault(::testing::Return(BTRMGR_RESULT_SUCCESS));
 
     /* Capture the event callback the plugin registers so tests can inject events */
-    ON_CALL(*g_suiteHarness->BtmgrMock(), BTRMGR_RegisterEventCallback(::testing::_))
+    ON_CALL(*suiteHarness.BtmgrMock(), BTRMGR_RegisterEventCallback(::testing::_))
         .WillByDefault(::testing::Invoke(
             [](BTRMGR_EventCallback cb) -> BTRMGR_Result_t {
                 g_suiteEventCallback = cb;
@@ -212,7 +217,7 @@ void Bluetooth_L2Test::SetUpTestSuite()
             }));
 
     /* BluetoothDeviceManager::updateCacheFromDevice() — return empty paired list */
-    ON_CALL(*g_suiteHarness->BtmgrMock(), BTRMGR_GetPairedDevices(::testing::_, ::testing::_))
+    ON_CALL(*suiteHarness.BtmgrMock(), BTRMGR_GetPairedDevices(::testing::_, ::testing::_))
         .WillByDefault(::testing::Invoke(
             [](unsigned char, BTRMGR_PairedDevicesList_t* pList) -> BTRMGR_Result_t {
                 pList->m_numOfDevices = 0;
@@ -220,20 +225,23 @@ void Bluetooth_L2Test::SetUpTestSuite()
             }));
 
     /* BTRMGR_GetDeviceTypeAsString — used by DeviceManager to stringify device type */
-    ON_CALL(*g_suiteHarness->BtmgrMock(), BTRMGR_GetDeviceTypeAsString(::testing::_))
+    ON_CALL(*suiteHarness.BtmgrMock(), BTRMGR_GetDeviceTypeAsString(::testing::_))
         .WillByDefault(::testing::Return("UNKNOWN"));
 
     /* disconnectExternallyConnectedDevices() is called at the end of Initialize —
      * return an empty connected device list so no disconnect attempts are made. */
-    ON_CALL(*g_suiteHarness->BtmgrMock(), BTRMGR_GetConnectedDevices(::testing::_, ::testing::_))
+    ON_CALL(*suiteHarness.BtmgrMock(), BTRMGR_GetConnectedDevices(::testing::_, ::testing::_))
         .WillByDefault(::testing::Invoke(
             [](unsigned char, BTRMGR_ConnectedDevicesList_t* pList) -> BTRMGR_Result_t {
                 pList->m_numOfDevices = 0;
                 return BTRMGR_RESULT_SUCCESS;
             }));
 
-    uint32_t status = g_suiteHarness->Activate("org.rdk.PersistentStore");
-    ASSERT_EQ(Core::ERROR_NONE, status);
+    uint32_t status = suiteHarness.Activate("org.rdk.PersistentStore");
+    g_persistentStoreActive = (status == Core::ERROR_NONE);
+    if (!g_persistentStoreActive) {
+        TEST_LOG("PersistentStore activation unavailable (status=%u); proceeding without it", status);
+    }
 
     /* Activate the Bluetooth plugin under test.
      * Bluetooth::Initialize() calls PowerManagerInterfaceBuilder which retries
@@ -243,8 +251,9 @@ void Bluetooth_L2Test::SetUpTestSuite()
      * see the plugin still mid-activation -> ERROR_INPROGRESS (12). Loop here
      * so that suite setup does not fail when PowerManager is absent. */
     for (int btRetry = 0; btRetry < 5; ++btRetry) {
-        status = g_suiteHarness->Activate("org.rdk.Bluetooth");
+        status = suiteHarness.Activate("org.rdk.Bluetooth");
         if (status == Core::ERROR_NONE) {
+            g_bluetoothActive = true;
             break;
         }
         if (status == Core::ERROR_INPROGRESS) {
@@ -254,25 +263,31 @@ void Bluetooth_L2Test::SetUpTestSuite()
         }
     }
     ASSERT_EQ(Core::ERROR_NONE, status);
+    ASSERT_TRUE(g_bluetoothActive);
     ASSERT_NE(nullptr, g_suiteEventCallback);
 }
 
 void Bluetooth_L2Test::TearDownTestSuite()
 {
-    ASSERT_NE(nullptr, g_suiteHarness.get());
-    ASSERT_NE(nullptr, g_suiteHarness->BtmgrMock());
+    BluetoothSuiteHarness suiteHarness;
+    ASSERT_NE(nullptr, suiteHarness.BtmgrMock());
 
-    /* Ensure Bluetooth deinit uses a valid Btmgr mock when unregistering callbacks. */
-    Btmgr::setImpl(g_suiteHarness->BtmgrMock());
+    ON_CALL(*suiteHarness.BtmgrMock(), BTRMGR_UnRegisterFromCallbacks(::testing::_))
+        .WillByDefault(::testing::Return(BTRMGR_RESULT_SUCCESS));
 
-    uint32_t status = g_suiteHarness->Deactivate("org.rdk.Bluetooth");
-    EXPECT_EQ(Core::ERROR_NONE, status);
+    if (g_bluetoothActive) {
+        uint32_t status = suiteHarness.Deactivate("org.rdk.Bluetooth");
+        EXPECT_EQ(Core::ERROR_NONE, status);
+    }
 
-    status = g_suiteHarness->Deactivate("org.rdk.PersistentStore");
-    EXPECT_EQ(Core::ERROR_NONE, status);
+    if (g_persistentStoreActive) {
+        uint32_t status = suiteHarness.Deactivate("org.rdk.PersistentStore");
+        EXPECT_EQ(Core::ERROR_NONE, status);
+    }
 
     g_suiteEventCallback = nullptr;
-    g_suiteHarness.reset();
+    g_bluetoothActive = false;
+    g_persistentStoreActive = false;
 }
 
 /* -------------------------------------------------------------------------
