@@ -527,6 +527,15 @@ TEST_F(Bluetooth_L2Test, BluetoothStartStopScan)
     JsonObject result;
     uint32_t status = Core::ERROR_GENERAL;
 
+    /* startDeviceDiscovery() calls BTRMGR_GetNumberOfAdapters before starting
+     * discovery; return 1 adapter so the HAL call path is taken. */
+    EXPECT_CALL(*p_btmgrImplMock, BTRMGR_GetNumberOfAdapters(::testing::_))
+        .WillOnce(::testing::Invoke(
+            [](unsigned char* pNum) -> BTRMGR_Result_t {
+                *pNum = 1;
+                return BTRMGR_RESULT_SUCCESS;
+            }));
+
     EXPECT_CALL(*p_btmgrImplMock, BTRMGR_StartDeviceDiscovery(0, ::testing::_))
         .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
 
@@ -797,15 +806,16 @@ TEST_F(Bluetooth_L2Test, BluetoothGetSetDeviceVolumeMute)
                 return BTRMGR_RESULT_SUCCESS;
             }));
 
-    params["deviceID"]      = std::to_string(TEST_DEVICE_HANDLE);
-    params["deviceProfile"] = TEST_DEVICE_TYPE_STR;
+    params["deviceID"]   = std::to_string(TEST_DEVICE_HANDLE);
+    params["deviceType"] = TEST_DEVICE_TYPE_STR;  /* plugin checks "deviceType", not "deviceProfile" */
     status = InvokeServiceMethod("org.rdk.Bluetooth.1", "getDeviceVolumeMuteInfo", params, result);
     EXPECT_EQ(Core::ERROR_NONE, status);
     EXPECT_TRUE(result["success"].Boolean());
     /* volume is stored as std::to_string(ui8volume) in the plugin, so it
-     * arrives as a JSON string, not a number. */
-    EXPECT_STREQ("80", result["volumeInfo"].Object()["volume"].String().c_str());
-    EXPECT_FALSE(result["volumeInfo"].Object()["mute"].Boolean());
+     * arrives as a JSON string, not a number.
+     * Plugin stores the object under "volumeinfo" (all lowercase). */
+    EXPECT_STREQ("80", result["volumeinfo"].Object()["volume"].String().c_str());
+    EXPECT_FALSE(result["volumeinfo"].Object()["mute"].Boolean());
 
     /* setDeviceVolumeMuteInfo */
     EXPECT_CALL(*p_btmgrImplMock,
@@ -813,7 +823,7 @@ TEST_F(Bluetooth_L2Test, BluetoothGetSetDeviceVolumeMute)
         .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
 
     params["volume"] = 50;
-    params["muted"]  = false;
+    params["mute"]   = 0;  /* plugin checks "mute" (integer 0/1), not "muted" (boolean) */
     status = InvokeServiceMethod("org.rdk.Bluetooth.1", "setDeviceVolumeMuteInfo", params, result);
     EXPECT_EQ(Core::ERROR_NONE, status);
     EXPECT_TRUE(result["success"].Boolean());
@@ -829,18 +839,45 @@ TEST_F(Bluetooth_L2Test, BluetoothSetGetAutoConnect)
     JsonObject result;
     uint32_t status = Core::ERROR_GENERAL;
 
-    /* setAutoConnect — persists to BluetoothDeviceManager cache */
+    /* setAutoConnect / getAutoConnect both operate on the BluetoothDeviceManager
+     * paired-device cache.  The cache starts empty (fixture initialises with
+     * BTRMGR_GetPairedDevices returning 0 devices), so we must first call pair
+     * to insert device 12345 into the cache before exercising the autoConnect
+     * accessors.
+     *
+     * pair() → BTRMGR_PairDevice → m_bluetoothDeviceManager.addDevice()
+     *        → BTRMGR_GetDeviceProperties (needed to build the cache entry) */
+    EXPECT_CALL(*p_btmgrImplMock, BTRMGR_PairDevice(0, TEST_DEVICE_HANDLE))
+        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
+
+    EXPECT_CALL(*p_btmgrImplMock,
+                BTRMGR_GetDeviceProperties(0, TEST_DEVICE_HANDLE, ::testing::_))
+        .WillOnce(::testing::Invoke(
+            [](unsigned char, BTRMgrDeviceHandle, BTRMGR_DevicesProperty_t* pProp) -> BTRMGR_Result_t {
+                pProp->m_deviceHandle = TEST_DEVICE_HANDLE;
+                pProp->m_deviceType   = BTRMGR_DEVICE_TYPE_LOUDSPEAKER;
+                strncpy(pProp->m_name,          TEST_DEVICE_NAME, BTRMGR_NAME_LEN_MAX - 1);
+                strncpy(pProp->m_deviceAddress, TEST_DEVICE_ADDR, BTRMGR_NAME_LEN_MAX - 1);
+                return BTRMGR_RESULT_SUCCESS;
+            }));
+
     params["deviceID"] = std::to_string(TEST_DEVICE_HANDLE);
-    params["enable"]   = true;
+    status = InvokeServiceMethod("org.rdk.Bluetooth.1", "pair", params, result);
+    EXPECT_EQ(Core::ERROR_NONE, status);
+    EXPECT_TRUE(result["success"].Boolean());
+
+    /* setAutoConnect — persists the flag to BluetoothDeviceManager cache */
+    params["enable"] = true;
     status = InvokeServiceMethod("org.rdk.Bluetooth.1", "setAutoConnect", params, result);
     EXPECT_EQ(Core::ERROR_NONE, status);
     EXPECT_TRUE(result["success"].Boolean());
 
-    /* getAutoConnect — reads back from cache */
+    /* getAutoConnect — reads back from cache.
+     * Plugin returns the flag under "autoconnect" (all lowercase). */
     status = InvokeServiceMethod("org.rdk.Bluetooth.1", "getAutoConnect", params, result);
     EXPECT_EQ(Core::ERROR_NONE, status);
     EXPECT_TRUE(result["success"].Boolean());
-    EXPECT_TRUE(result["enable"].Boolean());
+    EXPECT_TRUE(result["autoconnect"].Boolean());
 }
 
 /* =========================================================================
