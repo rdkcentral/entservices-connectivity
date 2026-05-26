@@ -53,4 +53,5 @@ install(TARGETS ${MODULE_NAME}
 )
 
 # Generate and install the plugin config JSON (callsign: org.rdk.PersistentStore)
-write_config(PLUGINS ${PLUGIN_NAME})
+# Explicit CLASSNAME/LOCATOR avoids falling back to unrelated defaults (e.g. "Project").
+write_config(${PLUGIN_NAME} CLASSNAME ${PLUGIN_NAME} LOCATOR lib${MODULE_NAME}.so)

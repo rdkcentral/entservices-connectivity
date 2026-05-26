@@ -239,9 +239,7 @@ void Bluetooth_L2Test::SetUpTestSuite()
 
     uint32_t status = suiteHarness.Activate("org.rdk.PersistentStore");
     g_persistentStoreActive = (status == Core::ERROR_NONE);
-    if (!g_persistentStoreActive) {
-        TEST_LOG("PersistentStore activation unavailable (status=%u); proceeding without it", status);
-    }
+    ASSERT_EQ(Core::ERROR_NONE, status);
 
     /* Activate the Bluetooth plugin under test.
      * Bluetooth::Initialize() calls PowerManagerInterfaceBuilder which retries
