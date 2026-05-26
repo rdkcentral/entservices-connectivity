@@ -44,6 +44,7 @@
 #include <fstream>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include <memory>
 #include <mutex>
 #include <thread>
 
@@ -67,6 +68,34 @@ using ::testing::NiceMock;
 using ::testing::StrictMock;
 using ::testing::Invoke;
 using namespace WPEFramework;
+
+namespace {
+class BluetoothSuiteHarness : public L2TestMocks {
+public:
+    BluetoothSuiteHarness()
+        : L2TestMocks()
+    {
+    }
+
+    uint32_t Activate(const char* callsign)
+    {
+        return ActivateService(callsign);
+    }
+
+    uint32_t Deactivate(const char* callsign)
+    {
+        return DeactivateService(callsign);
+    }
+
+    BtmgrImplMock* BtmgrMock()
+    {
+        return p_btmgrImplMock;
+    }
+};
+
+std::unique_ptr<BluetoothSuiteHarness> g_suiteHarness;
+BTRMGR_EventCallback g_suiteEventCallback = nullptr;
+} // namespace
 
 /* -------------------------------------------------------------------------
  * Async event flags
@@ -132,6 +161,9 @@ public:
     void onRequestFailed(const JsonObject& message);
 
 protected:
+    static void SetUpTestSuite();
+    static void TearDownTestSuite();
+
     Bluetooth_L2Test();
     virtual ~Bluetooth_L2Test() override;
 
@@ -151,6 +183,95 @@ private:
 };
 
 /* -------------------------------------------------------------------------
+ * Suite setup/teardown
+ * ---------------------------------------------------------------------- */
+void Bluetooth_L2Test::SetUpTestSuite()
+{
+    ASSERT_EQ(nullptr, g_suiteHarness.get());
+    g_suiteHarness = std::make_unique<BluetoothSuiteHarness>();
+
+    ASSERT_NE(nullptr, g_suiteHarness->BtmgrMock());
+
+    /* --- BTR Manager: registration calls made during plugin Initialize --- */
+    ON_CALL(*g_suiteHarness->BtmgrMock(), BTRMGR_RegisterForCallbacks(::testing::_))
+        .WillByDefault(::testing::Return(BTRMGR_RESULT_SUCCESS));
+
+    ON_CALL(*g_suiteHarness->BtmgrMock(), BTRMGR_UnRegisterFromCallbacks(::testing::_))
+        .WillByDefault(::testing::Return(BTRMGR_RESULT_SUCCESS));
+
+    /* Capture the event callback the plugin registers so tests can inject events */
+    ON_CALL(*g_suiteHarness->BtmgrMock(), BTRMGR_RegisterEventCallback(::testing::_))
+        .WillByDefault(::testing::Invoke(
+            [](BTRMGR_EventCallback cb) -> BTRMGR_Result_t {
+                g_suiteEventCallback = cb;
+                return BTRMGR_RESULT_SUCCESS;
+            }));
+
+    /* BluetoothDeviceManager::updateCacheFromDevice() — return empty paired list */
+    ON_CALL(*g_suiteHarness->BtmgrMock(), BTRMGR_GetPairedDevices(::testing::_, ::testing::_))
+        .WillByDefault(::testing::Invoke(
+            [](unsigned char, BTRMGR_PairedDevicesList_t* pList) -> BTRMGR_Result_t {
+                pList->m_numOfDevices = 0;
+                return BTRMGR_RESULT_SUCCESS;
+            }));
+
+    /* BTRMGR_GetDeviceTypeAsString — used by DeviceManager to stringify device type */
+    ON_CALL(*g_suiteHarness->BtmgrMock(), BTRMGR_GetDeviceTypeAsString(::testing::_))
+        .WillByDefault(::testing::Return("UNKNOWN"));
+
+    /* disconnectExternallyConnectedDevices() is called at the end of Initialize —
+     * return an empty connected device list so no disconnect attempts are made. */
+    ON_CALL(*g_suiteHarness->BtmgrMock(), BTRMGR_GetConnectedDevices(::testing::_, ::testing::_))
+        .WillByDefault(::testing::Invoke(
+            [](unsigned char, BTRMGR_ConnectedDevicesList_t* pList) -> BTRMGR_Result_t {
+                pList->m_numOfDevices = 0;
+                return BTRMGR_RESULT_SUCCESS;
+            }));
+
+    uint32_t status = g_suiteHarness->Activate("org.rdk.PersistentStore");
+    ASSERT_EQ(Core::ERROR_NONE, status);
+
+    /* Activate the Bluetooth plugin under test.
+     * Bluetooth::Initialize() calls PowerManagerInterfaceBuilder which retries
+     * for up to 5 s when PowerManager is unavailable. The INVOKE_TIMEOUT used
+     * by InvokeServiceMethod is 3 s, so the first call may time-out and return
+     * ERROR_TIMEDOUT (11), after which the framework retries once and can then
+     * see the plugin still mid-activation -> ERROR_INPROGRESS (12). Loop here
+     * so that suite setup does not fail when PowerManager is absent. */
+    for (int btRetry = 0; btRetry < 5; ++btRetry) {
+        status = g_suiteHarness->Activate("org.rdk.Bluetooth");
+        if (status == Core::ERROR_NONE) {
+            break;
+        }
+        if (status == Core::ERROR_INPROGRESS) {
+            std::this_thread::sleep_for(std::chrono::seconds(2));
+        } else {
+            break;
+        }
+    }
+    ASSERT_EQ(Core::ERROR_NONE, status);
+    ASSERT_NE(nullptr, g_suiteEventCallback);
+}
+
+void Bluetooth_L2Test::TearDownTestSuite()
+{
+    ASSERT_NE(nullptr, g_suiteHarness.get());
+    ASSERT_NE(nullptr, g_suiteHarness->BtmgrMock());
+
+    /* Ensure Bluetooth deinit uses a valid Btmgr mock when unregistering callbacks. */
+    Btmgr::setImpl(g_suiteHarness->BtmgrMock());
+
+    uint32_t status = g_suiteHarness->Deactivate("org.rdk.Bluetooth");
+    EXPECT_EQ(Core::ERROR_NONE, status);
+
+    status = g_suiteHarness->Deactivate("org.rdk.PersistentStore");
+    EXPECT_EQ(Core::ERROR_NONE, status);
+
+    g_suiteEventCallback = nullptr;
+    g_suiteHarness.reset();
+}
+
+/* -------------------------------------------------------------------------
  * Constructor
  * ---------------------------------------------------------------------- */
 Bluetooth_L2Test::Bluetooth_L2Test()
@@ -158,8 +279,6 @@ Bluetooth_L2Test::Bluetooth_L2Test()
     , m_event_signalled(BT_EVT_NONE)
     , m_eventCallback(nullptr)
 {
-    uint32_t status = Core::ERROR_GENERAL;
-
     /* --- BTR Manager: registration calls made during plugin Initialize --- */
     ON_CALL(*p_btmgrImplMock, BTRMGR_RegisterForCallbacks(::testing::_))
         .WillByDefault(::testing::Return(BTRMGR_RESULT_SUCCESS));
@@ -196,38 +315,9 @@ Bluetooth_L2Test::Bluetooth_L2Test()
                 return BTRMGR_RESULT_SUCCESS;
             }));
 
-    /* PersistentStore is activated so that BluetoothDeviceManager::init() can
-     * query it for previously paired device info.  If the IStore COM-RPC
-     * interface is not reachable (e.g. the L2 test environment does not
-     * expose it), updateCacheFromStorage() returns Core::ERROR_NOT_EXIST and
-     * init proceeds with an empty in-memory cache — Bluetooth activation
-     * therefore succeeds regardless of PersistentStore availability.
-     *
-     * NOTE: org.rdk.PowerManager is not available in the L2 test build.
-     * PowerManagerInterfaceBuilder retries 25 × 200 ms (= 5 s) before
-     * giving up. Its absence is non-fatal for Bluetooth init, but each test
-     * will be ~5 s slower than necessary until PowerManager is included in
-     * the L2 test artefact. */
-    status = ActivateService("org.rdk.PersistentStore");
-    EXPECT_EQ(Core::ERROR_NONE, status);
-
-    /* Activate the Bluetooth plugin under test.
-     * Bluetooth::Initialize() calls PowerManagerInterfaceBuilder which retries
-     * for up to 5 s when PowerManager is unavailable. The INVOKE_TIMEOUT used
-     * by InvokeServiceMethod is 3 s, so the first call may time-out and return
-     * ERROR_TIMEDOUT (11), after which the framework retries once and can then
-     * see the plugin still mid-activation → ERROR_INPROGRESS (12).  Loop here
-     * so that the constructor does not fail when PowerManager is absent. */
-    for (int btRetry = 0; btRetry < 5; ++btRetry) {
-        status = ActivateService("org.rdk.Bluetooth");
-        if (status == Core::ERROR_NONE) break;
-        if (status == Core::ERROR_INPROGRESS) {
-            std::this_thread::sleep_for(std::chrono::seconds(2));
-        } else {
-            break;
-        }
-    }
-    EXPECT_EQ(Core::ERROR_NONE, status);
+    /* RegisterEventCallback is captured once during suite setup. */
+    m_eventCallback = g_suiteEventCallback;
+    EXPECT_NE(nullptr, m_eventCallback);
 }
 
 /* -------------------------------------------------------------------------
@@ -235,17 +325,7 @@ Bluetooth_L2Test::Bluetooth_L2Test()
  * ---------------------------------------------------------------------- */
 Bluetooth_L2Test::~Bluetooth_L2Test()
 {
-    uint32_t status = Core::ERROR_GENERAL;
     m_event_signalled = BT_EVT_NONE;
-
-    ON_CALL(*p_btmgrImplMock, BTRMGR_UnRegisterFromCallbacks(::testing::_))
-        .WillByDefault(::testing::Return(BTRMGR_RESULT_SUCCESS));
-
-    status = DeactivateService("org.rdk.Bluetooth");
-    EXPECT_EQ(Core::ERROR_NONE, status);
-
-    status = DeactivateService("org.rdk.PersistentStore");
-    EXPECT_EQ(Core::ERROR_NONE, status);
 }
 
 /* -------------------------------------------------------------------------

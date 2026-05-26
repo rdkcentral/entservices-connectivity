@@ -53,4 +53,4 @@ install(TARGETS ${MODULE_NAME}
 )
 
 # Generate and install the plugin config JSON (callsign: org.rdk.PersistentStore)
-write_config(${PLUGIN_NAME})
+write_config(PLUGINS ${PLUGIN_NAME})
