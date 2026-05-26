@@ -28,10 +28,10 @@ namespace Plugin {
 /**
  * @brief A minimal mock implementation of org.rdk.PersistentStore for L2 tests.
  *
- * This plugin exists solely to satisfy BluetoothDeviceManager's
+ * This plugin exists to satisfy BluetoothDeviceManager's
  * QueryInterfaceByCallsign<Exchange::IStore>("org.rdk.PersistentStore") call
- * during Bluetooth plugin initialization in L2 tests. The real PersistentStore
- * plugin is not built as part of the connectivity L2 test workflow.
+ * during Bluetooth plugin initialization in L2 test environments that resolve
+ * org.rdk.PersistentStore to this test plugin.
  *
  * Behaviour:
  *  - GetValue  → Core::ERROR_NOT_EXIST  (storage is empty; init treats this as a fresh start)
@@ -52,8 +52,8 @@ public:
     END_INTERFACE_MAP
 
     // IPlugin
-    const std::string Initialize(PluginHost::IShell* service) override;
-    void Deinitialize(PluginHost::IShell* service) override;
+    const std::string Initialize(PluginHost::IShell* /*service*/) override;
+    void Deinitialize(PluginHost::IShell* /*service*/) override;
     std::string Information() const override;
 
     // IStore — GetValue reports empty storage so BluetoothDeviceManager starts fresh

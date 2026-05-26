@@ -34,10 +34,12 @@
 namespace WPEFramework {
     namespace Plugin {
 
-        inline bool missingFromPersistentStore(Core::hresult result)
-        {
-            return (Core::ERROR_NOT_EXIST == result) || (Core::ERROR_UNKNOWN_KEY == result);
-        }
+        namespace {
+            bool missingFromPersistentStore(Core::hresult result)
+            {
+                return (Core::ERROR_NOT_EXIST == result) || (Core::ERROR_UNKNOWN_KEY == result);
+            }
+        } // namespace
 
 #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
 
@@ -513,7 +515,7 @@ namespace WPEFramework {
 
         Core::hresult BluetoothDeviceManager::setLastVolumeSetting(const std::string& deviceID, long long volumeSetting)
         {
-            LOGINFO("deviceID=%s, volumeSetting=%lld\n", deviceID.c_str(), volumeSetting);
+            LOGINFO("deviceID=%s, volumeSetting=%lld", deviceID.c_str(), volumeSetting);
 
             BluetoothDeviceInfo deviceInfo;
 

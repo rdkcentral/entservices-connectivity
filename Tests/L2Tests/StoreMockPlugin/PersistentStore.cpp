@@ -22,15 +22,15 @@
 namespace WPEFramework {
 namespace Plugin {
 
-SERVICE_REGISTRATION(PersistentStore, 1, 0);
+SERVICE_REGISTRATION(PersistentStore, 1, 0, 0);
 
-const std::string PersistentStore::Initialize(PluginHost::IShell* service)
+const std::string PersistentStore::Initialize(PluginHost::IShell* /*service*/)
 {
     // No-op: this is a test-only stub; no real storage is initialised.
     return {};
 }
 
-void PersistentStore::Deinitialize(PluginHost::IShell* service)
+void PersistentStore::Deinitialize(PluginHost::IShell* /*service*/)
 {
     // No-op
 }
