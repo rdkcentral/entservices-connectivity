@@ -1827,6 +1827,9 @@ namespace WPEFramework
             {
                 LOGINFO("Making a call with deviceID=%llu ", deviceID);
                 successFlag = setDeviceVolumeMuteProperties(deviceID, deviceTypeStr, ui8volume, mute);
+                if (successFlag) {
+                    m_bluetoothDeviceManager.setLastVolumeSetting(deviceIDStr, static_cast<long long>(ui8volume));
+                }
             } else {
                 LOGERR("Please specify parameters. Example: \"params\": {\"deviceID\": \"271731989589742\", \"deviceType\": \"HEADPHONES\", \"volume\": \"0-255\", \"mute\": \"0-1\"}");
                 successFlag = false;
