@@ -39,11 +39,13 @@
 
 #include "L2Tests.h"
 #include "L2TestsMock.h"
+#include <chrono>
 #include <condition_variable>
 #include <fstream>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <mutex>
+#include <thread>
 
 #define JSON_TIMEOUT      (5000)
 #define EVNT_TIMEOUT      (5000)
@@ -209,8 +211,22 @@ Bluetooth_L2Test::Bluetooth_L2Test()
     status = ActivateService("org.rdk.PersistentStore");
     EXPECT_EQ(Core::ERROR_NONE, status);
 
-    /* Activate the Bluetooth plugin under test */
-    status = ActivateService("org.rdk.Bluetooth");
+    /* Activate the Bluetooth plugin under test.
+     * Bluetooth::Initialize() calls PowerManagerInterfaceBuilder which retries
+     * for up to 5 s when PowerManager is unavailable. The INVOKE_TIMEOUT used
+     * by InvokeServiceMethod is 3 s, so the first call may time-out and return
+     * ERROR_TIMEDOUT (11), after which the framework retries once and can then
+     * see the plugin still mid-activation → ERROR_INPROGRESS (12).  Loop here
+     * so that the constructor does not fail when PowerManager is absent. */
+    for (int btRetry = 0; btRetry < 5; ++btRetry) {
+        status = ActivateService("org.rdk.Bluetooth");
+        if (status == Core::ERROR_NONE) break;
+        if (status == Core::ERROR_INPROGRESS) {
+            std::this_thread::sleep_for(std::chrono::seconds(2));
+        } else {
+            break;
+        }
+    }
     EXPECT_EQ(Core::ERROR_NONE, status);
 }
 
@@ -671,15 +687,11 @@ TEST_F(Bluetooth_L2Test, BluetoothConnectDisconnect)
     JsonObject result;
     uint32_t status = Core::ERROR_GENERAL;
 
-    /* connect: BTRMGR_ConnectToDevice is always called; for audio output,
-     * BTRMGR_StartAudioStreamingOut may also be called — allow it. */
+    /* connect: for deviceType LOUDSPEAKER, Bluetooth::setDeviceConnection()
+     * calls BTRMGR_StartAudioStreamingOut (not BTRMGR_ConnectToDevice). */
     EXPECT_CALL(*p_btmgrImplMock,
-                BTRMGR_ConnectToDevice(0, TEST_DEVICE_HANDLE, BTRMGR_DEVICE_OP_TYPE_AUDIO_OUTPUT))
+                BTRMGR_StartAudioStreamingOut(0, TEST_DEVICE_HANDLE, BTRMGR_DEVICE_OP_TYPE_AUDIO_OUTPUT))
         .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-
-    ON_CALL(*p_btmgrImplMock,
-            BTRMGR_StartAudioStreamingOut(0, TEST_DEVICE_HANDLE, ::testing::_))
-        .WillByDefault(::testing::Return(BTRMGR_RESULT_SUCCESS));
 
     params["deviceID"]   = std::to_string(TEST_DEVICE_HANDLE);
     params["deviceType"] = TEST_DEVICE_TYPE_STR;
@@ -687,8 +699,8 @@ TEST_F(Bluetooth_L2Test, BluetoothConnectDisconnect)
     EXPECT_EQ(Core::ERROR_NONE, status);
     EXPECT_TRUE(result["success"].Boolean());
 
-    /* disconnect */
-    EXPECT_CALL(*p_btmgrImplMock, BTRMGR_DisconnectFromDevice(0, TEST_DEVICE_HANDLE))
+    /* disconnect: for deviceType LOUDSPEAKER, plugin calls BTRMGR_StopAudioStreamingOut */
+    EXPECT_CALL(*p_btmgrImplMock, BTRMGR_StopAudioStreamingOut(0, TEST_DEVICE_HANDLE))
         .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
 
     status = InvokeServiceMethod("org.rdk.Bluetooth.1", "disconnect", params, result);
@@ -790,7 +802,9 @@ TEST_F(Bluetooth_L2Test, BluetoothGetSetDeviceVolumeMute)
     status = InvokeServiceMethod("org.rdk.Bluetooth.1", "getDeviceVolumeMuteInfo", params, result);
     EXPECT_EQ(Core::ERROR_NONE, status);
     EXPECT_TRUE(result["success"].Boolean());
-    EXPECT_EQ(80u, result["volumeInfo"].Object()["volume"].Number());
+    /* volume is stored as std::to_string(ui8volume) in the plugin, so it
+     * arrives as a JSON string, not a number. */
+    EXPECT_STREQ("80", result["volumeInfo"].Object()["volume"].String().c_str());
     EXPECT_FALSE(result["volumeInfo"].Object()["mute"].Boolean());
 
     /* setDeviceVolumeMuteInfo */
@@ -831,6 +845,9 @@ TEST_F(Bluetooth_L2Test, BluetoothSetGetAutoConnect)
 
 /* =========================================================================
  * TC-17: sendAudioPlaybackCommand (PLAY)
+ * Bluetooth::setAudioControlCommand() maps command "PLAY" to
+ * BTRMGR_StartAudioStreamingIn (not BTRMGR_MediaControl).
+ * The wrapper reads the command from the "command" JSON key.
  * ====================================================================== */
 TEST_F(Bluetooth_L2Test, BluetoothSendAudioPlaybackCommandPlay)
 {
@@ -838,11 +855,11 @@ TEST_F(Bluetooth_L2Test, BluetoothSendAudioPlaybackCommandPlay)
     JsonObject result;
 
     EXPECT_CALL(*p_btmgrImplMock,
-                BTRMGR_MediaControl(0, TEST_DEVICE_HANDLE, BTRMGR_MEDIA_CTRL_PLAY))
+                BTRMGR_StartAudioStreamingIn(0, TEST_DEVICE_HANDLE, BTRMGR_DEVICE_OP_TYPE_AUDIO_INPUT))
         .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
 
-    params["deviceID"]     = std::to_string(TEST_DEVICE_HANDLE);
-    params["audioCtrlCmd"] = "PLAY";
+    params["deviceID"] = std::to_string(TEST_DEVICE_HANDLE);
+    params["command"]  = "PLAY";
     uint32_t status = InvokeServiceMethod("org.rdk.Bluetooth.1", "sendAudioPlaybackCommand", params, result);
     EXPECT_EQ(Core::ERROR_NONE, status);
     EXPECT_TRUE(result["success"].Boolean());
