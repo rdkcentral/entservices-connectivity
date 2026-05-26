@@ -26,47 +26,51 @@ if(PLUGIN_BLUETOOTH)
     set(SRC_FILES ${SRC_FILES} tests/Bluetooth_L2Test.cpp)
 endif()
 
-add_library(${MODULE_NAME} SHARED ${SRC_FILES})
+if(SRC_FILES)
+    add_library(${MODULE_NAME} SHARED ${SRC_FILES})
 
-set_target_properties(${MODULE_NAME} PROPERTIES
-        CXX_STANDARD 14
-        CXX_STANDARD_REQUIRED YES)
+    set_target_properties(${MODULE_NAME} PROPERTIES
+            CXX_STANDARD 14
+            CXX_STANDARD_REQUIRED YES)
 
-target_compile_definitions(${MODULE_NAME}
-            PRIVATE
-            MODULE_NAME=Plugin_${PLUGIN_NAME}
-            THUNDER_PORT="${THUNDER_PORT}")
+    target_compile_definitions(${MODULE_NAME}
+                PRIVATE
+                MODULE_NAME=Plugin_${PLUGIN_NAME}
+                THUNDER_PORT="${THUNDER_PORT}")
 
-target_compile_options(${MODULE_NAME} PRIVATE -Wno-error)
-target_link_libraries(${MODULE_NAME} PRIVATE ${NAMESPACE}Plugins::${NAMESPACE}Plugins)
+    target_compile_options(${MODULE_NAME} PRIVATE -Wno-error)
+    target_link_libraries(${MODULE_NAME} PRIVATE ${NAMESPACE}Plugins::${NAMESPACE}Plugins)
 
-if (NOT L2_TEST_OOP_RPC)
-    find_library(TESTMOCKLIB_LIBRARIES NAMES TestMocklib)
-    if (TESTMOCKLIB_LIBRARIES)
-        message ("Found mock library - ${TESTMOCKLIB_LIBRARIES}")
-        target_link_libraries(${MODULE_NAME} PRIVATE ${TESTMOCKLIB_LIBRARIES})
-    else (TESTMOCKLIB_LIBRARIES)
-         message ("Require ${TESTMOCKLIB_LIBRARIES} library")
-    endif (TESTMOCKLIB_LIBRARIES)
-endif (NOT L2_TEST_OOP_RPC)
+    if (NOT L2_TEST_OOP_RPC)
+        find_library(TESTMOCKLIB_LIBRARIES NAMES TestMocklib)
+        if (TESTMOCKLIB_LIBRARIES)
+            message ("Found mock library - ${TESTMOCKLIB_LIBRARIES}")
+            target_link_libraries(${MODULE_NAME} PRIVATE ${TESTMOCKLIB_LIBRARIES})
+        else (TESTMOCKLIB_LIBRARIES)
+             message ("Require ${TESTMOCKLIB_LIBRARIES} library")
+        endif (TESTMOCKLIB_LIBRARIES)
+    endif (NOT L2_TEST_OOP_RPC)
 
-find_library(MOCKACCESSOR_LIBRARIES NAMES MockAccessor)
-if (MOCKACCESSOR_LIBRARIES)
-    message ("Found MockAccessor library - ${MOCKACCESSOR_LIBRARIES}")
-    target_link_libraries(${MODULE_NAME} PRIVATE ${MOCKACCESSOR_LIBRARIES})
-else (MOCKACCESSOR_LIBRARIES)
-     message ("Require ${MOCKACCESSOR_LIBRARIES} library")
-endif (MOCKACCESSOR_LIBRARIES)
+    find_library(MOCKACCESSOR_LIBRARIES NAMES MockAccessor)
+    if (MOCKACCESSOR_LIBRARIES)
+        message ("Found MockAccessor library - ${MOCKACCESSOR_LIBRARIES}")
+        target_link_libraries(${MODULE_NAME} PRIVATE ${MOCKACCESSOR_LIBRARIES})
+    else (MOCKACCESSOR_LIBRARIES)
+         message ("Require ${MOCKACCESSOR_LIBRARIES} library")
+    endif (MOCKACCESSOR_LIBRARIES)
 
-target_include_directories(
-    ${MODULE_NAME} PRIVATE ./
-    ../../helpers
-    ../../../entservices-testframework/Tests/mocks
-    ../../../entservices-testframework/Tests/mocks/thunder
-    ../../../entservices-testframework/Tests/mocks/devicesettings
-    ../../../entservices-testframework/Tests/mocks/MockPlugin
-    ../../../entservices-testframework/Tests/L2Tests/L2TestsPlugin
-    ${CMAKE_INSTALL_PREFIX}/include
-    )
+    target_include_directories(
+        ${MODULE_NAME} PRIVATE ./
+        ../../helpers
+        ../../../entservices-testframework/Tests/mocks
+        ../../../entservices-testframework/Tests/mocks/thunder
+        ../../../entservices-testframework/Tests/mocks/devicesettings
+        ../../../entservices-testframework/Tests/mocks/MockPlugin
+        ../../../entservices-testframework/Tests/L2Tests/L2TestsPlugin
+        ${CMAKE_INSTALL_PREFIX}/include
+        )
 
-install(TARGETS ${MODULE_NAME} DESTINATION lib)
+    install(TARGETS ${MODULE_NAME} DESTINATION lib)
+else()
+    message(STATUS "No L2 test sources enabled for ${PLUGIN_NAME}; skipping ${MODULE_NAME}")
+endif()

@@ -533,7 +533,7 @@ TEST_F(Bluetooth_L2Test, BluetoothEnableFailure)
 
     params["enabled"] = "true";
     uint32_t status = InvokeServiceMethod("org.rdk.Bluetooth.1", "enable", params, result);
-    /* Plugin returns success=false in the JSON body; the RPC transport itself succeeds */
+    /* HAL failure propagates through returnResponse(): JSON-RPC returns a non-ERROR_NONE status and success=false in the JSON body */
     EXPECT_NE(Core::ERROR_NONE, status); // Should not be ERROR_NONE on failure
     EXPECT_FALSE(result["success"].Boolean());
 }
