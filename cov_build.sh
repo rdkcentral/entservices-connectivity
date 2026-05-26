@@ -7,6 +7,7 @@ GITHUB_WORKSPACE="${PWD}"
 ls -la ${GITHUB_WORKSPACE}
 ############################
 # Build entservices-connectivity
+# Coverity native build is intentionally L1-only; L2 coverage runs in dedicated L2 workflows.
 echo "building entservices-connectivity !!!"
 
 cd ${GITHUB_WORKSPACE}
@@ -21,7 +22,6 @@ cmake -G Ninja -S "$GITHUB_WORKSPACE" -B build/entservices-connectivity \
 -DCOMCAST_CONFIG=OFF \
 -DRDK_SERVICES_COVERITY=ON \
 -DRDK_SERVICES_L1_TEST=ON \
--DRDK_SERVICE_L2_TEST=ON \
 -DDS_FOUND=ON \
 -DPLUGIN_BLUETOOTH=ON \
 -DCMAKE_CXX_FLAGS="-DEXCEPTIONS_ENABLE=ON \

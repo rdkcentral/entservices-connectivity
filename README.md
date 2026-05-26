@@ -6,6 +6,8 @@ This repository-root documentation set covers the Bluetooth subsystem under:
 - Related build integration at [`CMakeLists.txt`](./CMakeLists.txt), [`cov_build.sh`](./cov_build.sh), and [`.github/workflows/L1-tests.yml`](./.github/workflows/L1-tests.yml)
 - Related L1 tests at [`Tests/L1Tests/tests/test_Bluetooth.cpp`](./Tests/L1Tests/tests/test_Bluetooth.cpp)
 
+Coverity/native build scope in this repository is L1-only via [`cov_build.sh`](./cov_build.sh). L2 coverage is executed through dedicated L2 workflow files.
+
 ## Generated Docs
 
 - [Bluetooth Plugin Subsystem](./docs/bluetooth-plugin.md)
