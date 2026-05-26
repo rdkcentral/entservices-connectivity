@@ -435,8 +435,9 @@ TEST_F(Bluetooth_L2Test, BluetoothEnableFailure)
         .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
 
     params["enabled"] = "true";
-    InvokeServiceMethod("org.rdk.Bluetooth.1", "enable", params, result);
+    uint32_t status = InvokeServiceMethod("org.rdk.Bluetooth.1", "enable", params, result);
     /* Plugin returns success=false in the JSON body; the RPC transport itself succeeds */
+    EXPECT_NE(Core::ERROR_NONE, status); // Should not be ERROR_NONE on failure
     EXPECT_FALSE(result["success"].Boolean());
 }
 
