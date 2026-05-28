@@ -1280,11 +1280,24 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, legacyPersistenceMigrationS
     EXPECT_TRUE(response.find("\"lastConnectTimeUtc\":\"1700000000\"") != string::npos);
 }
 
-TEST_F(BluetoothLegacyPersistenceMigrationParseTest, legacyPersistenceMigrationMissingStore_ValidFilesystemPersistenceImportPersistsToStore)
+class BluetoothLegacyPersistenceMigrationParseParamTest
+    : public BluetoothLegacyPersistenceMigrationParseTest
+    , public ::testing::WithParamInterface<uint32_t> {
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    StoreKeyNotFound,
+    BluetoothLegacyPersistenceMigrationParseParamTest,
+    ::testing::Values(Core::ERROR_NOT_EXIST, Core::ERROR_UNKNOWN_KEY),
+    [](const ::testing::TestParamInfo<uint32_t>& paramInfo) {
+        return paramInfo.param == Core::ERROR_NOT_EXIST ? "ERROR_NOT_EXIST" : "ERROR_UNKNOWN_KEY";
+    });
+
+TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, legacyPersistenceMigrationMissingStore_ValidFilesystemPersistenceImportPersistsToStore)
 {
     std::string persistedJson;
     EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(Core::ERROR_NOT_EXIST));
+        .WillOnce(::testing::Return(GetParam()));
     EXPECT_CALL(*p_storeMock, SetValue(::testing::_, ::testing::_, ::testing::_))
         .Times(::testing::AtLeast(1))
         .WillRepeatedly(::testing::DoAll(
@@ -1306,7 +1319,7 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, legacyPersistenceMigrationM
     EXPECT_TRUE(persistedJson.find("\"lastConnectTimeUtc\":\"1712345680\"") != string::npos);
 }
 
-TEST_F(BluetoothLegacyPersistenceMigrationParseTest, legacyPersistenceMigrationMissingStore_MissingFilesystemPersistenceSourceGracefulFallback)
+TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, legacyPersistenceMigrationMissingStore_MissingFilesystemPersistenceSourceGracefulFallback)
 {
     const std::string seedPayload =
         "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"deviceType\":\"HEADPHONES\","
@@ -1316,7 +1329,7 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, legacyPersistenceMigrationM
     }
 
     EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(Core::ERROR_NOT_EXIST));
+        .WillOnce(::testing::Return(GetParam()));
 
     EXPECT_TRUE(plugin->Initialize(&service).empty());
 
@@ -1329,10 +1342,10 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, legacyPersistenceMigrationM
     EXPECT_TRUE(syncedFilesystemPersistencePayload.find("\"autoConnectStatus\":true") != string::npos);
 }
 
-TEST_F(BluetoothLegacyPersistenceMigrationParseTest, legacyPersistenceMigrationMissingStore_MalformedFilesystemPersistencePayloadNonFatal)
+TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, legacyPersistenceMigrationMissingStore_MalformedFilesystemPersistencePayloadNonFatal)
 {
     EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(Core::ERROR_NOT_EXIST));
+        .WillOnce(::testing::Return(GetParam()));
 
     const std::string malformedPayload = "{\"pairedDevices\":[{\"deviceAddr\":\"123\"";
     if (!initializeFromFilesystemPersistencePayload(malformedPayload)) {
@@ -1355,7 +1368,7 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, legacyPersistenceMigrationM
     EXPECT_TRUE(response.find("\"pairedDevices\"") != string::npos);
 }
 
-TEST_F(BluetoothLegacyPersistenceMigrationParseTest, rollbackSyncMutations_WriteFilesystemPersistenceWhenFlagOn)
+TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, rollbackSyncMutations_WriteFilesystemPersistenceWhenFlagOn)
 {
     const std::string seedPayload =
         "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"deviceType\":\"HEADPHONES\","
@@ -1365,7 +1378,7 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, rollbackSyncMutations_Write
     }
 
     EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(Core::ERROR_NOT_EXIST));
+        .WillOnce(::testing::Return(GetParam()));
 
     EXPECT_TRUE(plugin->Initialize(&service).empty());
 
@@ -1652,7 +1665,7 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, parse_FriendlyName_Persiste
 // Data mapping tests: write (cache → filesystem file)
 // ============================================================================
 
-TEST_F(BluetoothLegacyPersistenceMigrationParseTest, write_InitialDeviceAutoConnectUnset_WritesAutoConnectFalseToFilesystem)
+TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, write_InitialDeviceAutoConnectUnset_WritesAutoConnectFalseToFilesystem)
 {
     // A device entry is present in the filesystem file without an explicit autoConnectStatus
     // field (UNSET). Write() must serialize UNSET as false when there is no prior
@@ -1665,7 +1678,7 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, write_InitialDeviceAutoConn
     }
 
     EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(Core::ERROR_NOT_EXIST));
+        .WillOnce(::testing::Return(GetParam()));
 
     EXPECT_TRUE(plugin->Initialize(&service).empty());
 
@@ -1675,7 +1688,7 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, write_InitialDeviceAutoConn
     EXPECT_TRUE(filesystemPayload.find("\"autoConnectStatus\":false") != string::npos);
 }
 
-TEST_F(BluetoothLegacyPersistenceMigrationParseTest, write_LastConnectTimeUtcEmpty_WritesZeroToFilesystem)
+TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, write_LastConnectTimeUtcEmpty_WritesZeroToFilesystem)
 {
     // When the filesystem file entry has no lastConnectionTimeUTC field, the cache
     // entry has an empty lastConnectTimeUtc. Write() must emit lastConnectionTimeUTC
@@ -1688,7 +1701,7 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, write_LastConnectTimeUtcEmp
     }
 
     EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(Core::ERROR_NOT_EXIST));
+        .WillOnce(::testing::Return(GetParam()));
 
     EXPECT_TRUE(plugin->Initialize(&service).empty());
 

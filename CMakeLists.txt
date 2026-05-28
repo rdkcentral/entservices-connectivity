@@ -42,6 +42,11 @@ if(RDK_SERVICES_L1_TEST)
     add_subdirectory(Tests/L1Tests)
 endif()
 
+if(RDK_SERVICE_L2_TEST)
+    add_subdirectory(Tests/L2Tests)
+    add_subdirectory(Tests/L2Tests/StoreMockPlugin)
+endif()
+
 if(PLUGIN_BLUETOOTH)
     add_subdirectory(Bluetooth)
 endif()
