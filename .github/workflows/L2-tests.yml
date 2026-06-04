@@ -98,7 +98,7 @@ jobs:
         with:
           repository: rdkcentral/entservices-connectivity
           path: entservices-connectivity
-          ref: feature/RDKEMW-16743
+          ref: develop
 
       - name: Checkout entservices-usersettings
         uses: actions/checkout@v3
@@ -112,7 +112,7 @@ jobs:
         with:
           repository: rdkcentral/entservices-testframework
           path: entservices-testframework
-          ref: 1.0.12
+          ref: 1.0.14
           token: ${{ secrets.RDKCM_RDKE }}
 
       - name: Checkout googletest
@@ -290,6 +290,7 @@ jobs:
           -S "$GITHUB_WORKSPACE/entservices-testframework/Tests/mocks"
           -B build/mocks
           -DBUILD_SHARED_LIBS=ON
+          -DRDK_SERVICE_L2_TEST=ON
           -DCMAKE_TOOLCHAIN_FILE="${{ env.TOOLCHAIN_FILE }}"
           -DCMAKE_INSTALL_PREFIX="$GITHUB_WORKSPACE/install/usr"
           -DCMAKE_MODULE_PATH="$GITHUB_WORKSPACE/install/tools/cmake"
@@ -297,7 +298,6 @@ jobs:
           -DCMAKE_CXX_FLAGS="
           -I $GITHUB_WORKSPACE/entservices-testframework/Tests/headers
           -I $GITHUB_WORKSPACE/install/usr/include"
-          -DRDK_SERVICE_L2_TEST=ON
           &&
           cmake --build build/mocks -j8
           &&
