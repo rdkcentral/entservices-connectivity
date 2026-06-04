@@ -112,7 +112,7 @@ jobs:
         with:
           repository: rdkcentral/entservices-testframework
           path: entservices-testframework
-          ref: feature/helpers_v1
+          ref: 1.0.12
           token: ${{ secrets.RDKCM_RDKE }}
 
       - name: Checkout googletest
@@ -297,6 +297,7 @@ jobs:
           -DCMAKE_CXX_FLAGS="
           -I $GITHUB_WORKSPACE/entservices-testframework/Tests/headers
           -I $GITHUB_WORKSPACE/install/usr/include"
+          -DRDK_SERVICE_L2_TEST=ON
           &&
           cmake --build build/mocks -j8
           &&
@@ -307,7 +308,7 @@ jobs:
         with:
           repository: rdkcentral/entservices-helpers
           path: entservices-helpers
-          ref: feature/RDKEMW-16743
+          ref: develop
 
       - name: Build entservices-helpers
         run: >
@@ -319,6 +320,12 @@ jobs:
           -DUSE_THUNDER_R4=ON
           -DHIDE_NON_EXTERNAL_SYMBOLS=OFF
           -DPLUGIN_HELPERS=ON
+          "-DCMAKE_CXX_FLAGS=
+          -I$GITHUB_WORKSPACE/entservices-testframework/Tests/headers
+          -I$GITHUB_WORKSPACE/entservices-testframework/Tests/headers/rdk/iarmbus
+          -I$GITHUB_WORKSPACE/entservices-testframework/Tests/mocks
+          -include $GITHUB_WORKSPACE/entservices-testframework/Tests/mocks/tr181api.h
+          -include $GITHUB_WORKSPACE/entservices-testframework/Tests/mocks/Iarm.h"
           &&
           cmake --build build/entservices-helpers
           &&
