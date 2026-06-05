@@ -32,7 +32,7 @@ set (TEST_LIB
     ${NAMESPACE}Plugins::${NAMESPACE}Plugins
 )
 
-set (TEST_INC ../../helpers)
+set (TEST_INC)
 
 #########################################################################################
 # add_plugin_test_ex: Macro to add plugin tests, it will append to TEST_SRC, TEST_INC,
@@ -102,7 +102,7 @@ macro(add_plugin_test plugin_name test_files)
 endmacro()
 
 # PLUGIN_BLUETOOTH
-set (BLUETOOTH_INC ${CMAKE_SOURCE_DIR}/../entservices-connectivity/Bluetooth ${CMAKE_SOURCE_DIR}/../entservices-connectivity/helpers)
+set (BLUETOOTH_INC ${CMAKE_SOURCE_DIR}/../entservices-connectivity/Bluetooth ${CMAKE_SOURCE_DIR}/../entservices-helpers/helpers)
 set (BLUETOOTH_LIBS ${NAMESPACE}Bluetooth)
 add_plugin_test_ex(PLUGIN_BLUETOOTH tests/test_Bluetooth.cpp "${BLUETOOTH_INC}" "${BLUETOOTH_LIBS}")
 
