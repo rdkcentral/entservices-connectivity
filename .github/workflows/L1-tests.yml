@@ -137,7 +137,7 @@ jobs:
         with:
           repository: rdkcentral/entservices-connectivity
           path: entservices-connectivity
-          ref: feature/RDKEMW-16743
+          ref: develop
 
       - name: Checkout googletest
         if: steps.cache.outputs.cache-hit != 'true'
