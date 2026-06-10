@@ -1972,6 +1972,10 @@ namespace WPEFramework
 
         void Bluetooth::onPowerModeChanged(const WPEFramework::Exchange::IPowerManager::PowerState currentState, const WPEFramework::Exchange::IPowerManager::PowerState newState)
         {
+            #ifndef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+                return;
+            #endif
+
             #ifdef BLUETOOTH_DEBUG
                 static const char* powerStateNames[] = {
                     "POWER_STATE_UNKNOWN",
