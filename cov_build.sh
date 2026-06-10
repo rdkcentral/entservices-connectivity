@@ -7,6 +7,7 @@ GITHUB_WORKSPACE="${PWD}"
 ls -la ${GITHUB_WORKSPACE}
 ############################
 # Build entservices-connectivity
+# Coverity native build is intentionally L1-only; L2 coverage runs in dedicated L2 workflows.
 echo "building entservices-connectivity !!!"
 
 cd ${GITHUB_WORKSPACE}

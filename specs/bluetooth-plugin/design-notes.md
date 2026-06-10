@@ -25,7 +25,7 @@ Each device entry persists:
 ## Adapter Failure-Handling Policy
 
 Migration and rollback paths use resilient, non-fatal failure handling:
-- AC1 migration is attempted only on PersistentStore miss (`ERROR_NOT_EXIST`).
+- AC1 migration is attempted only on PersistentStore miss (`ERROR_NOT_EXIST` or `ERROR_UNKNOWN_KEY`).
 - Missing filesystem persistence source or parse failure is non-fatal and MUST NOT block plugin initialization.
 - Field-level parse failures preserve existing cache values when available.
 - AC2 rollback sync runs after successful cache persistence; rollback write failures are logged and surfaced by error policy without corrupting in-memory cache.

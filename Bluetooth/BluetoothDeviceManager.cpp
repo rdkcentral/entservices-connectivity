@@ -25,6 +25,7 @@
 
 #include "BluetoothDeviceManager.h"
 #include "btmgr.h"
+
 #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
 #include "BluetoothPersistenceAdapter.h"
 #endif
@@ -33,7 +34,15 @@
 namespace WPEFramework {
     namespace Plugin {
 
+        namespace {
+            bool missingFromPersistentStore(Core::hresult result)
+            {
+                return (Core::ERROR_NOT_EXIST == result) || (Core::ERROR_UNKNOWN_KEY == result);
+            }
+        } // namespace
+
 #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+
         Core::hresult BluetoothDeviceManager::writeCacheFromFilesystemPersistence()
         {
             BluetoothPersistenceAdapter adapter;
@@ -202,7 +211,7 @@ namespace WPEFramework {
 
                 _adminLock.Unlock();
                 
-            } else if (Core::ERROR_NOT_EXIST != result) {
+            } else if (!missingFromPersistentStore(result)) {
                 LOGERR("Failed to load device info from PersistentStore, hresult=%d\n", result);
             }
 
@@ -341,6 +350,22 @@ namespace WPEFramework {
 
         Core::hresult BluetoothDeviceManager::init(PluginHost::IShell* service)
         {
+            LOGINFO("BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION is %s",
+#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+                "enabled"
+#else
+                "disabled"
+#endif
+            );
+
+            LOGINFO("BLUETOOTH_PERSISTENT_FILE_PATH is '%s'",
+#ifdef BLUETOOTH_PERSISTENT_FILE_PATH
+                BLUETOOTH_PERSISTENT_FILE_PATH
+#else
+             "unavailable"
+#endif
+            );
+
             if (service == nullptr) {
                 return Core::ERROR_GENERAL;
             }
@@ -349,13 +374,13 @@ namespace WPEFramework {
             _service->AddRef();
 
             const Core::hresult storageResult = updateCacheFromStorage();
-            if ((Core::ERROR_NONE != storageResult) && (Core::ERROR_NOT_EXIST != storageResult)) {
+            if ((Core::ERROR_NONE != storageResult) && !missingFromPersistentStore(storageResult)) {
                 LOGERR("PersistentStore read failed (hresult=%d); aborting init to avoid data loss", storageResult);
                 return storageResult;
             }
 
 #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
-            if (Core::ERROR_NOT_EXIST == storageResult) {
+            if (missingFromPersistentStore(storageResult)) {
                 LOGINFO("Migration attempted: PersistentStore device info is missing; trying filesystem persistence import.");
 
                 const Core::hresult migrationResult = writeCacheFromFilesystemPersistence();
@@ -486,6 +511,34 @@ namespace WPEFramework {
             if (Core::ERROR_NONE != result) {
                 LOGERR("Failed to update storage from cache after setting lastConnectTimeUtc for deviceID=%s", deviceID.c_str());
             }
+        }
+
+        Core::hresult BluetoothDeviceManager::setLastVolumeSetting(const std::string& deviceID, long long volumeSetting)
+        {
+            LOGINFO("deviceID=%s, volumeSetting=%lld", deviceID.c_str(), volumeSetting);
+
+            BluetoothDeviceInfo deviceInfo;
+
+            _adminLock.Lock();
+
+            Core::hresult result = getPairedDeviceInfo(deviceID, deviceInfo);
+
+            if (Core::ERROR_NONE != result) {
+                LOGERR("Device info is not found in cache for deviceID: %s", deviceID.c_str());
+                _adminLock.Unlock();
+                return Core::ERROR_NOT_EXIST;
+            }
+
+            deviceInfo.lastVolumeSetting = volumeSetting;
+            _pairedDeviceCache[deviceID] = std::move(deviceInfo);
+            _adminLock.Unlock();
+
+            result = writeStorageFromCache();
+            if (Core::ERROR_NONE != result) {
+                LOGERR("Failed to update storage from cache after setting lastVolumeSetting for deviceID=%s", deviceID.c_str());
+            }
+
+            return result;
         }
 
         Core::hresult BluetoothDeviceManager::getLastConnectTimeUtc(const std::string& deviceID, std::string& lastConnectTimeUtc)

@@ -63,6 +63,7 @@ namespace WPEFramework {
                 Core::hresult getAutoConnect(const std::string& deviceID, AutoConnectStatus& status);
                 void setLastConnectTimeUtc(const std::string& deviceID);
                 Core::hresult getLastConnectTimeUtc(const std::string& deviceID, std::string& lastConnectTimeUtc);
+                Core::hresult setLastVolumeSetting(const std::string& deviceID, long long volumeSetting);
                 Core::hresult addDevice(const std::string& deviceID);
                 Core::hresult removeDevice(const std::string& deviceID);
                 std::unordered_map<std::string /* deviceID */, BluetoothDeviceInfo /* deviceInfo */> getPairedDeviceInfos();
