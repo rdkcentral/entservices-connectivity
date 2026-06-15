@@ -16,6 +16,11 @@ Bluetooth initialization SHALL read PersistentStore device info first and SHALL 
 - **WHEN** initialization finds no Bluetooth/deviceInfo data in PersistentStore and source payload is missing, unreadable, or malformed
 - **THEN** initialization remains non-fatal and continues with baseline reconciliation flow
 
+#### Scenario: PersistentStore read fails with unexpected error
+- **WHEN** initialization encounters a non-absent error reading PersistentStore device info (e.g., storage interface unavailable)
+- **THEN** initialization aborts and returns an error to prevent data loss
+- **THEN** migration import is not attempted
+
 ### Requirement: Rollback synchronization SHALL run after successful persistence writes
 Mutating persistence paths SHALL invoke AS-file synchronization only after successful PersistentStore writes when migration support is enabled.
 
@@ -45,3 +50,40 @@ Disabling migration support SHALL NOT break non-migration Bluetooth persistence 
 #### Scenario: Baseline behavior with migration disabled
 - **WHEN** Bluetooth is built with `BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION` disabled and runtime mutations occur
 - **THEN** baseline Bluetooth persistence paths continue to function without migration dependencies
+
+### Requirement: Power-state-driven connection management SHALL be compile-time gated
+Power-state-driven connection management on transitions to and from `POWER_STATE_ON`, `POWER_STATE_STANDBY`, `POWER_STATE_STANDBY_LIGHT_SLEEP`, and `POWER_STATE_STANDBY_DEEP_SLEEP` SHALL be compiled and active only when `BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION` is enabled.
+
+#### Scenario: Power state transitions active with migration enabled
+- **WHEN** Bluetooth is built with `BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION` enabled
+- **THEN** power-state-driven connection management executes on relevant transitions (e.g., Bluetooth auto-enabled on wake when paired non-HID devices exist; non-HID devices disconnected on standby or deep sleep based on their autoconnect setting)
+
+#### Scenario: Power state transitions inactive with migration disabled
+- **WHEN** Bluetooth is built with `BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION` disabled
+- **THEN** `onPowerModeChanged` returns immediately and no power-state-driven connection or disconnection occurs
+
+### Requirement: Startup SHALL disconnect externally connected devices without explicit autoconnect
+During initialization, the plugin SHALL disconnect any currently connected non-HID device that does not have autoconnect explicitly set, to ensure only intentionally autoconnected devices remain connected after plugin activation.
+
+#### Scenario: Externally connected non-HID device without explicit autoconnect
+- **WHEN** initialization finds a connected non-HID device whose autoconnect flag has not been explicitly configured
+- **THEN** the plugin disconnects the device
+
+#### Scenario: Connected HID device at startup
+- **WHEN** initialization finds a connected Human Interface Device
+- **THEN** the device is left connected regardless of autoconnect setting
+
+### Requirement: External connect requests SHALL be auto-handled when autoconnect is explicitly set
+When an external Bluetooth device requests a connection and autoconnect has been explicitly configured for that device, the plugin SHALL resolve the request internally without propagating the event to clients.
+
+#### Scenario: Autoconnect explicitly enabled
+- **WHEN** an external connect request arrives for a device with autoconnect explicitly set to enabled
+- **THEN** the plugin accepts the connection, initiates device connection, and does not emit an `onConnectionRequest` event
+
+#### Scenario: Autoconnect explicitly disabled
+- **WHEN** an external connect request arrives for a device with autoconnect explicitly set to disabled
+- **THEN** the plugin rejects the connection without emitting an `onConnectionRequest` event
+
+#### Scenario: Autoconnect not explicitly set
+- **WHEN** an external connect request arrives for a device with no explicit autoconnect setting
+- **THEN** the plugin emits an `onConnectionRequest` event to clients to allow them to decide
