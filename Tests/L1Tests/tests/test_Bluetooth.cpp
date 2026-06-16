@@ -1224,6 +1224,9 @@ protected:
         EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
             .WillOnce(::testing::DoAll(
                 ::testing::SetArgReferee<2>(payload),
+                ::testing::Return(Core::ERROR_NONE)))
+            .WillOnce(::testing::DoAll(
+                ::testing::SetArgReferee<2>(std::string("test-checksum")),
                 ::testing::Return(Core::ERROR_NONE)));
 
         return plugin->Initialize(&service).empty();
@@ -1297,12 +1300,15 @@ TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, legacyPersistenceMigra
 {
     std::string persistedJson;
     EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(GetParam()));
-    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, ::testing::_, ::testing::_))
+        .WillOnce(::testing::Return(GetParam()))
+        .WillRepeatedly(::testing::Return(Core::ERROR_NOT_EXIST));
+    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, PERSISTENT_STORE_KEY_DEVICE_INFO, ::testing::_))
         .Times(::testing::AtLeast(1))
         .WillRepeatedly(::testing::DoAll(
             ::testing::SaveArg<2>(&persistedJson),
             ::testing::Return(Core::ERROR_NONE)));
+    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, PERSISTENT_STORE_KEY_FS_CHECKSUM, ::testing::_))
+        .WillRepeatedly(::testing::Return(Core::ERROR_NONE));
 
     const std::string payload =
         "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"friendlyName\":\"TVRemote\","
@@ -1312,6 +1318,8 @@ TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, legacyPersistenceMigra
     if (!initializeFromFilesystemPersistencePayload(payload)) {
         GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
     }
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
 
     EXPECT_FALSE(persistedJson.empty());
     EXPECT_TRUE(persistedJson.find("\"deviceID\":\"123\"") != string::npos);
@@ -1329,9 +1337,12 @@ TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, legacyPersistenceMigra
     }
 
     EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(GetParam()));
+        .WillOnce(::testing::Return(GetParam()))
+        .WillRepeatedly(::testing::Return(Core::ERROR_NOT_EXIST));
 
     EXPECT_TRUE(plugin->Initialize(&service).empty());
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
 
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
         _T("{\"deviceID\":\"123\",\"enable\":true}"), response));
@@ -1345,7 +1356,8 @@ TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, legacyPersistenceMigra
 TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, legacyPersistenceMigrationMissingStore_MalformedFilesystemPersistencePayloadNonFatal)
 {
     EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(GetParam()));
+        .WillOnce(::testing::Return(GetParam()))
+        .WillRepeatedly(::testing::Return(Core::ERROR_NOT_EXIST));
 
     const std::string malformedPayload = "{\"pairedDevices\":[{\"deviceAddr\":\"123\"";
     if (!initializeFromFilesystemPersistencePayload(malformedPayload)) {
@@ -1378,9 +1390,12 @@ TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, rollbackSyncMutations_
     }
 
     EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(GetParam()));
+        .WillOnce(::testing::Return(GetParam()))
+        .WillRepeatedly(::testing::Return(Core::ERROR_NOT_EXIST));
 
     EXPECT_TRUE(plugin->Initialize(&service).empty());
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
 
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
         _T("{\"deviceID\":\"123\",\"enable\":true}"), response));
@@ -1401,6 +1416,8 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, legacyPersistenceMigrationP
     if (!initializeFromFilesystemPersistencePayload(payload)) {
         GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
     }
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
 
     BTRMGR_PairedDevicesList_t pairedDevices;
     memset(&pairedDevices, 0, sizeof(pairedDevices));
@@ -1429,6 +1446,8 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, legacyPersistenceMigrationP
     if (!initializeFromFilesystemPersistencePayload(payload)) {
         GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
     }
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
 
     BTRMGR_PairedDevicesList_t pairedDevices;
     memset(&pairedDevices, 0, sizeof(pairedDevices));
@@ -1548,6 +1567,8 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, parse_EntryMissingDeviceAdd
     if (!initializeFromFilesystemPersistencePayload(payload)) {
         GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
     }
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
 
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getAutoConnect"), _T("{\"deviceID\":\"123\"}"), response));
     EXPECT_TRUE(response.find("\"autoconnect\":true") != string::npos);
@@ -1678,9 +1699,12 @@ TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, write_InitialDeviceAut
     }
 
     EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(GetParam()));
+        .WillOnce(::testing::Return(GetParam()))
+        .WillRepeatedly(::testing::Return(Core::ERROR_NOT_EXIST));
 
     EXPECT_TRUE(plugin->Initialize(&service).empty());
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
 
     std::string filesystemPayload;
     ASSERT_TRUE(readFilesystemPersistencePayload(filesystemPayload));
@@ -1701,9 +1725,12 @@ TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, write_LastConnectTimeU
     }
 
     EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(GetParam()));
+        .WillOnce(::testing::Return(GetParam()))
+        .WillRepeatedly(::testing::Return(Core::ERROR_NOT_EXIST));
 
     EXPECT_TRUE(plugin->Initialize(&service).empty());
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
 
     std::string filesystemPayload;
     ASSERT_TRUE(readFilesystemPersistencePayload(filesystemPayload));
@@ -1743,6 +1770,8 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, write_DeviceTypeMissingInFi
     if (!initializeFromFilesystemPersistencePayload(payload)) {
         GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
     }
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
 
     std::string filesystemPayload;
     ASSERT_TRUE(readFilesystemPersistencePayload(filesystemPayload));

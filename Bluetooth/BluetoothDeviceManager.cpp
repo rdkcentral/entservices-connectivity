@@ -260,6 +260,14 @@ namespace WPEFramework {
                 return importResult;
             }
 
+            // Backfill any missing device fields (e.g. deviceType) from BTRMGR.
+            // This must happen after the filesystem import (which replaces the cache)
+            // and before writeStorageFromCache so the enriched data is persisted.
+            const Core::hresult deviceResult = updateCacheFromDevice();
+            if (Core::ERROR_NONE != deviceResult) {
+                LOGWARN("performMigration: updateCacheFromDevice failed (hresult=%d); proceeding with imported data only", deviceResult);
+            }
+
             // Temporarily set _isMigrated so writeStorageFromCache proceeds.
             _isMigrated = true;
 
