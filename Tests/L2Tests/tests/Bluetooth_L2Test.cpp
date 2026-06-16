@@ -1502,6 +1502,7 @@ TEST_F(Bluetooth_L2Test, BluetoothClearMigration_ReEnablesPreMigrationGuard)
     params["deviceID"] = std::to_string(TEST_DEVICE_HANDLE);
     params["enable"]   = true;
     status = InvokeServiceMethod("org.rdk.Bluetooth.1", "setAutoConnect", params, result);
+    EXPECT_NE(Core::ERROR_NONE, status);
     EXPECT_FALSE(result["success"].Boolean());
 
     /* Step 4: Restore state so later tests are unaffected. */

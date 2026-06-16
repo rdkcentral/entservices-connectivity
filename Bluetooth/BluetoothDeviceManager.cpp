@@ -283,8 +283,8 @@ namespace WPEFramework {
             if (Core::ERROR_NONE != writeChecksumResult) {
                 LOGERR("performMigration: failed to persist checksum, hresult=%d", writeChecksumResult);
                 _isMigrated = false;
-                 _migrationLock.Unlock();
-                 return writeChecksumResult;
+                _migrationLock.Unlock();
+                return writeChecksumResult;
             }
 
             LOGINFO("performMigration: %s succeeded", firstTime ? "initial migration" : "re-sync");
