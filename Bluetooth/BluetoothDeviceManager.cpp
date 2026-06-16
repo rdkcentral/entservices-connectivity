@@ -236,7 +236,7 @@ namespace WPEFramework {
             std::string rawContent;
             const Core::hresult readRawResult = adapter.ReadRaw(rawContent);
             if (Core::ERROR_NOT_EXIST == readRawResult) {
-                LOGWARN("performMigration: AS filesystem persistence source not found, treating as empty");
+                LOGINFO("performMigration: AS filesystem persistence source not found, treating as empty");
                 // rawContent remains "" — fall through to checksum comparison and migration
             } else if (Core::ERROR_NONE != readRawResult) {
                 LOGERR("performMigration: failed to read AS filesystem persistence source, hresult=%d", readRawResult);
