@@ -1877,7 +1877,9 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, performMigrationWrapper_Suc
 TEST_F(BluetoothLegacyPersistenceMigrationParseTest, performMigrationWrapper_MissingSource_TreatsAsEmptySuccess)
 {
     // Ensure the filesystem file does not exist for this test.
-    std::remove(kFilesystemPersistenceFile);
+    if (std::remove(kFilesystemPersistenceFile) != 0 && errno != ENOENT) {
+        GTEST_SKIP() << "Unable to remove filesystem persistence file for test setup";
+    }
 
     EXPECT_TRUE(plugin->Initialize(&service).empty());
 
