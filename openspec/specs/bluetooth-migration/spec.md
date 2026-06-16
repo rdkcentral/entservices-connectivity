@@ -26,9 +26,14 @@ The `performMigration()` API SHALL read PersistentStore device info first and SH
 - **WHEN** `performMigration()` is called, no Bluetooth/deviceInfo data exists in PersistentStore, and the filesystem source payload is valid
 - **THEN** migration data is imported into cache and persisted to PersistentStore
 
-#### Scenario: PersistentStore data absent with invalid or missing migration source
-- **WHEN** `performMigration()` is called, no Bluetooth/deviceInfo data exists in PersistentStore, and the filesystem source payload is missing, unreadable, or malformed
-- **THEN** `performMigration()` returns a non-fatal error and the caller can proceed with baseline reconciliation
+#### Scenario: PersistentStore data absent with missing filesystem source
+- **WHEN** `performMigration()` is called, no Bluetooth/deviceInfo data exists in PersistentStore, and the filesystem source file does not exist
+- **THEN** the missing file is treated as an empty payload (zero devices)
+- **THEN** `performMigration()` proceeds with an empty cache and returns success (`ERROR_NONE`)
+
+#### Scenario: PersistentStore data absent with unreadable or malformed filesystem source
+- **WHEN** `performMigration()` is called, no Bluetooth/deviceInfo data exists in PersistentStore, and the filesystem source file exists but cannot be read (e.g., I/O error, file too large) or cannot be parsed (malformed JSON)
+- **THEN** `performMigration()` returns an error and aborts migration to prevent data loss
 
 #### Scenario: PersistentStore read fails with unexpected error
 - **WHEN** `performMigration()` encounters a non-absent error reading PersistentStore device info (e.g., storage interface unavailable)
