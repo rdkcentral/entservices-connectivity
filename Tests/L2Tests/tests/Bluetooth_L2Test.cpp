@@ -937,12 +937,14 @@ TEST_F(Bluetooth_L2Test, BluetoothSetGetAutoConnect)
     JsonObject result;
     uint32_t status = Core::ERROR_GENERAL;
 
+#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
     /* performMigration sets _isMigrated=true so that setAutoConnect is permitted.
      * No legacy filesystem persistence file exists in this environment so the call
      * treats the source as empty and succeeds without touching the device cache. */
     status = InvokeServiceMethod("org.rdk.Bluetooth.1", "performMigration", params, result);
     EXPECT_EQ(Core::ERROR_NONE, status);
     EXPECT_TRUE(result["success"].Boolean());
+#endif /* BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION */
 
     /* setAutoConnect / getAutoConnect both operate on the BluetoothDeviceManager
      * paired-device cache.  The cache starts empty (fixture initialises with
