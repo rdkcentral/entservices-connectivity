@@ -84,7 +84,7 @@ namespace WPEFramework {
 
                 Core::hresult getPairedDeviceInfo(const std::string& deviceID, BluetoothDeviceInfo& deviceInfo);
                 Core::hresult updateCacheFromStorage();
-                Core::hresult updateCacheFromDevice();
+                Core::hresult updateCacheFromDevice(bool backfillOnly = false);
                 Core::hresult writeStorageFromCache();
         #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
                 Core::hresult writeCacheFromFilesystemPersistence();

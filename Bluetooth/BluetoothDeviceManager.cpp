@@ -260,10 +260,11 @@ namespace WPEFramework {
                 return importResult;
             }
 
-            // Backfill any missing device fields (e.g. deviceType) from BTRMGR.
-            // This must happen after the filesystem import (which replaces the cache)
-            // and before writeStorageFromCache so the enriched data is persisted.
-            const Core::hresult deviceResult = updateCacheFromDevice();
+            // Backfill any missing device fields (e.g. deviceType) from BTRMGR for devices
+            // already present in the imported cache. New devices from BTRMGR are intentionally
+            // excluded here to preserve "filesystem is authoritative" semantics — in particular,
+            // treating a missing AS file as an empty payload must not repopulate from BTRMGR.
+            const Core::hresult deviceResult = updateCacheFromDevice(/* backfillOnly= */ true);
             if (Core::ERROR_NONE != deviceResult) {
                 LOGWARN("performMigration: updateCacheFromDevice failed (hresult=%d); proceeding with imported data only", deviceResult);
             }
@@ -406,7 +407,7 @@ namespace WPEFramework {
             return result;
         }
 
-        Core::hresult BluetoothDeviceManager::updateCacheFromDevice()
+        Core::hresult BluetoothDeviceManager::updateCacheFromDevice(bool backfillOnly)
         {
             BTRMGR_PairedDevicesList_t pairedDevices{};
 
@@ -418,8 +419,6 @@ namespace WPEFramework {
             }
 
             _adminLock.Lock();
-            
-            // Add any paired devices not already in cache.
 
             for (int i=0; i<pairedDevices.m_numOfDevices; i++)
             {
@@ -445,36 +444,40 @@ namespace WPEFramework {
                         existing.deviceType = deviceType;
                         LOGINFO("Backfilled deviceType for deviceID=%s from BTRMGR: %s\n", deviceId.c_str(), deviceType.c_str());
                     }
-                } else {
-                    // Device found that's not yet cached, add.
+                } else if (!backfillOnly) {
+                    // Device found that's not yet cached; add only when not in backfill-only mode.
                     LOGINFO("Adding device to cache: deviceID=%s, deviceType=%s\n", deviceId.c_str(), deviceType.c_str());
                     BluetoothDeviceInfo deviceInfo;
                     deviceInfo.deviceAddr = std::move(deviceAddr);
                     deviceInfo.deviceType = std::move(deviceType);
                     deviceInfo.friendlyName = (pairedDevices.m_deviceProperty[i].m_name[0] != '\0') ? std::string(pairedDevices.m_deviceProperty[i].m_name) : deviceId;
                     _pairedDeviceCache[deviceId] = std::move(deviceInfo);
+                } else {
+                    LOGINFO("Skipping device not in imported cache (backfill-only mode): deviceID=%s\n", deviceId.c_str());
                 }
             }
 
-            // Scrub cache of any devices that are no longer paired with the platform.
+            if (!backfillOnly) {
+                // Scrub cache of any devices that are no longer paired with the platform.
 
-            std::unordered_set<std::string> pairedDeviceIds;
-            pairedDeviceIds.reserve(static_cast<size_t>(pairedDevices.m_numOfDevices));
-            for (int i = 0; i < pairedDevices.m_numOfDevices; ++i) {
-                pairedDeviceIds.emplace(std::to_string(pairedDevices.m_deviceProperty[i].m_deviceHandle));
-            }
-
-            std::vector<std::string> deviceIdsToRemove;
-            for (const auto& entry : _pairedDeviceCache) {
-                const std::string& cachedDeviceId = entry.first;
-                if (pairedDeviceIds.find(cachedDeviceId) == pairedDeviceIds.end()) {
-                    LOGINFO("Marking device for removal from cache: deviceID=%s\n", cachedDeviceId.c_str());
-                    deviceIdsToRemove.push_back(cachedDeviceId);
+                std::unordered_set<std::string> pairedDeviceIds;
+                pairedDeviceIds.reserve(static_cast<size_t>(pairedDevices.m_numOfDevices));
+                for (int i = 0; i < pairedDevices.m_numOfDevices; ++i) {
+                    pairedDeviceIds.emplace(std::to_string(pairedDevices.m_deviceProperty[i].m_deviceHandle));
                 }
-            }
 
-            for (const auto& deviceId : deviceIdsToRemove) {
-                _pairedDeviceCache.erase(deviceId);
+                std::vector<std::string> deviceIdsToRemove;
+                for (const auto& entry : _pairedDeviceCache) {
+                    const std::string& cachedDeviceId = entry.first;
+                    if (pairedDeviceIds.find(cachedDeviceId) == pairedDeviceIds.end()) {
+                        LOGINFO("Marking device for removal from cache: deviceID=%s\n", cachedDeviceId.c_str());
+                        deviceIdsToRemove.push_back(cachedDeviceId);
+                    }
+                }
+
+                for (const auto& deviceId : deviceIdsToRemove) {
+                    _pairedDeviceCache.erase(deviceId);
+                }
             }
 
             _adminLock.Unlock();

@@ -1,25 +1,39 @@
 ## ADDED Requirements
 
-### Requirement: Migration initialization SHALL follow store-first import semantics
-Bluetooth initialization SHALL read PersistentStore device info first and SHALL only execute migration import from the filesystem source when PersistentStore device info is absent.
+### Requirement: Initialization SHALL NOT auto-import migration data from the filesystem
+Bluetooth initialization SHALL read PersistentStore device info to seed the in-memory cache and SHALL NOT automatically import migration data from the filesystem. Filesystem migration is deferred to an explicit client invocation of `performMigration()`.
+
+#### Scenario: Initialization with existing PersistentStore data
+- **WHEN** initialization finds valid Bluetooth/deviceInfo data in PersistentStore
+- **THEN** the cache is seeded from PersistentStore
+- **THEN** no migration import is attempted
+
+#### Scenario: Initialization with no PersistentStore data
+- **WHEN** initialization finds no Bluetooth/deviceInfo data in PersistentStore
+- **THEN** the cache starts empty
+- **THEN** no migration import is attempted
+- **THEN** initialization continues with baseline reconciliation flow
+
+### Requirement: `performMigration` SHALL follow store-first import semantics
+The `performMigration()` API SHALL read PersistentStore device info first and SHALL only execute migration import from the filesystem source when PersistentStore device info is absent.
 
 #### Scenario: PersistentStore data present
-- **WHEN** initialization finds valid Bluetooth/deviceInfo data in PersistentStore
+- **WHEN** `performMigration()` is called and valid Bluetooth/deviceInfo data exists in PersistentStore
 - **THEN** filesystem migration import is skipped
-- **THEN** initialization continues with existing persistent values
+- **THEN** `performMigration()` returns indicating migration was not needed
 
 #### Scenario: PersistentStore data absent with valid migration source
-- **WHEN** initialization finds no Bluetooth/deviceInfo data in PersistentStore and source payload is valid
+- **WHEN** `performMigration()` is called, no Bluetooth/deviceInfo data exists in PersistentStore, and the filesystem source payload is valid
 - **THEN** migration data is imported into cache and persisted to PersistentStore
 
 #### Scenario: PersistentStore data absent with invalid or missing migration source
-- **WHEN** initialization finds no Bluetooth/deviceInfo data in PersistentStore and source payload is missing, unreadable, or malformed
-- **THEN** initialization remains non-fatal and continues with baseline reconciliation flow
+- **WHEN** `performMigration()` is called, no Bluetooth/deviceInfo data exists in PersistentStore, and the filesystem source payload is missing, unreadable, or malformed
+- **THEN** `performMigration()` returns a non-fatal error and the caller can proceed with baseline reconciliation
 
 #### Scenario: PersistentStore read fails with unexpected error
-- **WHEN** initialization encounters a non-absent error reading PersistentStore device info (e.g., storage interface unavailable)
-- **THEN** initialization aborts and returns an error to prevent data loss
-- **THEN** migration import is not attempted
+- **WHEN** `performMigration()` encounters a non-absent error reading PersistentStore device info (e.g., storage interface unavailable)
+- **THEN** `performMigration()` aborts and returns an error to prevent data loss
+- **THEN** filesystem migration import is not attempted
 
 ### Requirement: Rollback synchronization SHALL run after successful persistence writes
 Mutating persistence paths SHALL invoke AS-file synchronization only after successful PersistentStore writes when migration support is enabled.
