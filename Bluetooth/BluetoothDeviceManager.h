@@ -20,6 +20,7 @@
 #pragma once
 
 #include "Module.h"
+#include <atomic>
 #include <unordered_map>
 #include <chrono>
 #include <ctime>
@@ -92,7 +93,7 @@ namespace WPEFramework {
                 Core::hresult readFsChecksumFromStorage(std::string& checksum) const;
                 Core::hresult writeFsChecksumToStorage(const std::string& checksum);
                 std::size_t _lastFilesystemPersistenceHash = 0;
-                bool _isMigrated = false;
+                std::atomic<bool> _isMigrated{false};
                 mutable Core::CriticalSection _migrationLock;
         #endif
         };

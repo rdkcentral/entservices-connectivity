@@ -269,12 +269,12 @@ namespace WPEFramework {
             }
 
             // Temporarily set _isMigrated so writeStorageFromCache proceeds.
-            _isMigrated = true;
+            _isMigrated.store(true);
 
             const Core::hresult writeResult = writeStorageFromCache();
             if (Core::ERROR_NONE != writeResult) {
                 LOGERR("performMigration: failed to persist imported data to PersistentStore, hresult=%d", writeResult);
-                _isMigrated = false;
+                _isMigrated.store(false);
                 _migrationLock.Unlock();
                 return writeResult;
             }
@@ -282,7 +282,7 @@ namespace WPEFramework {
             const Core::hresult writeChecksumResult = writeFsChecksumToStorage(newChecksum);
             if (Core::ERROR_NONE != writeChecksumResult) {
                 LOGERR("performMigration: failed to persist checksum, hresult=%d", writeChecksumResult);
-                _isMigrated = false;
+                _isMigrated.store(false);
                 _migrationLock.Unlock();
                 return writeChecksumResult;
             }
@@ -331,7 +331,7 @@ namespace WPEFramework {
             _pairedDeviceCache.clear();
             _adminLock.Unlock();
 
-            _isMigrated = false;
+            _isMigrated.store(false);
 
             LOGINFO("clearMigration: PersistentStore cleared and migration state reset");
             _migrationLock.Unlock();
@@ -484,14 +484,9 @@ namespace WPEFramework {
         Core::hresult BluetoothDeviceManager::writeStorageFromCache()
         {
 #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
-            {
-                _migrationLock.Lock();
-                const bool isMigrated = _isMigrated;
-                _migrationLock.Unlock();
-                if (!isMigrated) {
-                    LOGINFO("writeStorageFromCache skipped: migration has not been performed yet");
-                    return Core::ERROR_NONE;
-                }
+            if (!_isMigrated.load()) {
+                LOGINFO("writeStorageFromCache skipped: migration has not been performed yet");
+                return Core::ERROR_NONE;
             }
 #endif
 
@@ -585,10 +580,8 @@ namespace WPEFramework {
             {
                 std::string storedChecksum;
                 const Core::hresult checksumResult = readFsChecksumFromStorage(storedChecksum);
-                _migrationLock.Lock();
-                _isMigrated = (Core::ERROR_NONE == checksumResult);
-                const bool isMigrated = _isMigrated;
-                _migrationLock.Unlock();
+                const bool isMigrated = (Core::ERROR_NONE == checksumResult);
+                _isMigrated.store(isMigrated);
                 LOGINFO("Migration state at init: _isMigrated=%s", isMigrated ? "true" : "false");
             }
 #endif
@@ -640,10 +633,7 @@ namespace WPEFramework {
             LOGINFO("deviceID=%s, enable=%s\n", deviceID.c_str(), enable ? "true" : "false");
 
 #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
-             _migrationLock.Lock();
-             const bool isMigrated = _isMigrated;
-             _migrationLock.Unlock();
-             if (!isMigrated) {
+            if (!_isMigrated.load()) {
                 LOGWARN("setAutoConnect rejected: migration has not been performed yet for deviceID=%s", deviceID.c_str());
                 return Core::ERROR_ILLEGAL_STATE;
             }
