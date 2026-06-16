@@ -49,6 +49,13 @@ namespace WPEFramework {
 
             std::vector<BluetoothDeviceInfo> importedDevices;
             const Core::hresult result = adapter.Read(importedDevices);
+            if (Core::ERROR_NOT_EXIST == result) {
+                // Missing file is treated as having no entries — clear the cache and return success.
+                _adminLock.Lock();
+                _pairedDeviceCache.clear();
+                _adminLock.Unlock();
+                return Core::ERROR_NONE;
+            }
             if (Core::ERROR_NONE != result) {
                 return result;
             }
@@ -229,12 +236,10 @@ namespace WPEFramework {
             std::string rawContent;
             const Core::hresult readRawResult = adapter.ReadRaw(rawContent);
             if (Core::ERROR_NOT_EXIST == readRawResult) {
-                LOGINFO("performMigration: AS filesystem persistence source not found, skipping");
-                _migrationLock.Unlock();
-                return Core::ERROR_NONE;
-            }
-            if (Core::ERROR_NONE != readRawResult) {
-                LOGWARN("performMigration: failed to read AS filesystem persistence source, hresult=%d", readRawResult);
+                LOGWARN("performMigration: AS filesystem persistence source not found, treating as empty");
+                // rawContent remains "" — fall through to checksum comparison and migration
+            } else if (Core::ERROR_NONE != readRawResult) {
+                LOGERR("performMigration: failed to read AS filesystem persistence source, hresult=%d", readRawResult);
                 _migrationLock.Unlock();
                 return readRawResult;
             }
@@ -250,7 +255,7 @@ namespace WPEFramework {
             // Import devices from the AS file into the cache.
             const Core::hresult importResult = writeCacheFromFilesystemPersistence();
             if (Core::ERROR_NONE != importResult) {
-                LOGWARN("performMigration: failed to import from filesystem persistence, hresult=%d", importResult);
+                LOGERR("performMigration: failed to import from filesystem persistence, hresult=%d", importResult);
                 _migrationLock.Unlock();
                 return importResult;
             }
@@ -260,7 +265,7 @@ namespace WPEFramework {
 
             const Core::hresult writeResult = writeStorageFromCache();
             if (Core::ERROR_NONE != writeResult) {
-                LOGWARN("performMigration: failed to persist imported data to PersistentStore, hresult=%d", writeResult);
+                LOGERR("performMigration: failed to persist imported data to PersistentStore, hresult=%d", writeResult);
                 _isMigrated = false;
                 _migrationLock.Unlock();
                 return writeResult;
@@ -268,8 +273,10 @@ namespace WPEFramework {
 
             const Core::hresult writeChecksumResult = writeFsChecksumToStorage(newChecksum);
             if (Core::ERROR_NONE != writeChecksumResult) {
-                LOGWARN("performMigration: failed to persist checksum, hresult=%d", writeChecksumResult);
-                // _isMigrated remains true — data was persisted successfully; checksum will be retried on next call.
+                LOGERR("performMigration: failed to persist checksum, hresult=%d", writeChecksumResult);
+                _isMigrated = false;
+                 _migrationLock.Unlock();
+                 return writeChecksumResult;
             }
 
             LOGINFO("performMigration: %s succeeded", firstTime ? "initial migration" : "re-sync");
@@ -469,9 +476,14 @@ namespace WPEFramework {
         Core::hresult BluetoothDeviceManager::writeStorageFromCache()
         {
 #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
-            if (!_isMigrated) {
-                LOGINFO("writeStorageFromCache skipped: migration has not been performed yet");
-                return Core::ERROR_NONE;
+            {
+                _migrationLock.Lock();
+                const bool isMigrated = _isMigrated;
+                _migrationLock.Unlock();
+                if (!isMigrated) {
+                    LOGINFO("writeStorageFromCache skipped: migration has not been performed yet");
+                    return Core::ERROR_NONE;
+                }
             }
 #endif
 
@@ -556,6 +568,8 @@ namespace WPEFramework {
             const Core::hresult storageResult = updateCacheFromStorage();
             if ((Core::ERROR_NONE != storageResult) && !missingFromPersistentStore(storageResult)) {
                 LOGERR("PersistentStore read failed (hresult=%d); aborting init to avoid data loss", storageResult);
+                _service->Release();
+                _service = nullptr;
                 return storageResult;
             }
 
@@ -563,8 +577,11 @@ namespace WPEFramework {
             {
                 std::string storedChecksum;
                 const Core::hresult checksumResult = readFsChecksumFromStorage(storedChecksum);
+                _migrationLock.Lock();
                 _isMigrated = (Core::ERROR_NONE == checksumResult);
-                LOGINFO("Migration state at init: _isMigrated=%s", _isMigrated ? "true" : "false");
+                const bool isMigrated = _isMigrated;
+                _migrationLock.Unlock();
+                LOGINFO("Migration state at init: _isMigrated=%s", isMigrated ? "true" : "false");
             }
 #endif
 
@@ -574,12 +591,16 @@ namespace WPEFramework {
                 // will be unavailable for everything else. Fail init so the plugin is not
                 // activated in a broken state.
                 LOGERR("Failed to update cache from device (hresult=%d); aborting init", deviceResult);
+                _service->Release();
+                _service = nullptr;
                 return deviceResult;
             }
 
             const Core::hresult writeResult = writeStorageFromCache();
             if (Core::ERROR_NONE != writeResult) {
                 LOGWARN("Failed to write cache to PersistentStore, hresult=%d", writeResult);
+                _service->Release();
+                _service = nullptr;
                 return writeResult;
             }
 
