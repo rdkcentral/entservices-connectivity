@@ -23,7 +23,7 @@ Migration is **client-triggered**, not automatic. The plugin does **not** auto-m
 
 The plugin tracks whether migration has been performed. Migration state becomes active after a successful `performMigration` call and is cleared by `clearMigration`. Key observable effects:
 
-- `setAutoConnect` is **rejected** (returns `success: false`) when migration has not been performed.
+- `setAutoConnect` is **rejected** (returns a JSON-RPC error response) when migration has not been performed.
 - Pairing, unpairing, and `setAutoConnect` changes will **not** be written to PersistentStore or the AS file when migration has not been performed.
 - `getAutoConnect` always responds normally, regardless of migration state.
 
@@ -91,7 +91,7 @@ curl --header "Content-Type: application/json" --request POST \
 
 For any test cases requiring a change in the bluetooth device's auto-connect status, the guide UI should **NOT** be used. The UI isn't currently using the new Bluetooth Thunder plug-in APIs to set the auto-connect status, and as such would not be reflected in PersistentStore. Use the `setAutoConnect` curl command from the Curl Reference Commands section above.
 
-`setAutoConnect` will be **rejected** (returns `success: false`) if `performMigration` has not been called first in the current boot session, or if `clearMigration` has been called since the last `performMigration`.
+`setAutoConnect` will be **rejected** (returns a JSON-RPC error: `{"error":{"code":1,"message":"ERROR_GENERAL"}}`) if `performMigration` has not been called first in the current boot session, or if `clearMigration` has been called since the last `performMigration`.
 
 ---
 
@@ -124,7 +124,7 @@ Note the device addresses, `autoConnectStatus`, and `lastConnectionTimeUTC` valu
    curl --header "Content-Type: application/json" --request POST \
      --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.PersistentStore.getValue","params":{"namespace":"Bluetooth","key":"deviceInfo"}}' \
      http://127.0.0.1:9998/jsonrpc
-   # Expected: success:false or empty/error response
+   # Expected: JSON-RPC error response (key not found)
    ```
 3. Call `performMigration`:
    ```bash
@@ -400,7 +400,7 @@ curl --header "Content-Type: application/json" --request POST \
    ```
 
 **Expected Results:**
-- Response returns `{"success": false}`.
+- Response returns a JSON-RPC error: `{"error":{"code":1,"message":"ERROR_GENERAL"}}`.
 - No changes are made to PS.
 
 **Expected Log Entries:**
@@ -454,7 +454,7 @@ curl --header "Content-Type: application/json" --request POST \
    ```
 
 **Expected Results:**
-- `setAutoConnect` returns `{"success": false}`.
+- `setAutoConnect` returns a JSON-RPC error: `{"error":{"code":1,"message":"ERROR_GENERAL"}}`.
 - Rejection is immediate without attempting a PS write.
 
 **Expected Log Entries:**
@@ -692,7 +692,7 @@ This test simulates the "IUI LD Disabled" scenario from the design, where IUI ca
    ```
 3. Verify PS `deviceInfo` and `fsChecksumAtLastSync` are gone.
 4. Verify the AS file is **unchanged** (clearing only affects PS, not the AS file).
-5. Attempt `setAutoConnect` for any device — verify it is rejected.
+5. Attempt `setAutoConnect` for any device — verify it returns a JSON-RPC error: `{"error":{"code":1,"message":"ERROR_GENERAL"}}`.
 6. Downgrade to old firmware (or simulate old-firmware behaviour by verifying only the AS file is used).
 7. Verify all devices in the AS file are recognised.
 
@@ -764,7 +764,7 @@ This test simulates the "IUI LD Disabled" scenario from the design, where IUI ca
 2. After boot, attempt `setAutoConnect` for any paired device **before** calling `performMigration`.
 
 **Expected Results:**
-- `setAutoConnect` returns `{"success": false}`.
+- `setAutoConnect` returns a JSON-RPC error: `{"error":{"code":1,"message":"ERROR_GENERAL"}}`.
 - The plugin correctly identifies on boot that no prior migration has been performed (no checksum key in PersistentStore) and enforces the guard.
 
 **Expected Log Entries on boot** (search device logs for this exact string):
