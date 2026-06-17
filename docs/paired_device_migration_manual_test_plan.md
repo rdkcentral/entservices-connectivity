@@ -1,6 +1,6 @@
 # Bluetooth Migration & Rollback — Manual Test Plan
 
-**Ticket:** RDKEMW-17454 / CPESP-9452  
+**Ticket:** RDKEMW-20057 / CPESP-9979
 **Feature Flag:** `BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION` (compile-time)  
 **AS Persistent File:** `/opt/persistent/sky/sky-asperipherals-bluetoothdevices.json`  
 **PersistentStore Location:** namespace `Bluetooth`, key `deviceInfo`  
