@@ -1410,23 +1410,71 @@ TEST_F(Bluetooth_L2Test, BluetoothOnPlaybackNewTrack)
  * Write a valid AS-format JSON file to the filesystem persistence path, then
  * call performMigration. The plugin must import the devices and report
  * success=true.
+ *
+ * writeCacheFromFilesystemPersistence() calls BTRMGR_GetPairedDevices to
+ * build an addr→deviceID map; any device whose address is not returned by
+ * that call is silently skipped. The default fixture mock returns 0 paired
+ * devices, so without overriding it the cache stays empty and the test can
+ * pass without having imported anything. This test therefore overrides the
+ * mock to return the matching device, drives the addr→ID resolution, and
+ * then asserts the imported autoConnectStatus=true flag is observable via
+ * getAutoConnect.
+ *
+ * BTRMGR_GetPairedDevices is called twice during performMigration:
+ *   1. writeCacheFromFilesystemPersistence() — builds addr→deviceID map
+ *   2. updateCacheFromDevice(backfillOnly=true) — backfills name / type
+ * The ON_CALL default action covers both calls.
  * ====================================================================== */
 TEST_F(Bluetooth_L2Test, BluetoothPerformMigration_Success_FilePresent)
 {
     static constexpr const char* kFilePath = "/tmp/paired_bluetooth_devices.json";
 
-    /* Write a valid AS filesystem persistence payload. */
+    /* Write a valid AS filesystem persistence payload.
+     * deviceAddr must match m_deviceAddress returned by the mock below. */
     std::ofstream fs(kFilePath, std::ios::trunc);
     ASSERT_TRUE(fs.is_open()) << "Cannot create test filesystem persistence file";
-    fs << "{\"pairedDevices\":[{\"deviceAddr\":\"AA:BB:CC:DD:EE:FF\","
-       << "\"deviceType\":\"LOUDSPEAKER\",\"autoConnectStatus\":true,"
+    fs << "{\"pairedDevices\":[{\"deviceAddr\":\"" << TEST_DEVICE_ADDR << "\","
+       << "\"deviceType\":\"" << TEST_DEVICE_TYPE_STR << "\",\"autoConnectStatus\":true,"
        << "\"lastConnectionTimeUTC\":0}]}";
     fs.close();
+
+    /* Override the default (0 devices) with a device whose address matches
+     * the filesystem payload so the addr→deviceID resolution succeeds. */
+    ON_CALL(*p_btmgrImplMock, BTRMGR_GetPairedDevices(::testing::_, ::testing::_))
+        .WillByDefault(::testing::Invoke(
+            [](unsigned char, BTRMGR_PairedDevicesList_t* pList) -> BTRMGR_Result_t {
+                pList->m_numOfDevices = 1;
+                pList->m_deviceProperty[0].m_deviceHandle             = TEST_DEVICE_HANDLE;
+                pList->m_deviceProperty[0].m_deviceType               = BTRMGR_DEVICE_TYPE_LOUDSPEAKER;
+                pList->m_deviceProperty[0].m_isConnected              = 0;
+                pList->m_deviceProperty[0].m_isLastConnectedDevice    = 0;
+                pList->m_deviceProperty[0].m_ui32DevClassBtSpec       = 0x240404;
+                pList->m_deviceProperty[0].m_ui16DevAppearanceBleSpec = 0;
+                strncpy(pList->m_deviceProperty[0].m_name,
+                        TEST_DEVICE_NAME, BTRMGR_NAME_LEN_MAX - 1);
+                strncpy(pList->m_deviceProperty[0].m_deviceAddress,
+                        TEST_DEVICE_ADDR, BTRMGR_NAME_LEN_MAX - 1);
+                return BTRMGR_RESULT_SUCCESS;
+            }));
+
+    ON_CALL(*p_btmgrImplMock, BTRMGR_GetDeviceTypeAsString(BTRMGR_DEVICE_TYPE_LOUDSPEAKER))
+        .WillByDefault(::testing::Return(TEST_DEVICE_TYPE_STR));
 
     JsonObject result;
     uint32_t status = InvokeServiceMethod("org.rdk.Bluetooth.1", "performMigration", result);
     EXPECT_EQ(Core::ERROR_NONE, status);
     EXPECT_TRUE(result["success"].Boolean());
+
+    /* Verify the imported autoConnectStatus=true is observable via getAutoConnect.
+     * If the addr→deviceID resolution was skipped (e.g. BTRMGR_GetPairedDevices
+     * returned 0 devices), the cache would be empty and getAutoConnect would
+     * return an error rather than the imported flag. */
+    JsonObject acParams, acResult;
+    acParams["deviceID"] = std::to_string(TEST_DEVICE_HANDLE);
+    status = InvokeServiceMethod("org.rdk.Bluetooth.1", "getAutoConnect", acParams, acResult);
+    EXPECT_EQ(Core::ERROR_NONE, status);
+    EXPECT_TRUE(acResult["success"].Boolean());
+    EXPECT_TRUE(acResult["autoconnect"].Boolean());
 
     std::remove(kFilePath);
 }
