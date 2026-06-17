@@ -70,6 +70,10 @@ const string WPEFramework::Plugin::Bluetooth::METHOD_GET_DEVICE_VOLUME_MUTE_INFO
 const string WPEFramework::Plugin::Bluetooth::METHOD_SET_DEVICE_VOLUME_MUTE_INFO = "setDeviceVolumeMuteInfo";
 const string WPEFramework::Plugin::Bluetooth::METHOD_SET_AUTO_CONNECT = "setAutoConnect";
 const string WPEFramework::Plugin::Bluetooth::METHOD_GET_AUTO_CONNECT_STATUS = "getAutoConnect";
+#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+const string WPEFramework::Plugin::Bluetooth::METHOD_PERFORM_MIGRATION = "performMigration";
+const string WPEFramework::Plugin::Bluetooth::METHOD_CLEAR_MIGRATION = "clearMigration";
+#endif
 
 const string WPEFramework::Plugin::Bluetooth::EVT_STATUS_CHANGED = "onStatusChanged";
 const string WPEFramework::Plugin::Bluetooth::EVT_PAIRING_REQUEST = "onPairingRequest";
@@ -226,6 +230,10 @@ namespace WPEFramework
             Register(METHOD_SET_DEVICE_VOLUME_MUTE_INFO, &Bluetooth::setDeviceVolumeMuteInfoWrapper, this);
             Register(METHOD_SET_AUTO_CONNECT, &Bluetooth::setAutoConnectWrapper, this);
             Register(METHOD_GET_AUTO_CONNECT_STATUS, &Bluetooth::getAutoConnectWrapper, this);
+#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+            Register(METHOD_PERFORM_MIGRATION, &Bluetooth::performMigrationWrapper, this);
+            Register(METHOD_CLEAR_MIGRATION, &Bluetooth::clearMigrationWrapper, this);
+#endif
 
             Utils::IARM::init();
 
@@ -1969,6 +1977,30 @@ namespace WPEFramework
 
         //
         /// Registered methods end
+
+#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+        uint32_t Bluetooth::performMigrationWrapper(const JsonObject& parameters, JsonObject& response)
+        {
+            LOGINFOMETHOD();
+            UNUSED(parameters);
+            const Core::hresult result = m_bluetoothDeviceManager.performMigration();
+            if (Core::ERROR_NONE != result) {
+                LOGERR("performMigration failed, hresult=%d", result);
+            }
+            returnResponse(Core::ERROR_NONE == result);
+        }
+
+        uint32_t Bluetooth::clearMigrationWrapper(const JsonObject& parameters, JsonObject& response)
+        {
+            LOGINFOMETHOD();
+            UNUSED(parameters);
+            const Core::hresult result = m_bluetoothDeviceManager.clearMigration();
+            if (Core::ERROR_NONE != result) {
+                LOGERR("clearMigration failed, hresult=%d", result);
+            }
+            returnResponse(Core::ERROR_NONE == result);
+        }
+#endif
 
         void Bluetooth::onPowerModeChanged(const WPEFramework::Exchange::IPowerManager::PowerState currentState, const WPEFramework::Exchange::IPowerManager::PowerState newState)
         {
