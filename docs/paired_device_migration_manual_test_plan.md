@@ -91,7 +91,7 @@ curl --header "Content-Type: application/json" --request POST \
 
 For any test cases requiring a change in the bluetooth device's auto-connect status, the guide UI should **NOT** be used. The UI isn't currently using the new Bluetooth Thunder plug-in APIs to set the auto-connect status, and as such would not be reflected in PersistentStore. Use the `setAutoConnect` curl command from the Curl Reference Commands section above.
 
-`setAutoConnect` will be **rejected** (returns a JSON-RPC error: `{"error":{"code":1,"message":"ERROR_GENERAL"}}`) if `performMigration` has not been called first in the current boot session, or if `clearMigration` has been called since the last `performMigration`.
+`setAutoConnect` will be **rejected** (returns a JSON-RPC error: `{"error":{"code":1,"message":"ERROR_GENERAL"}}`) until a successful `performMigration` has occurred since the last `clearMigration`, or equivalently, until the `fsChecksumAtLastSync` key is present in PersistentStore. Because the plugin re-derives migration state from that key at init, migration remains enabled across reboots without needing `performMigration` to be called again.
 
 ---
 

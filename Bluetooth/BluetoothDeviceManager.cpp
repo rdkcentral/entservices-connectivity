@@ -43,19 +43,19 @@ namespace WPEFramework {
 
 #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
 
-        Core::hresult BluetoothDeviceManager::writeCacheFromFilesystemPersistence()
+        Core::hresult BluetoothDeviceManager::writeCacheFromFilesystemPersistence(const std::string& rawContent)
         {
-            BluetoothPersistenceAdapter adapter;
-
-            std::vector<BluetoothDeviceInfo> importedDevices;
-            const Core::hresult result = adapter.Read(importedDevices);
-            if (Core::ERROR_NOT_EXIST == result) {
-                // Missing file is treated as having no entries — clear the cache and return success.
+            if (rawContent.empty()) {
+                // Empty raw content means no file was found — treat as having no entries.
                 _adminLock.Lock();
                 _pairedDeviceCache.clear();
                 _adminLock.Unlock();
                 return Core::ERROR_NONE;
             }
+
+            BluetoothPersistenceAdapter adapter;
+            std::vector<BluetoothDeviceInfo> importedDevices;
+            const Core::hresult result = adapter.Parse(rawContent, importedDevices);
             if (Core::ERROR_NONE != result) {
                 return result;
             }
@@ -219,7 +219,7 @@ namespace WPEFramework {
 
         Core::hresult BluetoothDeviceManager::performMigration()
         {
-            _migrationLock.Lock();
+            Core::SafeSyncType<Core::CriticalSection> lock(_migrationLock);
 
             std::string storedChecksum;
             const Core::hresult readChecksumResult = readFsChecksumFromStorage(storedChecksum);
@@ -227,7 +227,6 @@ namespace WPEFramework {
 
             if ((Core::ERROR_NONE != readChecksumResult) && !firstTime) {
                 LOGERR("performMigration: failed to read stored checksum, hresult=%d", readChecksumResult);
-                _migrationLock.Unlock();
                 return readChecksumResult;
             }
 
@@ -240,7 +239,6 @@ namespace WPEFramework {
                 // rawContent remains "" — fall through to checksum comparison and migration
             } else if (Core::ERROR_NONE != readRawResult) {
                 LOGERR("performMigration: failed to read AS filesystem persistence source, hresult=%d", readRawResult);
-                _migrationLock.Unlock();
                 return readRawResult;
             }
 
@@ -248,15 +246,13 @@ namespace WPEFramework {
 
             if (!firstTime && (newChecksum == storedChecksum)) {
                 LOGINFO("performMigration: AS file unchanged (checksum match), no sync needed");
-                _migrationLock.Unlock();
                 return Core::ERROR_NONE;
             }
 
             // Import devices from the AS file into the cache.
-            const Core::hresult importResult = writeCacheFromFilesystemPersistence();
+            const Core::hresult importResult = writeCacheFromFilesystemPersistence(rawContent);
             if (Core::ERROR_NONE != importResult) {
                 LOGERR("performMigration: failed to import from filesystem persistence, hresult=%d", importResult);
-                _migrationLock.Unlock();
                 return importResult;
             }
 
@@ -276,7 +272,6 @@ namespace WPEFramework {
             if (Core::ERROR_NONE != writeResult) {
                 LOGERR("performMigration: failed to persist imported data to PersistentStore, hresult=%d", writeResult);
                 _isMigrated.store(false);
-                _migrationLock.Unlock();
                 return writeResult;
             }
 
@@ -284,29 +279,25 @@ namespace WPEFramework {
             if (Core::ERROR_NONE != writeChecksumResult) {
                 LOGERR("performMigration: failed to persist checksum, hresult=%d", writeChecksumResult);
                 _isMigrated.store(false);
-                _migrationLock.Unlock();
                 return writeChecksumResult;
             }
 
             LOGINFO("performMigration: %s succeeded", firstTime ? "initial migration" : "re-sync");
-            _migrationLock.Unlock();
             return Core::ERROR_NONE;
         }
 
         Core::hresult BluetoothDeviceManager::clearMigration()
         {
-            _migrationLock.Lock();
+            Core::SafeSyncType<Core::CriticalSection> lock(_migrationLock);
 
             if (_service == nullptr) {
                 LOGERR("clearMigration: service is null");
-                _migrationLock.Unlock();
                 return Core::ERROR_GENERAL;
             }
 
             Exchange::IStore* pPersistentStore = _service->QueryInterfaceByCallsign<Exchange::IStore>(PERSISTENT_STORE_CALLSIGN);
             if (pPersistentStore == nullptr) {
                 LOGERR("clearMigration: failed to get PersistentStore interface");
-                _migrationLock.Unlock();
                 return Core::ERROR_GENERAL;
             }
 
@@ -314,7 +305,6 @@ namespace WPEFramework {
             if ((Core::ERROR_NONE != result) && !missingFromPersistentStore(result)) {
                 LOGERR("clearMigration: failed to delete deviceInfo from PersistentStore, hresult=%d", result);
                 pPersistentStore->Release();
-                _migrationLock.Unlock();
                 return result;
             }
 
@@ -322,7 +312,6 @@ namespace WPEFramework {
             if ((Core::ERROR_NONE != result) && !missingFromPersistentStore(result)) {
                 LOGERR("clearMigration: failed to delete fsChecksumAtLastSync from PersistentStore, hresult=%d", result);
                 pPersistentStore->Release();
-                _migrationLock.Unlock();
                 return result;
             }
 
@@ -335,7 +324,6 @@ namespace WPEFramework {
             _isMigrated.store(false);
 
             LOGINFO("clearMigration: PersistentStore cleared and migration state reset");
-            _migrationLock.Unlock();
             return Core::ERROR_NONE;
         }
 #endif

@@ -181,17 +181,12 @@ Core::hresult BluetoothPersistenceAdapter::Parse(const std::string& payload, std
 Core::hresult BluetoothPersistenceAdapter::Read(std::vector<BluetoothDeviceInfo>& devices) const
 {
     errno = 0;
-    if (access(_filesystemPersistencePath.c_str(), F_OK) != 0) {
+    std::ifstream input(_filesystemPersistencePath, std::ios::in | std::ios::binary);
+    if (!input.is_open()) {
         if (errno == ENOENT) {
             LOGINFO("filesystem persistence file does not exist: %s", _filesystemPersistencePath.c_str());
             return Core::ERROR_NOT_EXIST;
         }
-        LOGWARN("filesystem persistence file is not accessible: %s", _filesystemPersistencePath.c_str());
-        return Core::ERROR_GENERAL;
-    }
-
-    std::ifstream input(_filesystemPersistencePath, std::ios::in | std::ios::binary);
-    if (!input.is_open()) {
         LOGWARN("filesystem persistence file is not readable: %s", _filesystemPersistencePath.c_str());
         return Core::ERROR_GENERAL;
     }
@@ -225,17 +220,12 @@ Core::hresult BluetoothPersistenceAdapter::Read(std::vector<BluetoothDeviceInfo>
 Core::hresult BluetoothPersistenceAdapter::ReadRaw(std::string& content) const
 {
     errno = 0;
-    if (access(_filesystemPersistencePath.c_str(), F_OK) != 0) {
+    std::ifstream input(_filesystemPersistencePath, std::ios::in | std::ios::binary);
+    if (!input.is_open()) {
         if (errno == ENOENT) {
             LOGINFO("filesystem persistence file does not exist: %s", _filesystemPersistencePath.c_str());
             return Core::ERROR_NOT_EXIST;
         }
-        LOGWARN("filesystem persistence file is not accessible: %s", _filesystemPersistencePath.c_str());
-        return Core::ERROR_GENERAL;
-    }
-
-    std::ifstream input(_filesystemPersistencePath, std::ios::in | std::ios::binary);
-    if (!input.is_open()) {
         LOGWARN("filesystem persistence file is not readable: %s", _filesystemPersistencePath.c_str());
         return Core::ERROR_GENERAL;
     }

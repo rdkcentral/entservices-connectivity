@@ -87,7 +87,7 @@ namespace WPEFramework {
                 Core::hresult updateCacheFromDevice(bool backfillOnly = false);
                 Core::hresult writeStorageFromCache();
         #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
-                Core::hresult writeCacheFromFilesystemPersistence();
+                Core::hresult writeCacheFromFilesystemPersistence(const std::string& rawContent);
                 void writeFilesystemPersistenceFromCache();
                 std::string computeFNV1aChecksum(const std::string& content) const;
                 Core::hresult readFsChecksumFromStorage(std::string& checksum) const;

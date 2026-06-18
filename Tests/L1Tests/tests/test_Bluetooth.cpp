@@ -1245,6 +1245,18 @@ protected:
 
         return true;
     }
+
+    static std::string computeTestFNV1a(const std::string& content)
+    {
+        static constexpr uint64_t FNV_OFFSET_BASIS = 14695981039346656037ULL;
+        static constexpr uint64_t FNV_PRIME         = 1099511628211ULL;
+        uint64_t hash = FNV_OFFSET_BASIS;
+        for (const unsigned char c : content) {
+            hash ^= static_cast<uint64_t>(c);
+            hash *= FNV_PRIME;
+        }
+        return std::to_string(hash);
+    }
 };
 
 TEST_F(BluetoothLegacyPersistenceMigrationParseTest, legacyPersistenceMigrationStorePresent_BypassesFilesystemPersistenceImport)
@@ -1915,6 +1927,102 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, performMigrationWrapper_Set
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
         _T("{\"deviceID\":\"123\",\"enable\":true}"), response));
     EXPECT_TRUE(response.find("\"success\":true") != string::npos);
+}
+
+/* -------------------------------------------------------------------------
+ * performMigration — idempotency: checksum match skips all store writes
+ * When the stored checksum equals the FNV-1a hash of the current filesystem
+ * file content, performMigration must return success=true immediately without
+ * writing deviceInfo or fsChecksumAtLastSync to PersistentStore.
+ * ---------------------------------------------------------------------- */
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, performMigrationWrapper_Idempotency_ChecksumMatchIsNoOp)
+{
+    const std::string payload =
+        "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"deviceType\":\"HEADPHONES\","
+        "\"autoConnectStatus\":true,\"lastConnectionTimeUTC\":0}]}";
+
+    if (!writeFilesystemPersistencePayload(payload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    // Initialize with no stored checksum so _isMigrated=false;
+    // writeStorageFromCache is skipped during init, leaving the file content unchanged.
+    EXPECT_TRUE(plugin->Initialize(&service).empty());
+
+    // Arrange: PersistentStore holds a checksum that matches the current file exactly.
+    const std::string matchingChecksum = computeTestFNV1a(payload);
+    EXPECT_CALL(*p_storeMock, GetValue(::testing::_, PERSISTENT_STORE_KEY_FS_CHECKSUM, ::testing::_))
+        .WillOnce(::testing::DoAll(
+            ::testing::SetArgReferee<2>(matchingChecksum),
+            ::testing::Return(Core::ERROR_NONE)));
+
+    // Neither device data nor the checksum must be written on the no-op path.
+    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, PERSISTENT_STORE_KEY_DEVICE_INFO, ::testing::_))
+        .Times(0);
+    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, PERSISTENT_STORE_KEY_FS_CHECKSUM, ::testing::_))
+        .Times(0);
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":true") != string::npos);
+}
+
+/* -------------------------------------------------------------------------
+ * performMigration — re-sync: checksum mismatch triggers full re-import
+ * When the filesystem file has changed since the last migration run (the
+ * FNV-1a hash of the current file differs from the stored checksum),
+ * performMigration must re-import devices from the new file content and
+ * write both the updated device data and the new checksum to PersistentStore.
+ * ---------------------------------------------------------------------- */
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, performMigrationWrapper_FileChanged_ResyncReimportsDataAndUpdatesChecksum)
+{
+    // V1 is the content that was previously migrated; its checksum is "stored".
+    const std::string payloadV1 =
+        "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"deviceType\":\"HEADPHONES\","
+        "\"autoConnectStatus\":true,\"lastConnectionTimeUTC\":0}]}";
+    const std::string storedChecksumFromV1 = computeTestFNV1a(payloadV1);
+
+    // V2 represents the file as it exists now — the autoConnectStatus has changed.
+    const std::string payloadV2 =
+        "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"deviceType\":\"HEADPHONES\","
+        "\"autoConnectStatus\":false,\"lastConnectionTimeUTC\":1700000000}]}";
+
+    if (!writeFilesystemPersistencePayload(payloadV2)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    // Initialize with no stored checksum so _isMigrated=false during init;
+    // writeStorageFromCache is skipped during init, leaving the file content unchanged.
+    EXPECT_TRUE(plugin->Initialize(&service).empty());
+
+    // Arrange: PersistentStore holds the checksum for V1, but the file now has V2 content.
+    // computeTestFNV1a(payloadV2) != storedChecksumFromV1 → mismatch → re-sync triggered.
+    EXPECT_CALL(*p_storeMock, GetValue(::testing::_, PERSISTENT_STORE_KEY_FS_CHECKSUM, ::testing::_))
+        .WillOnce(::testing::DoAll(
+            ::testing::SetArgReferee<2>(storedChecksumFromV1),
+            ::testing::Return(Core::ERROR_NONE)));
+
+    std::string capturedDeviceInfo;
+    std::string capturedNewChecksum;
+
+    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, PERSISTENT_STORE_KEY_DEVICE_INFO, ::testing::_))
+        .WillOnce(::testing::DoAll(
+            ::testing::SaveArg<2>(&capturedDeviceInfo),
+            ::testing::Return(Core::ERROR_NONE)));
+    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, PERSISTENT_STORE_KEY_FS_CHECKSUM, ::testing::_))
+        .WillOnce(::testing::DoAll(
+            ::testing::SaveArg<2>(&capturedNewChecksum),
+            ::testing::Return(Core::ERROR_NONE)));
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":true") != string::npos);
+
+    // Device info for device "123" must have been written.
+    EXPECT_TRUE(capturedDeviceInfo.find("\"deviceID\":\"123\"") != string::npos);
+
+    // The written checksum must equal the FNV-1a hash of V2 and differ from V1's checksum.
+    const std::string expectedNewChecksum = computeTestFNV1a(payloadV2);
+    EXPECT_EQ(capturedNewChecksum, expectedNewChecksum);
+    EXPECT_NE(capturedNewChecksum, storedChecksumFromV1);
 }
 
 /* -------------------------------------------------------------------------

@@ -37,12 +37,11 @@ public:
 
     Core::hresult Read(std::vector<BluetoothDeviceInfo>& devices) const;
     Core::hresult ReadRaw(std::string& content) const;
+    Core::hresult Parse(const std::string& payload, std::vector<BluetoothDeviceInfo>& devices) const;
     Core::hresult Write(const std::unordered_map<std::string, BluetoothDeviceInfo>& deviceCache) const;
 
 private:
     std::string _filesystemPersistencePath;
-
-    Core::hresult Parse(const std::string& payload, std::vector<BluetoothDeviceInfo>& devices) const;
 };
 
 } // namespace Plugin

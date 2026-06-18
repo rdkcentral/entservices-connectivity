@@ -14,29 +14,35 @@ Bluetooth initialization SHALL read PersistentStore device info to seed the in-m
 - **THEN** no migration import is attempted
 - **THEN** initialization continues with baseline reconciliation flow
 
-### Requirement: `performMigration` SHALL follow store-first import semantics
-The `performMigration()` API SHALL read PersistentStore device info first and SHALL only execute migration import from the filesystem source when PersistentStore device info is absent.
+### Requirement: `performMigration` SHALL use checksum-based import semantics
+The `performMigration()` API SHALL determine whether to import from the filesystem source solely by comparing the current AS file checksum against the `fsChecksumAtLastSync` value stored in PersistentStore. The presence or absence of `deviceInfo` in PersistentStore is not a factor in this decision.
 
-#### Scenario: PersistentStore data present
-- **WHEN** `performMigration()` is called and valid Bluetooth/deviceInfo data exists in PersistentStore
+#### Scenario: First call (no stored checksum)
+- **WHEN** `performMigration()` is called and `fsChecksumAtLastSync` is absent from PersistentStore
+- **THEN** migration data is imported from the filesystem source into cache and persisted to PersistentStore
+- **THEN** `fsChecksumAtLastSync` is written with the checksum of the imported file
+
+#### Scenario: Subsequent call with unchanged AS file
+- **WHEN** `performMigration()` is called and the AS file checksum matches the stored `fsChecksumAtLastSync`
 - **THEN** filesystem migration import is skipped
-- **THEN** `performMigration()` returns indicating migration was not needed
+- **THEN** `performMigration()` returns success indicating no sync was needed
 
-#### Scenario: PersistentStore data absent with valid migration source
-- **WHEN** `performMigration()` is called, no Bluetooth/deviceInfo data exists in PersistentStore, and the filesystem source payload is valid
-- **THEN** migration data is imported into cache and persisted to PersistentStore
+#### Scenario: Subsequent call with changed AS file
+- **WHEN** `performMigration()` is called and the AS file checksum differs from the stored `fsChecksumAtLastSync`
+- **THEN** migration data is re-imported from the filesystem source into cache and persisted to PersistentStore
+- **THEN** `fsChecksumAtLastSync` is updated with the new checksum
 
-#### Scenario: PersistentStore data absent with missing filesystem source
-- **WHEN** `performMigration()` is called, no Bluetooth/deviceInfo data exists in PersistentStore, and the filesystem source file does not exist
+#### Scenario: Missing filesystem source
+- **WHEN** `performMigration()` is called and the filesystem source file does not exist
 - **THEN** the missing file is treated as an empty payload (zero devices)
-- **THEN** `performMigration()` proceeds with an empty cache and returns success (`ERROR_NONE`)
+- **THEN** `performMigration()` proceeds with the empty payload and returns success (`ERROR_NONE`)
 
-#### Scenario: PersistentStore data absent with unreadable or malformed filesystem source
-- **WHEN** `performMigration()` is called, no Bluetooth/deviceInfo data exists in PersistentStore, and the filesystem source file exists but cannot be read (e.g., I/O error, file too large) or cannot be parsed (malformed JSON)
+#### Scenario: Unreadable or malformed filesystem source
+- **WHEN** `performMigration()` is called and the filesystem source file exists but cannot be read (e.g., I/O error) or cannot be parsed (malformed JSON)
 - **THEN** `performMigration()` returns an error and aborts migration to prevent data loss
 
-#### Scenario: PersistentStore read fails with unexpected error
-- **WHEN** `performMigration()` encounters a non-absent error reading PersistentStore device info (e.g., storage interface unavailable)
+#### Scenario: Stored checksum read fails with unexpected error
+- **WHEN** `performMigration()` encounters a non-absent error reading `fsChecksumAtLastSync` from PersistentStore (e.g., storage interface unavailable)
 - **THEN** `performMigration()` aborts and returns an error to prevent data loss
 - **THEN** filesystem migration import is not attempted
 
