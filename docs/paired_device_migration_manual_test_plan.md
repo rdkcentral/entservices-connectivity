@@ -144,17 +144,18 @@ Note the device addresses, `autoConnectStatus`, and `lastConnectionTimeUTC` valu
      --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.PersistentStore.getValue","params":{"namespace":"Bluetooth","key":"fsChecksumAtLastSync"}}' \
      http://127.0.0.1:9998/jsonrpc
    ```
-6. Verify the AS file is unchanged (read-only during migration):
+6. Verify the AS file is semantically equivalent to its pre-migration state. Note: `performMigration` calls `writeFilesystemPersistenceFromCache()` after a successful PersistentStore write, so the file may be rewritten or reformatted (canonicalized) — byte equality and mtime checks are **not** appropriate here. Instead, compare content against the values noted in Setup:
    ```bash
    cat /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
    ```
+   Confirm that every device address, `autoConnectStatus`, and `lastConnectionTimeUTC` recorded before migration is still present and correct.
 
 **Expected Results:**
 - `performMigration` returns `{"success": true}`.
 - `Bluetooth/deviceInfo` is populated with device entries matching those from the AS file.
 - `Bluetooth/fsChecksumAtLastSync` contains a non-empty checksum string.
 - Device `autoConnectStatus` and `lastConnectionTimeUTC` values from the AS file are preserved in PS.
-- The AS file is unmodified.
+ - The AS file may be re-written by rollback-sync, but it should remain semantically equivalent (same pairedDevices data unless expected backfill/normalization occurs).
 
 **Expected Log Entries:**
 - `performMigration: initial migration succeeded`

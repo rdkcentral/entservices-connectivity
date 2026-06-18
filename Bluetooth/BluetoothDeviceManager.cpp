@@ -234,10 +234,7 @@ namespace WPEFramework {
             BluetoothPersistenceAdapter adapter;
             std::string rawContent;
             const Core::hresult readRawResult = adapter.ReadRaw(rawContent);
-            if (Core::ERROR_NOT_EXIST == readRawResult) {
-                LOGINFO("performMigration: AS filesystem persistence source not found, treating as empty");
-                // rawContent remains "" — fall through to checksum comparison and migration
-            } else if (Core::ERROR_NONE != readRawResult) {
+            if ((Core::ERROR_NONE != readRawResult) && (Core::ERROR_NOT_EXIST != readRawResult)) {
                 LOGERR("performMigration: failed to read AS filesystem persistence source, hresult=%d", readRawResult);
                 return readRawResult;
             }
@@ -246,6 +243,7 @@ namespace WPEFramework {
 
             if (!firstTime && (newChecksum == storedChecksum)) {
                 LOGINFO("performMigration: AS file unchanged (checksum match), no sync needed");
+                _isMigrated.store(true);
                 return Core::ERROR_NONE;
             }
 
