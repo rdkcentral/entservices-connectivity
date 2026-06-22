@@ -232,7 +232,7 @@ Note the device addresses, `autoConnectStatus`, and `lastConnectionTimeUTC` valu
 **Precondition:** `performMigration` has been successfully called. `deviceInfo` is present in PS.
 
 **Steps:**
-1. Confirm both PS keys exist (see Curl Reference Commands).
+1. Confirm the PS key `Bluetooth/deviceInfo` exists (see Curl Reference Commands).
 2. Call `clearMigration`:
    ```bash
    curl --header "Content-Type: application/json" --request POST \
