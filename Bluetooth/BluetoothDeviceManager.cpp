@@ -220,6 +220,11 @@ namespace WPEFramework {
             LOGINFO("clearMigration: PersistentStore cleared and migration state reset");
             return Core::ERROR_NONE;
         }
+
+        bool BluetoothDeviceManager::isMigrated() const
+        {
+            return _isMigrated.load();
+        }
 #endif
 
         Core::hresult BluetoothDeviceManager::updateCacheFromStorage()
