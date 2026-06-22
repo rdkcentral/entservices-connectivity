@@ -948,9 +948,17 @@ TEST_F(Bluetooth_L2Test, BluetoothSetGetAutoConnect)
     uint32_t status = Core::ERROR_GENERAL;
 
 #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+    /* Guarantee _isMigrated=false before calling performMigration so the call
+     * is never a no-op due to state left by a prior test. */
+    {
+        JsonObject clearResult;
+        uint32_t clearStatus = InvokeServiceMethod("org.rdk.Bluetooth.1", "clearMigration", clearResult);
+        ASSERT_EQ(Core::ERROR_NONE, clearStatus);
+        ASSERT_TRUE(clearResult["success"].Boolean());
+    }
     /* performMigration sets _isMigrated=true so that setAutoConnect is permitted.
      * No legacy filesystem persistence file exists in this environment, so the call
-      * treats the source as empty (clears the in-memory cache) and still succeeds. */
+     * treats the source as empty (clears the in-memory cache) and still succeeds. */
     status = InvokeServiceMethod("org.rdk.Bluetooth.1", "performMigration", params, result);
     EXPECT_EQ(Core::ERROR_NONE, status);
     EXPECT_TRUE(result["success"].Boolean());
@@ -1448,10 +1456,25 @@ TEST_F(Bluetooth_L2Test, BluetoothOnPlaybackNewTrack)
  *   1. writeCacheFromFilesystemPersistence() — builds addr→deviceID map
  *   2. updateCacheFromDevice(backfillOnly=true) — backfills name / type
  * The ON_CALL default action covers both calls.
+ *
+ * Setup: clearMigration is called first so that any Bluetooth/deviceInfo key
+ * left by a prior test is removed, ensuring performMigration always runs the
+ * full import path rather than becoming a no-op.
  * ====================================================================== */
 TEST_F(Bluetooth_L2Test, BluetoothPerformMigration_Success_FilePresent)
 {
     static constexpr const char* kFilePath = "/tmp/paired_bluetooth_devices.json";
+
+    /* Guarantee a true first-time migration: clear any PersistentStore key that
+     * a prior test in this run may have written, and remove any stale filesystem
+     * persistence file so the source is known-good before we write it. */
+    {
+        JsonObject clearResult;
+        uint32_t clearStatus = InvokeServiceMethod("org.rdk.Bluetooth.1", "clearMigration", clearResult);
+        ASSERT_EQ(Core::ERROR_NONE, clearStatus);
+        ASSERT_TRUE(clearResult["success"].Boolean());
+    }
+    std::remove(kFilePath);
 
     /* Write a valid AS filesystem persistence payload.
      * deviceAddr must match m_deviceAddress returned by the mock below. */
@@ -1520,6 +1543,15 @@ TEST_F(Bluetooth_L2Test, BluetoothPerformMigration_MissingSource_TreatsAsEmpty)
 {
     static constexpr const char* kFilePath = "/tmp/paired_bluetooth_devices.json";
 
+    /* Guarantee _isMigrated=false so performMigration runs the full import path
+     * regardless of what a prior test may have left in PersistentStore. */
+    {
+        JsonObject clearResult;
+        uint32_t clearStatus = InvokeServiceMethod("org.rdk.Bluetooth.1", "clearMigration", clearResult);
+        ASSERT_EQ(Core::ERROR_NONE, clearStatus);
+        ASSERT_TRUE(clearResult["success"].Boolean());
+    }
+
     /* Ensure the filesystem persistence file does not exist. */
     std::remove(kFilePath);
 
@@ -1557,6 +1589,15 @@ TEST_F(Bluetooth_L2Test, BluetoothClearMigration_Success)
 TEST_F(Bluetooth_L2Test, BluetoothClearMigration_ReEnablesPreMigrationGuard)
 {
     static constexpr const char* kFilePath = "/tmp/paired_bluetooth_devices.json";
+
+    /* Guarantee _isMigrated=false before Step 1 so the performMigration call
+     * always executes the full import path regardless of prior test state. */
+    {
+        JsonObject clearResult;
+        uint32_t clearStatus = InvokeServiceMethod("org.rdk.Bluetooth.1", "clearMigration", clearResult);
+        ASSERT_EQ(Core::ERROR_NONE, clearStatus);
+        ASSERT_TRUE(clearResult["success"].Boolean());
+    }
 
     /* Step 1: Write filesystem file and perform migration → _isMigrated=true. */
     {
