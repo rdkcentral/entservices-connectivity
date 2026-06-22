@@ -1535,6 +1535,11 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, parse_AutoConnectStatusMiss
         GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
     }
 
+    // performMigration imports the AS file into the cache. Device "123" is imported
+    // without an autoConnectStatus, so it has AUTO_CONNECT_STATUS_UNSET. getPairedDevices
+    // omits the autoconnect field for UNSET entries.
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
+
     BTRMGR_PairedDevicesList_t pairedDevices;
     memset(&pairedDevices, 0, sizeof(pairedDevices));
     pairedDevices.m_numOfDevices = 1;
@@ -1579,6 +1584,11 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, parse_EntryEmptyDeviceAddr_
     if (!initializeFromFilesystemPersistencePayload(payload)) {
         GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
     }
+
+    // performMigration imports the AS file; the entry with an empty deviceAddr is skipped,
+    // leaving no cache entry for the device. getPairedDevices therefore omits the
+    // autoconnect field because no cache entry exists for this device.
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
 
     BTRMGR_PairedDevicesList_t pairedDevices;
     memset(&pairedDevices, 0, sizeof(pairedDevices));

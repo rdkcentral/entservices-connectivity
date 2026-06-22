@@ -1959,6 +1959,13 @@ namespace WPEFramework
             if (parameters.HasLabel("deviceID"))
             {
                 getStringParameter("deviceID", deviceID);
+#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+                if (!m_bluetoothDeviceManager.isMigrated()) {
+                    LOGWARN("getAutoConnect: device list not present in RDK Store, returning disabled for deviceID=%s", deviceID.c_str());
+                    response["autoconnect"] = false;
+                    returnResponse(true);
+                }
+#endif
                 AutoConnectStatus status;
                 Core::hresult result = m_bluetoothDeviceManager.getAutoConnect(deviceID, status);
 
