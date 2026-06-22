@@ -71,7 +71,6 @@ namespace WPEFramework {
         #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
                 Core::hresult performMigration();
                 Core::hresult clearMigration();
-                bool isMigrated() const { return _isMigrated.load(); }
         #endif
 
             private:

@@ -552,6 +552,7 @@ TEST_F(Bluetooth_L2Test, BluetoothGetSetName)
         .WillOnce(::testing::Invoke(
             [](unsigned char, char* pName) -> BTRMGR_Result_t {
                 strncpy(pName, "TestAdapter", BTRMGR_NAME_LEN_MAX - 1);
+                pName[BTRMGR_NAME_LEN_MAX - 1] = '\0';
                 return BTRMGR_RESULT_SUCCESS;
             }));
 
@@ -670,6 +671,7 @@ TEST_F(Bluetooth_L2Test, BluetoothGetDiscoveredDevices)
                 pList->m_deviceProperty[0].m_ui32DevClassBtSpec   = 0x240404;
                 pList->m_deviceProperty[0].m_ui16DevAppearanceBleSpec = 0;
                 strncpy(pList->m_deviceProperty[0].m_name, TEST_DEVICE_NAME, BTRMGR_NAME_LEN_MAX - 1);
+                pList->m_deviceProperty[0].m_name[BTRMGR_NAME_LEN_MAX - 1] = '\0';
                 return BTRMGR_RESULT_SUCCESS;
             }));
 
@@ -707,6 +709,7 @@ TEST_F(Bluetooth_L2Test, BluetoothGetPairedDevices)
                 pList->m_deviceProperty[0].m_ui32DevClassBtSpec    = 0x240404;
                 pList->m_deviceProperty[0].m_ui16DevAppearanceBleSpec = 0;
                 strncpy(pList->m_deviceProperty[0].m_name, TEST_DEVICE_NAME, BTRMGR_NAME_LEN_MAX - 1);
+                pList->m_deviceProperty[0].m_name[BTRMGR_NAME_LEN_MAX - 1] = '\0';
                 return BTRMGR_RESULT_SUCCESS;
             }));
 
@@ -742,6 +745,7 @@ TEST_F(Bluetooth_L2Test, BluetoothGetConnectedDevices)
                 pList->m_deviceProperty[0].m_ui32DevClassBtSpec    = 0x240404;
                 pList->m_deviceProperty[0].m_ui16DevAppearanceBleSpec = 0;
                 strncpy(pList->m_deviceProperty[0].m_name, TEST_DEVICE_NAME, BTRMGR_NAME_LEN_MAX - 1);
+                pList->m_deviceProperty[0].m_name[BTRMGR_NAME_LEN_MAX - 1] = '\0';
                 return BTRMGR_RESULT_SUCCESS;
             }));
 
@@ -833,7 +837,9 @@ TEST_F(Bluetooth_L2Test, BluetoothGetDeviceInfo)
                 pProp->m_isPaired     = 1;
                 pProp->m_isConnected  = 0;
                 strncpy(pProp->m_name,          TEST_DEVICE_NAME,  BTRMGR_NAME_LEN_MAX - 1);
+                pProp->m_name[BTRMGR_NAME_LEN_MAX - 1] = '\0';
                 strncpy(pProp->m_deviceAddress, TEST_DEVICE_ADDR,  BTRMGR_NAME_LEN_MAX - 1);
+                pProp->m_deviceAddress[BTRMGR_NAME_LEN_MAX - 1] = '\0';
                 return BTRMGR_RESULT_SUCCESS;
             }));
 
@@ -863,9 +869,13 @@ TEST_F(Bluetooth_L2Test, BluetoothGetAudioInfo)
         .WillOnce(::testing::Invoke(
             [](unsigned char, BTRMgrDeviceHandle, BTRMGR_MediaTrackInfo_t* pInfo) -> BTRMGR_Result_t {
                 strncpy(pInfo->pcAlbum,  "TestAlbum",  BTRMGR_MAX_STR_LEN - 1);
+                pInfo->pcAlbum[BTRMGR_MAX_STR_LEN - 1] = '\0';
                 strncpy(pInfo->pcArtist, "TestArtist", BTRMGR_MAX_STR_LEN - 1);
+                pInfo->pcArtist[BTRMGR_MAX_STR_LEN - 1] = '\0';
                 strncpy(pInfo->pcTitle,  "TestTitle",  BTRMGR_MAX_STR_LEN - 1);
+                pInfo->pcTitle[BTRMGR_MAX_STR_LEN - 1] = '\0';
                 strncpy(pInfo->pcGenre,  "TestGenre",  BTRMGR_MAX_STR_LEN - 1);
+                pInfo->pcGenre[BTRMGR_MAX_STR_LEN - 1] = '\0';
                 pInfo->ui32Duration        = 240;
                 pInfo->ui32TrackNumber     = 1;
                 pInfo->ui32NumberOfTracks  = 12;
@@ -964,7 +974,9 @@ TEST_F(Bluetooth_L2Test, BluetoothSetGetAutoConnect)
                 pProp->m_deviceHandle = TEST_DEVICE_HANDLE;
                 pProp->m_deviceType   = BTRMGR_DEVICE_TYPE_LOUDSPEAKER;
                 strncpy(pProp->m_name,          TEST_DEVICE_NAME, BTRMGR_NAME_LEN_MAX - 1);
+                pProp->m_name[BTRMGR_NAME_LEN_MAX - 1] = '\0';
                 strncpy(pProp->m_deviceAddress, TEST_DEVICE_ADDR, BTRMGR_NAME_LEN_MAX - 1);
+                pProp->m_deviceAddress[BTRMGR_NAME_LEN_MAX - 1] = '\0';
                 return BTRMGR_RESULT_SUCCESS;
             }));
 
@@ -1102,6 +1114,7 @@ TEST_F(Bluetooth_L2Test, BluetoothOnStatusChangedPairingComplete)
     msg.m_discoveredDevice.m_isConnected   = 0;
     msg.m_discoveredDevice.m_isLastConnectedDevice = 0;
     strncpy(msg.m_discoveredDevice.m_name, TEST_DEVICE_NAME, BTRMGR_NAME_LEN_MAX - 1);
+    msg.m_discoveredDevice.m_name[BTRMGR_NAME_LEN_MAX - 1] = '\0';
     injectBtEvent(msg);
 
     signalled = WaitForRequestStatus(EVNT_TIMEOUT, BT_EVT_STATUS_CHANGED);
@@ -1139,6 +1152,7 @@ TEST_F(Bluetooth_L2Test, BluetoothOnStatusChangedConnectionComplete)
     msg.m_pairedDevice.m_isConnected   = 1;
     msg.m_pairedDevice.m_isLastConnectedDevice = 0;
     strncpy(msg.m_pairedDevice.m_name, TEST_DEVICE_NAME, BTRMGR_NAME_LEN_MAX - 1);
+    msg.m_pairedDevice.m_name[BTRMGR_NAME_LEN_MAX - 1] = '\0';
     injectBtEvent(msg);
 
     signalled = WaitForRequestStatus(EVNT_TIMEOUT, BT_EVT_STATUS_CHANGED);
@@ -1175,6 +1189,7 @@ TEST_F(Bluetooth_L2Test, BluetoothOnDeviceFound)
     msg.m_pairedDevice.m_deviceType    = BTRMGR_DEVICE_TYPE_LOUDSPEAKER;
     msg.m_pairedDevice.m_isLastConnectedDevice = 0;
     strncpy(msg.m_pairedDevice.m_name, TEST_DEVICE_NAME, BTRMGR_NAME_LEN_MAX - 1);
+    msg.m_pairedDevice.m_name[BTRMGR_NAME_LEN_MAX - 1] = '\0';
     injectBtEvent(msg);
 
     signalled = WaitForRequestStatus(EVNT_TIMEOUT, BT_EVT_DEVICE_FOUND);
@@ -1211,6 +1226,7 @@ TEST_F(Bluetooth_L2Test, BluetoothOnDeviceLost)
     msg.m_pairedDevice.m_deviceType    = BTRMGR_DEVICE_TYPE_LOUDSPEAKER;
     msg.m_pairedDevice.m_isLastConnectedDevice = 0;
     strncpy(msg.m_pairedDevice.m_name, TEST_DEVICE_NAME, BTRMGR_NAME_LEN_MAX - 1);
+    msg.m_pairedDevice.m_name[BTRMGR_NAME_LEN_MAX - 1] = '\0';
     injectBtEvent(msg);
 
     signalled = WaitForRequestStatus(EVNT_TIMEOUT, BT_EVT_DEVICE_LOST);
@@ -1249,6 +1265,7 @@ TEST_F(Bluetooth_L2Test, BluetoothOnDiscoveredDeviceDiscovered)
     msg.m_discoveredDevice.m_isPairedDevice = 0;
     msg.m_discoveredDevice.m_isLastConnectedDevice = 0;
     strncpy(msg.m_discoveredDevice.m_name, TEST_DEVICE_NAME, BTRMGR_NAME_LEN_MAX - 1);
+    msg.m_discoveredDevice.m_name[BTRMGR_NAME_LEN_MAX - 1] = '\0';
     injectBtEvent(msg);
 
     signalled = WaitForRequestStatus(EVNT_TIMEOUT, BT_EVT_DISCOVERY_UPDATE);
@@ -1287,7 +1304,9 @@ TEST_F(Bluetooth_L2Test, BluetoothOnPairingRequest)
     msg.m_externalDevice.m_externalDevicePIN  = 0; /* pinRequired = false */
     msg.m_externalDevice.m_serviceInfo.m_numOfService = 0;
     strncpy(msg.m_externalDevice.m_name,          TEST_DEVICE_NAME, BTRMGR_NAME_LEN_MAX - 1);
+    msg.m_externalDevice.m_name[BTRMGR_NAME_LEN_MAX - 1] = '\0';
     strncpy(msg.m_externalDevice.m_deviceAddress, TEST_DEVICE_ADDR, BTRMGR_NAME_LEN_MAX - 1);
+    msg.m_externalDevice.m_deviceAddress[BTRMGR_NAME_LEN_MAX - 1] = '\0';
     injectBtEvent(msg);
 
     signalled = WaitForRequestStatus(EVNT_TIMEOUT, BT_EVT_PAIRING_REQUEST);
@@ -1326,6 +1345,7 @@ TEST_F(Bluetooth_L2Test, BluetoothOnRequestFailedPairing)
     msg.m_discoveredDevice.m_isConnected   = 0;
     msg.m_discoveredDevice.m_isLastConnectedDevice = 0;
     strncpy(msg.m_discoveredDevice.m_name, TEST_DEVICE_NAME, BTRMGR_NAME_LEN_MAX - 1);
+    msg.m_discoveredDevice.m_name[BTRMGR_NAME_LEN_MAX - 1] = '\0';
     injectBtEvent(msg);
 
     signalled = WaitForRequestStatus(EVNT_TIMEOUT, BT_EVT_REQUEST_FAILED);
@@ -1390,9 +1410,13 @@ TEST_F(Bluetooth_L2Test, BluetoothOnPlaybackNewTrack)
     msg.m_eventType    = BTRMGR_EVENT_MEDIA_TRACK_CHANGED;
     msg.m_mediaInfo.m_deviceHandle = TEST_DEVICE_HANDLE;
     strncpy(msg.m_mediaInfo.m_mediaTrackInfo.pcAlbum,  "Album1",   BTRMGR_MAX_STR_LEN - 1);
+    msg.m_mediaInfo.m_mediaTrackInfo.pcAlbum[BTRMGR_MAX_STR_LEN - 1] = '\0';
     strncpy(msg.m_mediaInfo.m_mediaTrackInfo.pcArtist, "Artist1",  BTRMGR_MAX_STR_LEN - 1);
+    msg.m_mediaInfo.m_mediaTrackInfo.pcArtist[BTRMGR_MAX_STR_LEN - 1] = '\0';
     strncpy(msg.m_mediaInfo.m_mediaTrackInfo.pcTitle,  "Track1",   BTRMGR_MAX_STR_LEN - 1);
+    msg.m_mediaInfo.m_mediaTrackInfo.pcTitle[BTRMGR_MAX_STR_LEN - 1] = '\0';
     strncpy(msg.m_mediaInfo.m_mediaTrackInfo.pcGenre,  "Pop",      BTRMGR_MAX_STR_LEN - 1);
+    msg.m_mediaInfo.m_mediaTrackInfo.pcGenre[BTRMGR_MAX_STR_LEN - 1] = '\0';
     msg.m_mediaInfo.m_mediaTrackInfo.ui32Duration       = 200;
     msg.m_mediaInfo.m_mediaTrackInfo.ui32TrackNumber    = 3;
     msg.m_mediaInfo.m_mediaTrackInfo.ui32NumberOfTracks = 15;
@@ -1452,8 +1476,10 @@ TEST_F(Bluetooth_L2Test, BluetoothPerformMigration_Success_FilePresent)
                 pList->m_deviceProperty[0].m_ui16DevAppearanceBleSpec = 0;
                 strncpy(pList->m_deviceProperty[0].m_name,
                         TEST_DEVICE_NAME, BTRMGR_NAME_LEN_MAX - 1);
+                pList->m_deviceProperty[0].m_name[BTRMGR_NAME_LEN_MAX - 1] = '\0';
                 strncpy(pList->m_deviceProperty[0].m_deviceAddress,
                         TEST_DEVICE_ADDR, BTRMGR_NAME_LEN_MAX - 1);
+                pList->m_deviceProperty[0].m_deviceAddress[BTRMGR_NAME_LEN_MAX - 1] = '\0';
                 return BTRMGR_RESULT_SUCCESS;
             }));
 

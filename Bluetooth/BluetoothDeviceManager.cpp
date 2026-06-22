@@ -550,6 +550,14 @@ namespace WPEFramework {
         {
             LOGINFO("deviceID=%s\n", deviceID.c_str());
 
+#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+            if (!_isMigrated.load()) {
+                LOGWARN("getAutoConnect: device list not present in RDK Store, returning disabled for deviceID=%s", deviceID.c_str());
+                status = AUTO_CONNECT_STATUS_DISABLED;
+                return Core::ERROR_NONE;
+            }
+#endif
+
             BluetoothDeviceInfo deviceInfo;
 
             _adminLock.Lock();
