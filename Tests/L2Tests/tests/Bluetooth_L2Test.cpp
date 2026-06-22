@@ -1500,8 +1500,8 @@ TEST_F(Bluetooth_L2Test, BluetoothPerformMigration_MissingSource_TreatsAsEmpty)
 
 /* =========================================================================
  * TC-31: clearMigration — success
- * Calling clearMigration must delete both the deviceInfo and
- * fsChecksumAtLastSync keys from PersistentStore and return success=true.
+ * Calling clearMigration must delete the deviceInfo key from PersistentStore
+ * and return success=true.
  * ====================================================================== */
 TEST_F(Bluetooth_L2Test, BluetoothClearMigration_Success)
 {
