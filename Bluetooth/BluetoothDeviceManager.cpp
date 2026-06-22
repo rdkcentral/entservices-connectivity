@@ -47,6 +47,7 @@ namespace WPEFramework {
         {
             if (rawContent.empty()) {
                 // Empty raw content means no file was found — treat as having no entries.
+                LOGINFO("Empty filesystem payload, clearing cache");
                 _adminLock.Lock();
                 _pairedDeviceCache.clear();
                 _adminLock.Unlock();
@@ -94,7 +95,7 @@ namespace WPEFramework {
             return Core::ERROR_NONE;
         }
 
-        void BluetoothDeviceManager::writeFilesystemPersistenceFromCache()
+        Core::hresult BluetoothDeviceManager::writeFilesystemPersistenceFromCache()
         {
             BluetoothPersistenceAdapter adapter;
             std::unordered_map<std::string, BluetoothDeviceInfo> cacheSnapshot = getPairedDeviceInfos();
@@ -114,11 +115,14 @@ namespace WPEFramework {
             } else {
                 LOGINFO("Filesystem persistence sync succeeded: Persistence payload updated from cache, cache_size=%zu", cacheSnapshot.size());
             }
+            return result;
         }
 
         Core::hresult BluetoothDeviceManager::performMigration()
         {
             Core::SafeSyncType<Core::CriticalSection> lock(_migrationLock);
+
+            LOGINFO("performMigration: MIGRATION_ATTEMPTED");
 
             if (_service == nullptr) {
                 LOGERR("performMigration: service is null");
@@ -154,6 +158,10 @@ namespace WPEFramework {
             if ((Core::ERROR_NONE != readRawResult) && (Core::ERROR_NOT_EXIST != readRawResult)) {
                 LOGERR("performMigration: failed to read AS filesystem persistence source, hresult=%d", readRawResult);
                 return readRawResult;
+            }
+
+            if (Core::ERROR_NOT_EXIST == readRawResult) {
+                LOGINFO("performMigration: AS filesystem persistence source not found (MIGRATION_SOURCE_MISSING); treating as empty payload");
             }
 
             // Import devices from the AS file into the cache.
@@ -424,7 +432,14 @@ namespace WPEFramework {
             }
 #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
             else {
-                writeFilesystemPersistenceFromCache();
+                const size_t newHash = std::hash<std::string>{}(bluetoothDeviceInfoStr);
+                if (newHash == _lastFilesystemPayloadHash) {
+                    LOGINFO("Filesystem persistence sync skipped: payload unchanged");
+                } else {
+                    if (Core::ERROR_NONE == writeFilesystemPersistenceFromCache()) {
+                        _lastFilesystemPayloadHash = newHash;
+                    }
+                }
             }
 #endif
 

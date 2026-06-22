@@ -1502,6 +1502,11 @@ TEST_F(Bluetooth_L2Test, BluetoothPerformMigration_Success_FilePresent)
     EXPECT_TRUE(acResult["success"].Boolean());
     EXPECT_TRUE(acResult["autoconnect"].Boolean());
 
+    JsonObject clearResult;
+     status = InvokeServiceMethod("org.rdk.Bluetooth.1", "clearMigration", clearResult);
+     EXPECT_EQ(Core::ERROR_NONE, status);
+     EXPECT_TRUE(clearResult["success"].Boolean());
+
     std::remove(kFilePath);
 }
 
@@ -1522,6 +1527,11 @@ TEST_F(Bluetooth_L2Test, BluetoothPerformMigration_MissingSource_TreatsAsEmpty)
     uint32_t status = InvokeServiceMethod("org.rdk.Bluetooth.1", "performMigration", result);
     EXPECT_EQ(Core::ERROR_NONE, status);
     EXPECT_TRUE(result["success"].Boolean());
+
+    JsonObject clearResult;
+     status = InvokeServiceMethod("org.rdk.Bluetooth.1", "clearMigration", clearResult);
+     EXPECT_EQ(Core::ERROR_NONE, status);
+     EXPECT_TRUE(clearResult["success"].Boolean());
 }
 
 /* =========================================================================
@@ -1579,10 +1589,9 @@ TEST_F(Bluetooth_L2Test, BluetoothClearMigration_ReEnablesPreMigrationGuard)
     EXPECT_NE(Core::ERROR_NONE, status);
     EXPECT_FALSE(result["success"].Boolean());
 
-    /* Step 4: Restore state so later tests are unaffected. */
-    status = InvokeServiceMethod("org.rdk.Bluetooth.1", "performMigration", result);
-    EXPECT_EQ(Core::ERROR_NONE, status);
-
+    /* Step 4: Clean up filesystem persistence file.
+     * The suite started with _isMigrated=false; clearMigration in Step 2
+     * already restored that state, so no further action is needed here. */
     std::remove(kFilePath);
 }
 #endif /* BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION */

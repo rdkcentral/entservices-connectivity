@@ -86,9 +86,10 @@ namespace WPEFramework {
                 Core::hresult writeStorageFromCache();
         #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
                 Core::hresult writeCacheFromFilesystemPersistence(const std::string& rawContent);
-                void writeFilesystemPersistenceFromCache();
+                Core::hresult writeFilesystemPersistenceFromCache();
                 std::atomic<bool> _isMigrated{false};
                 mutable Core::CriticalSection _migrationLock;
+                size_t _lastFilesystemPayloadHash{0};
         #endif
         };
 
