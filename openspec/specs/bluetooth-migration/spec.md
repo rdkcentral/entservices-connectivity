@@ -98,8 +98,8 @@ During initialization, the plugin SHALL disconnect any currently connected non-H
 - **WHEN** initialization finds a connected Human Interface Device
 - **THEN** the device is left connected regardless of autoconnect setting
 
-### Requirement: External connect requests SHALL be auto-handled when autoconnect is explicitly set
-When an external Bluetooth device requests a connection and autoconnect has been explicitly configured for that device, the plugin SHALL resolve the request internally without propagating the event to clients.
+### Requirement: External connect requests SHALL be auto-handled when autoconnect status is known
+When an external Bluetooth device requests a connection and its autoconnect status can be determined, the plugin SHALL resolve the request internally without propagating the event to clients. An unset autoconnect status is treated as disabled.
 
 #### Scenario: Autoconnect explicitly enabled
 - **WHEN** an external connect request arrives for a device with autoconnect explicitly set to enabled
@@ -111,4 +111,4 @@ When an external Bluetooth device requests a connection and autoconnect has been
 
 #### Scenario: Autoconnect not explicitly set
 - **WHEN** an external connect request arrives for a device with no explicit autoconnect setting
-- **THEN** the plugin emits an `onConnectionRequest` event to clients to allow them to decide
+- **THEN** the plugin treats the device as autoconnect-disabled and rejects the connection without emitting an `onConnectionRequest` event

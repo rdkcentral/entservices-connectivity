@@ -670,6 +670,7 @@ TEST_F(Bluetooth_L2Test, BluetoothGetDiscoveredDevices)
                 pList->m_deviceProperty[0].m_ui32DevClassBtSpec   = 0x240404;
                 pList->m_deviceProperty[0].m_ui16DevAppearanceBleSpec = 0;
                 strncpy(pList->m_deviceProperty[0].m_name, TEST_DEVICE_NAME, BTRMGR_NAME_LEN_MAX - 1);
+                pList->m_deviceProperty[0].m_name[BTRMGR_NAME_LEN_MAX - 1] = '\0';
                 return BTRMGR_RESULT_SUCCESS;
             }));
 
@@ -707,6 +708,7 @@ TEST_F(Bluetooth_L2Test, BluetoothGetPairedDevices)
                 pList->m_deviceProperty[0].m_ui32DevClassBtSpec    = 0x240404;
                 pList->m_deviceProperty[0].m_ui16DevAppearanceBleSpec = 0;
                 strncpy(pList->m_deviceProperty[0].m_name, TEST_DEVICE_NAME, BTRMGR_NAME_LEN_MAX - 1);
+                pList->m_deviceProperty[0].m_name[BTRMGR_NAME_LEN_MAX - 1] = '\0';
                 return BTRMGR_RESULT_SUCCESS;
             }));
 
@@ -742,6 +744,7 @@ TEST_F(Bluetooth_L2Test, BluetoothGetConnectedDevices)
                 pList->m_deviceProperty[0].m_ui32DevClassBtSpec    = 0x240404;
                 pList->m_deviceProperty[0].m_ui16DevAppearanceBleSpec = 0;
                 strncpy(pList->m_deviceProperty[0].m_name, TEST_DEVICE_NAME, BTRMGR_NAME_LEN_MAX - 1);
+                pList->m_deviceProperty[0].m_name[BTRMGR_NAME_LEN_MAX - 1] = '\0';
                 return BTRMGR_RESULT_SUCCESS;
             }));
 
@@ -1452,6 +1455,7 @@ TEST_F(Bluetooth_L2Test, BluetoothPerformMigration_Success_FilePresent)
                 pList->m_deviceProperty[0].m_ui16DevAppearanceBleSpec = 0;
                 strncpy(pList->m_deviceProperty[0].m_name,
                         TEST_DEVICE_NAME, BTRMGR_NAME_LEN_MAX - 1);
+                pList->m_deviceProperty[0].m_name[BTRMGR_NAME_LEN_MAX - 1] = '\0';
                 strncpy(pList->m_deviceProperty[0].m_deviceAddress,
                         TEST_DEVICE_ADDR, BTRMGR_NAME_LEN_MAX - 1);
                 return BTRMGR_RESULT_SUCCESS;
