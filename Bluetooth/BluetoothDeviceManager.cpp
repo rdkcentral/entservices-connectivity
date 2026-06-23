@@ -657,7 +657,7 @@ namespace WPEFramework {
 
             if (Core::ERROR_NONE == result) {
                 // Consider AUTO_CONNECT_STATUS_UNSET --> AUTO_CONNECT_STATUS_DISABLED
-                status = (AUTO_CONNECT_STATUS_ENABLED == deviceInfo.autoConnectStatus);
+                status = (AUTO_CONNECT_STATUS_UNSET == deviceInfo.autoConnectStatus) ? AUTO_CONNECT_STATUS_DISABLED : deviceInfo.autoConnectStatus;
             }
             
             return result;
