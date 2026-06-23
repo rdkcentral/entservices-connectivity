@@ -1541,8 +1541,8 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, parse_AutoConnectStatusStri
 TEST_F(BluetoothLegacyPersistenceMigrationParseTest, parse_AutoConnectStatusMissing_NoPairedDeviceAutoConnectField)
 {
     // When autoConnectStatus is absent from the file, Parse() leaves the cache entry
-    // with AUTO_CONNECT_STATUS_UNSET. getPairedDevices omits the autoconnect field for
-    // UNSET, distinguishing it from an explicitly set DISABLED (false) value.
+    // with AUTO_CONNECT_STATUS_UNSET. getAutoConnect treats UNSET as DISABLED, so
+    // getPairedDevices includes "autoconnect":false in the response.
     const std::string payload =
         "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"deviceType\":\"HEADPHONES\","
         "\"lastVolumeSetting\":0,\"lastConnectionTimeUTC\":0}]}";
@@ -1565,7 +1565,7 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, parse_AutoConnectStatusMiss
 
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getPairedDevices"), _T("{}"), response));
     EXPECT_TRUE(response.find("\"pairedDevices\"") != string::npos);
-    EXPECT_TRUE(response.find("\"autoconnect\"") == string::npos);
+    EXPECT_TRUE(response.find("\"autoconnect\":false") != string::npos);
 }
 
 TEST_F(BluetoothLegacyPersistenceMigrationParseTest, parse_EntryMissingDeviceAddr_ValidEntryStillImported)
@@ -1610,7 +1610,7 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, parse_EntryEmptyDeviceAddr_
 
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getPairedDevices"), _T("{}"), response));
     EXPECT_TRUE(response.find("\"pairedDevices\"") != string::npos);
-    EXPECT_TRUE(response.find("\"autoconnect\"") == string::npos);
+    EXPECT_TRUE(response.find("\"autoconnect\":false") != string::npos);
 }
 
 TEST_F(BluetoothLegacyPersistenceMigrationParseTest, parse_LastConnectionTimeUTCMissing_NoLastConnectTimeInResponse)
