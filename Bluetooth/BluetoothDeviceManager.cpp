@@ -46,7 +46,6 @@ namespace WPEFramework {
         Core::hresult BluetoothDeviceManager::writeCacheFromFilesystemPersistence(const std::string& rawContent)
         {
             if (rawContent.empty()) {
-                // Empty raw content means no file was found — treat as having no entries.
                 _adminLock.Lock();
                 _pairedDeviceCache.clear();
                 _adminLock.Unlock();
@@ -433,7 +432,7 @@ namespace WPEFramework {
                     // Device found that's not yet cached; add only when not in backfill-only mode.
                     LOGINFO("Adding device to cache: deviceID=%s, deviceType=%s\n", deviceId.c_str(), deviceType.c_str());
                     BluetoothDeviceInfo deviceInfo;
-                    deviceInfo.deviceAddr = std::move(deviceAddr);
+                    deviceInfo.deviceAddr = deviceAddr;
                     deviceInfo.deviceType = std::move(deviceType);
                     deviceInfo.friendlyName = (pairedDevices.m_deviceProperty[i].m_name[0] != '\0') ? std::string(pairedDevices.m_deviceProperty[i].m_name) : deviceId;
                     _pairedDeviceCache[deviceId] = std::move(deviceInfo);

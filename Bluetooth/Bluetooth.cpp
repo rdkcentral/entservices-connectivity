@@ -1179,6 +1179,7 @@ namespace WPEFramework
                 case BTRMGR_EVENT_RECEIVED_EXTERNAL_CONNECT_REQUEST: {
                     LOGERR("Received %s Event from BTRMgr", "external connection request");
 
+                    #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
                     if (m_bluetoothDeviceManager.isMigrated()) {
 
                         // Migration is complete, check the autoconnect status and respond to the event accordingly.
@@ -1204,6 +1205,7 @@ namespace WPEFramework
                     } else {
                         LOGINFO("Device manager not migrated, notifying client about connection request for device %llu", eventMsg.m_externalDevice.m_deviceHandle);
                     }
+                    #endif
 
                     params["deviceID"] = std::to_string(eventMsg.m_externalDevice.m_deviceHandle);
                     params["name"] = string(eventMsg.m_externalDevice.m_name);
