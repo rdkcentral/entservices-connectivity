@@ -1179,30 +1179,31 @@ namespace WPEFramework
                 case BTRMGR_EVENT_RECEIVED_EXTERNAL_CONNECT_REQUEST: {
                     LOGERR("Received %s Event from BTRMgr", "external connection request");
 
-                    // Plug-in handles external connect requests if autoconnect was explicitly set, otherwise let client handle it.
+                    if (m_bluetoothDeviceManager.isMigrated()) {
 
-                    AutoConnectStatus autoConnectStatus;
-                    Core::hresult result = m_bluetoothDeviceManager.getAutoConnect(std::to_string(eventMsg.m_externalDevice.m_deviceHandle), autoConnectStatus);
+                        // Migration is complete, check the autoconnect status and respond to the event accordingly.
 
-                    if (Core::ERROR_NONE == result && AUTO_CONNECT_STATUS_UNSET != autoConnectStatus) {
-                        
-                        bool bAccepted = AUTO_CONNECT_STATUS_ENABLED == autoConnectStatus;
+                        AutoConnectStatus autoConnectStatus;
+                        Core::hresult result = m_bluetoothDeviceManager.getAutoConnect(std::to_string(eventMsg.m_externalDevice.m_deviceHandle), autoConnectStatus);
+                        if (Core::ERROR_NONE == result) {
+                            bool bAccepted = AUTO_CONNECT_STATUS_ENABLED == autoConnectStatus;
 
-                        (void)setEventResponse(eventMsg.m_externalDevice.m_deviceHandle,
-                            EVT_CONNECTION_REQUEST,
-                            bAccepted ? "ACCEPTED" : "REJECTED");
+                            (void)setEventResponse(eventMsg.m_externalDevice.m_deviceHandle,
+                                EVT_CONNECTION_REQUEST,
+                                bAccepted ? "ACCEPTED" : "REJECTED");
 
-                        if (bAccepted) {
-                            // Connect device
-                            (void)setDeviceConnection(eventMsg.m_externalDevice.m_deviceHandle, true, BTRMGR_GetDeviceTypeAsString(eventMsg.m_externalDevice.m_deviceType));
+                            if (bAccepted) {
+                                // Connect device
+                                (void)setDeviceConnection(eventMsg.m_externalDevice.m_deviceHandle, true, BTRMGR_GetDeviceTypeAsString(eventMsg.m_externalDevice.m_deviceType));
+                            }
+
+                            return; // Response sent, no need to notify client about this event.
+                        } else {
+                            LOGERR("Failed to get autoconnect status for device %llu: %d", eventMsg.m_externalDevice.m_deviceHandle, result);
                         }
-
-                        return; // Response sent, no need to notify client about this event.
                     } else {
-                        LOGINFO("Autoconnect not explicitly set for device %llu", eventMsg.m_externalDevice.m_deviceHandle);
+                        LOGINFO("Device manager not migrated, notifying client about connection request for device %llu", eventMsg.m_externalDevice.m_deviceHandle);
                     }
-
-                    // autoconnect flag was not explicitly set for the device, notify client about the connection request and let it decide.
 
                     params["deviceID"] = std::to_string(eventMsg.m_externalDevice.m_deviceHandle);
                     params["name"] = string(eventMsg.m_externalDevice.m_name);
@@ -2004,7 +2005,11 @@ namespace WPEFramework
 
         void Bluetooth::onPowerModeChanged(const WPEFramework::Exchange::IPowerManager::PowerState currentState, const WPEFramework::Exchange::IPowerManager::PowerState newState)
         {
-            #ifndef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+            #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+                if (!m_bluetoothDeviceManager.isMigrated()) {
+                    return;
+                }
+            #else
                 return;
             #endif
 

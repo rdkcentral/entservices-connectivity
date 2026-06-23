@@ -254,6 +254,8 @@ namespace WPEFramework {
                 return importResult;
             }
 
+            _isMigrated.store(true);
+
             // Backfill any missing device fields (e.g. deviceType) from BTRMGR for devices
             // already present in the imported cache. New devices from BTRMGR are intentionally
             // excluded here to preserve "filesystem is authoritative" semantics — in particular,
@@ -262,9 +264,6 @@ namespace WPEFramework {
             if (Core::ERROR_NONE != deviceResult) {
                 LOGWARN("performMigration: updateCacheFromDevice failed (hresult=%d); proceeding with imported data only", deviceResult);
             }
-
-            // Temporarily set _isMigrated so writeStorageFromCache proceeds.
-            _isMigrated.store(true);
 
             const Core::hresult writeResult = writeStorageFromCache();
             if (Core::ERROR_NONE != writeResult) {
@@ -472,13 +471,6 @@ namespace WPEFramework {
 
         Core::hresult BluetoothDeviceManager::writeStorageFromCache()
         {
-#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
-            if (!_isMigrated.load()) {
-                LOGINFO("writeStorageFromCache skipped: migration has not been performed yet");
-                return Core::ERROR_NONE;
-            }
-#endif
-
             if (_service == nullptr) {
                 LOGERR("Service is null");
                 return Core::ERROR_GENERAL;
@@ -522,7 +514,7 @@ namespace WPEFramework {
                 LOGERR("Failed to save device info to PersistentStore, hresult=%d", result);
             }
 #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
-            else {
+            else if (_isMigrated.load()) {
                 writeFilesystemPersistenceFromCache();
             }
 #endif
@@ -664,7 +656,8 @@ namespace WPEFramework {
             _adminLock.Unlock();
 
             if (Core::ERROR_NONE == result) {
-                status = deviceInfo.autoConnectStatus;
+                // Consider AUTO_CONNECT_STATUS_UNSET --> AUTO_CONNECT_STATUS_DISABLED
+                status = (AUTO_CONNECT_STATUS_ENABLED == deviceInfo.autoConnectStatus);
             }
             
             return result;
