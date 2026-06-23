@@ -77,10 +77,10 @@ Disabling migration support SHALL NOT break non-migration Bluetooth persistence 
 - **THEN** baseline Bluetooth persistence paths continue to function without migration dependencies
 
 ### Requirement: Power-state-driven connection management SHALL be compile-time gated
-Power-state-driven connection management on transitions to and from `POWER_STATE_ON`, `POWER_STATE_STANDBY`, `POWER_STATE_STANDBY_LIGHT_SLEEP`, and `POWER_STATE_STANDBY_DEEP_SLEEP` SHALL be compiled and active only when `BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION` is enabled.
+Power-state-driven connection management on transitions to and from `POWER_STATE_ON`, `POWER_STATE_STANDBY`, `POWER_STATE_STANDBY_LIGHT_SLEEP`, and `POWER_STATE_STANDBY_DEEP_SLEEP` SHALL be compiled only when `BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION` is enabled, and SHALL execute only after a successful `performMigration()` (i.e., when migration state is active).
 
 #### Scenario: Power state transitions active with migration enabled
-- **WHEN** Bluetooth is built with `BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION` enabled
+- **WHEN** Bluetooth is built with `BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION` enabled and migration has been performed (`fsChecksumAtLastSync` present in PersistentStore)
 - **THEN** power-state-driven connection management executes on relevant transitions (e.g., Bluetooth auto-enabled on wake when paired non-HID devices exist; non-HID devices disconnected on standby or deep sleep based on their autoconnect setting)
 
 #### Scenario: Power state transitions inactive with migration disabled

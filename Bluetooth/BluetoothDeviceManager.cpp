@@ -267,14 +267,14 @@ namespace WPEFramework {
             const Core::hresult writeResult = writeStorageFromCache();
             if (Core::ERROR_NONE != writeResult) {
                 LOGERR("performMigration: failed to persist imported data to PersistentStore, hresult=%d", writeResult);
-                _isMigrated.store(false);
+                _isMigrated.store(!firstTime); // If this was the first migration attempt, mark as not migrated.
                 return writeResult;
             }
 
             const Core::hresult writeChecksumResult = writeFsChecksumToStorage(newChecksum);
             if (Core::ERROR_NONE != writeChecksumResult) {
                 LOGERR("performMigration: failed to persist checksum, hresult=%d", writeChecksumResult);
-                _isMigrated.store(false);
+                _isMigrated.store(!firstTime); // If this was the first migration attempt, mark as not migrated.
                 return writeChecksumResult;
             }
 
