@@ -1,21 +1,21 @@
 /**
-* If not stated otherwise in this file or this component's LICENSE
-* file the following copyright and licenses apply:
-*
-* Copyright 2026 RDK Management
-*
-* Licensed under the Apache License, Version 2.0 (the "License");
-* You may not use this file except in compliance with the License.
-* You may obtain a copy of the License at
-*
-* http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-**/
+ * If not stated otherwise in this file or this component's LICENSE
+ * file the following copyright and licenses apply:
+ *
+ * Copyright 2026 RDK Management
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ **/
 
 #pragma once
 
@@ -30,6 +30,8 @@
 #define PERSISTENT_STORE_CALLSIGN "org.rdk.PersistentStore"
 #define PERSISTENT_STORE_NAMESPACE "Bluetooth"
 #define PERSISTENT_STORE_KEY_DEVICE_INFO "deviceInfo"
+#define PERSISTENT_STORE_KEY_MIGRATION_VERSION "migrationVersion"
+#define BLUETOOTH_MIGRATION_VERSION "1"
 
 namespace WPEFramework {
     namespace Plugin {
@@ -59,6 +61,12 @@ namespace WPEFramework {
                 Core::hresult init(PluginHost::IShell* service);
                 void deinit();
 
+                // Migration API
+                Core::hresult performMigration();
+                Core::hresult clearMigration();
+                bool isMigrated() const;
+
+                // Device persistence API
                 Core::hresult setAutoConnect(const std::string& deviceID, bool enable);
                 Core::hresult getAutoConnect(const std::string& deviceID, AutoConnectStatus& status);
                 void setLastConnectTimeUtc(const std::string& deviceID);
@@ -73,11 +81,24 @@ namespace WPEFramework {
                 mutable Core::CriticalSection _adminLock;
                 PluginHost::IShell* _service = nullptr;
                 std::unordered_map<std::string /* deviceID */, BluetoothDeviceInfo /* deviceInfo */> _pairedDeviceCache;
+                bool _isMigrated = false;
 
+                // Low-level store / cache helpers
                 Core::hresult getPairedDeviceInfo(const std::string& deviceID, BluetoothDeviceInfo& deviceInfo);
                 Core::hresult updateCacheFromStorage();
-                Core::hresult updateCacheFromDevice();
                 Core::hresult writeStorageFromCache();
+                Core::hresult writeDeviceInfoToStore();
+
+                // Migration marker helpers
+                Core::hresult readMigrationVersion(std::string& version);
+                Core::hresult writeMigrationVersion();
+                Core::hresult deleteMigrationVersion();
+
+                // Migration step helpers
+                Core::hresult clearBluetoothStoreData();
+                Core::hresult importFromAS();
+                Core::hresult enrichCacheFromBTRMGR();
+
         #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
                 Core::hresult writeCacheFromFilesystemPersistence();
                 void writeFilesystemPersistenceFromCache();
