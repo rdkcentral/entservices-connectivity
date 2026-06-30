@@ -70,6 +70,8 @@ const string WPEFramework::Plugin::Bluetooth::METHOD_GET_DEVICE_VOLUME_MUTE_INFO
 const string WPEFramework::Plugin::Bluetooth::METHOD_SET_DEVICE_VOLUME_MUTE_INFO = "setDeviceVolumeMuteInfo";
 const string WPEFramework::Plugin::Bluetooth::METHOD_SET_AUTO_CONNECT = "setAutoConnect";
 const string WPEFramework::Plugin::Bluetooth::METHOD_GET_AUTO_CONNECT_STATUS = "getAutoConnect";
+const string WPEFramework::Plugin::Bluetooth::METHOD_PERFORM_MIGRATION = "performMigration";
+const string WPEFramework::Plugin::Bluetooth::METHOD_CLEAR_MIGRATION = "clearMigration";
 
 const string WPEFramework::Plugin::Bluetooth::EVT_STATUS_CHANGED = "onStatusChanged";
 const string WPEFramework::Plugin::Bluetooth::EVT_PAIRING_REQUEST = "onPairingRequest";
@@ -226,6 +228,8 @@ namespace WPEFramework
             Register(METHOD_SET_DEVICE_VOLUME_MUTE_INFO, &Bluetooth::setDeviceVolumeMuteInfoWrapper, this);
             Register(METHOD_SET_AUTO_CONNECT, &Bluetooth::setAutoConnectWrapper, this);
             Register(METHOD_GET_AUTO_CONNECT_STATUS, &Bluetooth::getAutoConnectWrapper, this);
+            Register(METHOD_PERFORM_MIGRATION, &Bluetooth::performMigrationWrapper, this);
+            Register(METHOD_CLEAR_MIGRATION, &Bluetooth::clearMigrationWrapper, this);
 
             Utils::IARM::init();
 
@@ -1965,6 +1969,26 @@ namespace WPEFramework
                 successFlag = false;
             }
             returnResponse(successFlag);
+        }
+
+        uint32_t Bluetooth::performMigrationWrapper(const JsonObject& parameters, JsonObject& response)
+        {
+            LOGINFOMETHOD();
+            Core::hresult result = m_bluetoothDeviceManager.performMigration();
+            if (Core::ERROR_NONE != result) {
+                LOGERR("performMigration failed, hresult=0x%08X", result);
+            }
+            returnResponse(Core::ERROR_NONE == result);
+        }
+
+        uint32_t Bluetooth::clearMigrationWrapper(const JsonObject& parameters, JsonObject& response)
+        {
+            LOGINFOMETHOD();
+            Core::hresult result = m_bluetoothDeviceManager.clearMigration();
+            if (Core::ERROR_NONE != result) {
+                LOGERR("clearMigration failed, hresult=0x%08X", result);
+            }
+            returnResponse(Core::ERROR_NONE == result);
         }
 
         //

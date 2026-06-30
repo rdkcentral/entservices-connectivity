@@ -139,6 +139,8 @@ namespace WPEFramework {
             uint32_t setDeviceVolumeMuteInfoWrapper(const JsonObject& parameters, JsonObject& response);
             uint32_t setAutoConnectWrapper(const JsonObject& parameters, JsonObject& response);
             uint32_t getAutoConnectWrapper(const JsonObject& parameters, JsonObject& response);
+            uint32_t performMigrationWrapper(const JsonObject& parameters, JsonObject& response);
+            uint32_t clearMigrationWrapper(const JsonObject& parameters, JsonObject& response);
             // Registered methods end
 
         private: /*internal methods*/
@@ -198,6 +200,8 @@ namespace WPEFramework {
             static const string METHOD_SET_DEVICE_VOLUME_MUTE_INFO;
             static const string METHOD_SET_AUTO_CONNECT;
             static const string METHOD_GET_AUTO_CONNECT_STATUS;
+            static const string METHOD_PERFORM_MIGRATION;
+            static const string METHOD_CLEAR_MIGRATION;
 
             static const string EVT_STATUS_CHANGED;
             static const string EVT_PAIRING_REQUEST;

@@ -14,6 +14,16 @@ All notable changes to this RDK Service will be documented in this file.
 
 * Changes in CHANGELOG should be updated when commits are added to the main or release branches. There should be one CHANGELOG entry per JIRA Ticket. This is not enforced on sprint branches since there could be multiple changes for the same JIRA ticket during development. 
 
+## [Unreleased]
+### Added
+- Added explicit PersistentStore migration marker (`migrationVersion`) as the sole source of migration truth.
+- Added `performMigration` JSON-RPC method: clears stale store data, imports from AS storage, enriches via BTRMGR, writes RDK store, then writes migration marker.
+- Added `clearMigration` JSON-RPC method: removes store data and migration marker, clears RAM cache, preserves AS storage.
+### Changed
+- `init()` no longer auto-migrates or reads AS at startup; migration state is determined only by the migration marker.
+- All persistence APIs (`setAutoConnect`, `addDevice`, `removeDevice`, etc.) are no-ops before migration completes.
+- `getAutoConnect` returns disabled before migration completes.
+
 ## [1.0.11] - 2025-01-27
 ### Added
 -  Make sure connect response is sent on a connect request

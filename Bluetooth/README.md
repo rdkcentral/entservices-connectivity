@@ -30,6 +30,8 @@ curl --header "Content-Type: application/json" --request POST --data '{"jsonrpc"
 curl --header "Content-Type: application/json" --request POST --data '{"jsonrpc":"2.0", "id":"3", "method":"org.rdk.Bluetooth.1.getDeviceVolumeMuteInfo", "params": {"deviceID": "256168644324480", "profile": "WEARABLE HEADSET"}}' http://127.0.0.1:9998/jsonrpc
 curl --header "Content-Type: application/json" --request POST --data '{"jsonrpc":"2.0", "id":"3", "method":"org.rdk.Bluetooth.1.setAutoConnect", "params": {"deviceID": "256168644324480", "enable": true}}' http://127.0.0.1:9998/jsonrpc
 curl --header "Content-Type: application/json" --request POST --data '{"jsonrpc":"2.0", "id":"3", "method":"org.rdk.Bluetooth.1.getAutoConnect", "params": {"deviceID": "256168644324480"}}' http://127.0.0.1:9998/jsonrpc
+curl --header "Content-Type: application/json" --request POST --data '{"jsonrpc":"2.0", "id":"3", "method":"org.rdk.Bluetooth.1.performMigration"}' http://127.0.0.1:9998/jsonrpc
+curl --header "Content-Type: application/json" --request POST --data '{"jsonrpc":"2.0", "id":"3", "method":"org.rdk.Bluetooth.1.clearMigration"}' http://127.0.0.1:9998/jsonrpc
 ```
 
 ## Responses:
