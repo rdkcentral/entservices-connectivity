@@ -22,7 +22,7 @@ All notable changes to this RDK Service will be documented in this file.
 ### Changed
 - `init()` no longer auto-migrates or reads AS at startup; migration state is determined only by the migration marker.
 - All persistence APIs (`setAutoConnect`, `addDevice`, `removeDevice`, etc.) are no-ops before migration completes.
-- `getAutoConnect` returns disabled before migration completes.
+- `getAutoConnect` returns `UNSET` (not explicitly disabled) before migration completes; the public API wrapper exposes this as `false`, while internal handlers (e.g. external connection requests) correctly forward to the client rather than auto-rejecting.
 
 ## [1.0.11] - 2025-01-27
 ### Added

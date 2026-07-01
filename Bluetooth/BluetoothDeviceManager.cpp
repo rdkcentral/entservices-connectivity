@@ -702,8 +702,13 @@ namespace WPEFramework {
             LOGINFO("deviceID=%s\n", deviceID.c_str());
 
             if (!_isMigrated) {
-                // Pre-migration: report disabled gracefully.
-                status = AUTO_CONNECT_STATUS_DISABLED;
+                // Pre-migration: no autoConnect preference has been explicitly set.
+                // Return UNSET so that callers which distinguish "not set" from "explicitly disabled"
+                // (e.g. the external-connection-request handler) behave correctly and forward the
+                // decision to the client rather than auto-rejecting.
+                // The public-facing getAutoConnectWrapper treats UNSET as false, satisfying the
+                // requirement that the API reports disabled/false before migration.
+                status = AUTO_CONNECT_STATUS_UNSET;
                 return Core::ERROR_NONE;
             }
 
@@ -725,7 +730,8 @@ namespace WPEFramework {
         void BluetoothDeviceManager::setLastConnectTimeUtc(const std::string& deviceID)
         {
             if (!_isMigrated) {
-                return; // pre-migration no-op
+                LOGINFO("setLastConnectTimeUtc: pre-migration, skipping for deviceID=%s", deviceID.c_str());
+                return;
             }
 
             BluetoothDeviceInfo deviceInfo;
@@ -761,7 +767,8 @@ namespace WPEFramework {
             LOGINFO("deviceID=%s, volumeSetting=%lld", deviceID.c_str(), volumeSetting);
 
             if (!_isMigrated) {
-                return Core::ERROR_NONE; // pre-migration no-op
+                LOGINFO("setLastVolumeSetting: pre-migration, skipping for deviceID=%s", deviceID.c_str());
+                return Core::ERROR_NONE;
             }
 
             BluetoothDeviceInfo deviceInfo;
@@ -811,8 +818,7 @@ namespace WPEFramework {
             LOGINFO("deviceID=%s\n", deviceID.c_str());
 
             if (!_isMigrated) {
-                // Pre-migration: the pairing itself succeeds but we don't own persistence yet.
-                LOGINFO("addDevice: pre-migration, skipping persistence for deviceID=%s", deviceID.c_str());
+                LOGINFO("addDevice: pre-migration, skipping cache update for deviceID=%s", deviceID.c_str());
                 return Core::ERROR_NONE;
             }
 
@@ -852,8 +858,7 @@ namespace WPEFramework {
             LOGINFO("deviceID=%s\n", deviceID.c_str());
 
             if (!_isMigrated) {
-                // Pre-migration: the unpairing itself succeeds but we don't own persistence yet.
-                LOGINFO("removeDevice: pre-migration, skipping persistence for deviceID=%s", deviceID.c_str());
+                LOGINFO("removeDevice: pre-migration, skipping cache update for deviceID=%s", deviceID.c_str());
                 return Core::ERROR_NONE;
             }
 
