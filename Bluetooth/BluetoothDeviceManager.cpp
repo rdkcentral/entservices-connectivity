@@ -273,11 +273,8 @@ namespace WPEFramework {
                 return writeVersionResult;
             }
 
-            // Step 6: Transfer AS ownership. Set migrated true, then perform the initial AS sync
-            // under new ownership. writeStorageFromCache() only writes AS when _isMigrated is true,
-            // so this is the first AS write by this component.
+            // Step 6: Transfer AS ownership, set migrated true.
             _isMigrated.store(true);
-            writeFilesystemPersistenceFromCache();
 
             LOGINFO("performMigration: initial migration succeeded");
             return Core::ERROR_NONE;
