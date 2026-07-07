@@ -1226,7 +1226,7 @@ protected:
                 ::testing::SetArgReferee<2>(payload),
                 ::testing::Return(Core::ERROR_NONE)))
             .WillOnce(::testing::DoAll(
-                ::testing::SetArgReferee<2>(std::string("test-checksum")),
+                ::testing::SetArgReferee<2>(std::string("1")),
                 ::testing::Return(Core::ERROR_NONE)));
 
         return plugin->Initialize(&service).empty();
@@ -1246,17 +1246,6 @@ protected:
         return true;
     }
 
-    static std::string computeTestFNV1a(const std::string& content)
-    {
-        static constexpr uint64_t FNV_OFFSET_BASIS = 14695981039346656037ULL;
-        static constexpr uint64_t FNV_PRIME         = 1099511628211ULL;
-        uint64_t hash = FNV_OFFSET_BASIS;
-        for (const unsigned char c : content) {
-            hash ^= static_cast<uint64_t>(c);
-            hash *= FNV_PRIME;
-        }
-        return std::to_string(hash);
-    }
 };
 
 TEST_F(BluetoothLegacyPersistenceMigrationParseTest, legacyPersistenceMigrationStorePresent_BypassesFilesystemPersistenceImport)
@@ -1319,7 +1308,7 @@ TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, legacyPersistenceMigra
         .WillRepeatedly(::testing::DoAll(
             ::testing::SaveArg<2>(&persistedJson),
             ::testing::Return(Core::ERROR_NONE)));
-    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, PERSISTENT_STORE_KEY_FS_CHECKSUM, ::testing::_))
+    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, PERSISTENT_STORE_KEY_MIGRATION_VERSION, ::testing::_))
         .WillRepeatedly(::testing::Return(Core::ERROR_NONE));
 
     const std::string payload =
@@ -1845,16 +1834,16 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, write_AutoConnectStatusUnse
 // ============================================================================
 
 // Fixture with _isMigrated=true at startup (simulates a previously-migrated
-// device that has a stored checksum in PersistentStore).
+// device that has a stored migrationVersion in PersistentStore).
 class BluetoothClearMigrationTest : public BluetoothLegacyPersistenceMigrationParseTest {
 protected:
     BluetoothClearMigrationTest()
     {
-        // Return a stored checksum for PERSISTENT_STORE_KEY_FS_CHECKSUM so that
+        // Return a stored migrationVersion for PERSISTENT_STORE_KEY_MIGRATION_VERSION so that
         // BluetoothDeviceManager::init() sets _isMigrated=true.
-        ON_CALL(*p_storeMock, GetValue(::testing::_, PERSISTENT_STORE_KEY_FS_CHECKSUM, ::testing::_))
+        ON_CALL(*p_storeMock, GetValue(::testing::_, PERSISTENT_STORE_KEY_MIGRATION_VERSION, ::testing::_))
             .WillByDefault(::testing::DoAll(
-                ::testing::SetArgReferee<2>(std::string("test-checksum")),
+                ::testing::SetArgReferee<2>(std::string("1")),
                 ::testing::Return(Core::ERROR_NONE)));
 
         EXPECT_TRUE(plugin->Initialize(&service).empty());
@@ -1930,12 +1919,12 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, performMigrationWrapper_Set
 }
 
 /* -------------------------------------------------------------------------
- * performMigration — idempotency: checksum match skips all store writes
- * When the stored checksum equals the FNV-1a hash of the current filesystem
- * file content, performMigration must return success=true immediately without
- * writing deviceInfo or fsChecksumAtLastSync to PersistentStore.
+ * performMigration — idempotency: migrationVersion present skips all store writes
+ * When the migrationVersion key is already present in PersistentStore,
+ * performMigration must return success=true immediately without writing
+ * deviceInfo or migrationVersion to PersistentStore.
  * ---------------------------------------------------------------------- */
-TEST_F(BluetoothLegacyPersistenceMigrationParseTest, performMigrationWrapper_Idempotency_ChecksumMatchIsNoOp)
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, performMigrationWrapper_Idempotency_MigrationVersionPresentIsNoOp)
 {
     const std::string payload =
         "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"deviceType\":\"HEADPHONES\","
@@ -1945,96 +1934,35 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, performMigrationWrapper_Ide
         GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
     }
 
-    // Initialize with no stored checksum so _isMigrated=false;
-    // writeStorageFromCache is skipped during init, leaving the file content unchanged.
+    // Initialize with no stored migrationVersion so _isMigrated=false.
     EXPECT_TRUE(plugin->Initialize(&service).empty());
 
-    // Arrange: PersistentStore holds a checksum that matches the current file exactly.
-    const std::string matchingChecksum = computeTestFNV1a(payload);
-    EXPECT_CALL(*p_storeMock, GetValue(::testing::_, PERSISTENT_STORE_KEY_FS_CHECKSUM, ::testing::_))
+    // Arrange: PersistentStore holds migrationVersion="1" indicating migration already done.
+    EXPECT_CALL(*p_storeMock, GetValue(::testing::_, PERSISTENT_STORE_KEY_MIGRATION_VERSION, ::testing::_))
         .WillOnce(::testing::DoAll(
-            ::testing::SetArgReferee<2>(matchingChecksum),
+            ::testing::SetArgReferee<2>(std::string("1")),
             ::testing::Return(Core::ERROR_NONE)));
 
-    // Neither device data nor the checksum must be written on the no-op path.
+    // Neither device data nor the migrationVersion must be written on the no-op path.
     EXPECT_CALL(*p_storeMock, SetValue(::testing::_, PERSISTENT_STORE_KEY_DEVICE_INFO, ::testing::_))
         .Times(0);
-    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, PERSISTENT_STORE_KEY_FS_CHECKSUM, ::testing::_))
+    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, PERSISTENT_STORE_KEY_MIGRATION_VERSION, ::testing::_))
         .Times(0);
 
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
     EXPECT_TRUE(response.find("\"success\":true") != string::npos);
-}
-
-/* -------------------------------------------------------------------------
- * performMigration — re-sync: checksum mismatch triggers full re-import
- * When the filesystem file has changed since the last migration run (the
- * FNV-1a hash of the current file differs from the stored checksum),
- * performMigration must re-import devices from the new file content and
- * write both the updated device data and the new checksum to PersistentStore.
- * ---------------------------------------------------------------------- */
-TEST_F(BluetoothLegacyPersistenceMigrationParseTest, performMigrationWrapper_FileChanged_ResyncReimportsDataAndUpdatesChecksum)
-{
-    // V1 is the content that was previously migrated; its checksum is "stored".
-    const std::string payloadV1 =
-        "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"deviceType\":\"HEADPHONES\","
-        "\"autoConnectStatus\":true,\"lastConnectionTimeUTC\":0}]}";
-    const std::string storedChecksumFromV1 = computeTestFNV1a(payloadV1);
-
-    // V2 represents the file as it exists now — the autoConnectStatus has changed.
-    const std::string payloadV2 =
-        "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"deviceType\":\"HEADPHONES\","
-        "\"autoConnectStatus\":false,\"lastConnectionTimeUTC\":1700000000}]}";
-
-    if (!writeFilesystemPersistencePayload(payloadV2)) {
-        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
-    }
-
-    // Initialize with no stored checksum so _isMigrated=false during init;
-    // writeStorageFromCache is skipped during init, leaving the file content unchanged.
-    EXPECT_TRUE(plugin->Initialize(&service).empty());
-
-    // Arrange: PersistentStore holds the checksum for V1, but the file now has V2 content.
-    // computeTestFNV1a(payloadV2) != storedChecksumFromV1 → mismatch → re-sync triggered.
-    EXPECT_CALL(*p_storeMock, GetValue(::testing::_, PERSISTENT_STORE_KEY_FS_CHECKSUM, ::testing::_))
-        .WillOnce(::testing::DoAll(
-            ::testing::SetArgReferee<2>(storedChecksumFromV1),
-            ::testing::Return(Core::ERROR_NONE)));
-
-    std::string capturedDeviceInfo;
-    std::string capturedNewChecksum;
-
-    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, PERSISTENT_STORE_KEY_DEVICE_INFO, ::testing::_))
-        .WillOnce(::testing::DoAll(
-            ::testing::SaveArg<2>(&capturedDeviceInfo),
-            ::testing::Return(Core::ERROR_NONE)));
-    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, PERSISTENT_STORE_KEY_FS_CHECKSUM, ::testing::_))
-        .WillOnce(::testing::DoAll(
-            ::testing::SaveArg<2>(&capturedNewChecksum),
-            ::testing::Return(Core::ERROR_NONE)));
-
-    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
-    EXPECT_TRUE(response.find("\"success\":true") != string::npos);
-
-    // Device info for device "123" must have been written.
-    EXPECT_TRUE(capturedDeviceInfo.find("\"deviceID\":\"123\"") != string::npos);
-
-    // The written checksum must equal the FNV-1a hash of V2 and differ from V1's checksum.
-    const std::string expectedNewChecksum = computeTestFNV1a(payloadV2);
-    EXPECT_EQ(capturedNewChecksum, expectedNewChecksum);
-    EXPECT_NE(capturedNewChecksum, storedChecksumFromV1);
 }
 
 /* -------------------------------------------------------------------------
  * clearMigration — success: both PersistentStore keys are deleted
  * clearMigration must call DeleteKey for "deviceInfo" and
- * "fsChecksumAtLastSync" and return success=true.
+ * "migrationVersion" and return success=true.
  * ---------------------------------------------------------------------- */
 TEST_F(BluetoothClearMigrationTest, clearMigrationWrapper_Success_DeletesBothStoredKeys)
 {
     EXPECT_CALL(*p_storeMock, DeleteKey(::testing::_, PERSISTENT_STORE_KEY_DEVICE_INFO))
         .WillOnce(::testing::Return(Core::ERROR_NONE));
-    EXPECT_CALL(*p_storeMock, DeleteKey(::testing::_, PERSISTENT_STORE_KEY_FS_CHECKSUM))
+    EXPECT_CALL(*p_storeMock, DeleteKey(::testing::_, PERSISTENT_STORE_KEY_MIGRATION_VERSION))
         .WillOnce(::testing::Return(Core::ERROR_NONE));
 
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("clearMigration"), _T("{}"), response));

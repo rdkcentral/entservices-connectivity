@@ -32,7 +32,7 @@
 #define PERSISTENT_STORE_NAMESPACE "Bluetooth"
 #define PERSISTENT_STORE_KEY_DEVICE_INFO "deviceInfo"
 #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
-#define PERSISTENT_STORE_KEY_FS_CHECKSUM "fsChecksumAtLastSync"
+#define PERSISTENT_STORE_KEY_MIGRATION_VERSION "migrationVersion"
 #endif
 
 namespace WPEFramework {
@@ -90,9 +90,8 @@ namespace WPEFramework {
         #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
                 Core::hresult writeCacheFromFilesystemPersistence(const std::string& rawContent);
                 void writeFilesystemPersistenceFromCache();
-                std::string computeFNV1aChecksum(const std::string& content) const;
-                Core::hresult readFsChecksumFromStorage(std::string& checksum) const;
-                Core::hresult writeFsChecksumToStorage(const std::string& checksum);
+                Core::hresult readMigrationVersionFromStorage(std::string& version) const;
+                Core::hresult writeMigrationVersionToStorage();
                 std::size_t _lastFilesystemPersistenceHash = 0;
                 std::atomic<bool> _isMigrated{false};
                 mutable Core::CriticalSection _migrationLock;

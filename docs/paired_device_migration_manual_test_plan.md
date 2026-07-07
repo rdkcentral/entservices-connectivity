@@ -4,7 +4,7 @@
 **Feature Flag:** `BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION` (compile-time)  
 **AS Persistent File:** `/opt/persistent/sky/sky-asperipherals-bluetoothdevices.json`  
 **PersistentStore Location:** namespace `Bluetooth`, key `deviceInfo`  
-**PersistentStore Checksum Key:** namespace `Bluetooth`, key `fsChecksumAtLastSync`
+**PersistentStore Checksum Key:** namespace `Bluetooth`, key `migrationVersion`
 
 ---
 
@@ -16,8 +16,8 @@ Migration is **client-triggered**, not automatic. The plugin does **not** auto-m
 
 | API | Method | Description |
 |-----|--------|-------------|
-| `performMigration` | `org.rdk.Bluetooth.performMigration` | **First call:** imports AS file → RDK PersistentStore, stores `fsChecksumAtLastSync`. **Subsequent calls:** re-syncs only if AS file has changed (checksum differs). No-op if unchanged. |
-| `clearMigration` | `org.rdk.Bluetooth.clearMigration` | Deletes `deviceInfo` and `fsChecksumAtLastSync` from RDK PersistentStore, clears the plugin's paired device cache, and resets migration state. AS file is **not** touched. |
+| `performMigration` | `org.rdk.Bluetooth.performMigration` | **First call:** imports AS file → RDK PersistentStore, writes `migrationVersion=1`. **Subsequent calls:** no-op (migrationVersion already present). |
+| `clearMigration` | `org.rdk.Bluetooth.clearMigration` | Deletes `deviceInfo` and `migrationVersion` from RDK PersistentStore, clears the plugin's paired device cache, and resets migration state. AS file is **not** touched. |
 
 ### Migration State
 
@@ -47,9 +47,9 @@ curl --header "Content-Type: application/json" --request POST \
   --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.PersistentStore.getValue","params":{"namespace":"Bluetooth","key":"deviceInfo"}}' \
   http://127.0.0.1:9998/jsonrpc
 
-# Read fsChecksumAtLastSync from PersistentStore
+# Read migrationVersion from PersistentStore
 curl --header "Content-Type: application/json" --request POST \
-  --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.PersistentStore.getValue","params":{"namespace":"Bluetooth","key":"fsChecksumAtLastSync"}}' \
+  --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.PersistentStore.getValue","params":{"namespace":"Bluetooth","key":"migrationVersion"}}' \
   http://127.0.0.1:9998/jsonrpc
 
 # Delete a key from PersistentStore (manual cleanup)
@@ -93,7 +93,7 @@ curl --header "Content-Type: application/json" --request POST \
 
 For any test cases requiring a change in the bluetooth device's auto-connect status, the guide UI should **NOT** be used. The UI isn't currently using the new Bluetooth Thunder plug-in APIs to set the auto-connect status, and as such would not be reflected in PersistentStore. Use the `setAutoConnect` curl command from the Curl Reference Commands section above.
 
-`setAutoConnect` will be **rejected** (returns a JSON-RPC error: `{"error":{"code":1,"message":"ERROR_GENERAL"}}`) until a successful `performMigration` has occurred since the last `clearMigration`, or equivalently, until the `fsChecksumAtLastSync` key is present in PersistentStore. Because the plugin re-derives migration state from that key at init, migration remains enabled across reboots without needing `performMigration` to be called again.
+`setAutoConnect` will be **rejected** (returns a JSON-RPC error: `{"error":{"code":1,"message":"ERROR_GENERAL"}}`) until a successful `performMigration` has occurred since the last `clearMigration`, or equivalently, until the `migrationVersion` key is present in PersistentStore. Because the plugin re-derives migration state from that key at init, migration remains enabled across reboots without needing `performMigration` to be called again.
 
 ---
 
@@ -101,7 +101,7 @@ For any test cases requiring a change in the bluetooth device's auto-connect sta
 
 ### TC-MIG-01: First-time migration from AS filesystem to PersistentStore
 
-**Precondition:** Device has paired devices in the AS file `/opt/persistent/sky/sky-asperipherals-bluetoothdevices.json`. Both `Bluetooth/deviceInfo` and `Bluetooth/fsChecksumAtLastSync` are absent from PersistentStore (clean state, simulating first boot on new firmware).
+**Precondition:** Device has paired devices in the AS file `/opt/persistent/sky/sky-asperipherals-bluetoothdevices.json`. Both `Bluetooth/deviceInfo` and `Bluetooth/migrationVersion` are absent from PersistentStore (clean state, simulating first boot on new firmware).
 
 **Setup:**
 ```bash
@@ -111,7 +111,7 @@ curl --header "Content-Type: application/json" --request POST \
   http://127.0.0.1:9998/jsonrpc
 
 curl --header "Content-Type: application/json" --request POST \
-  --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.PersistentStore.deleteKey","params":{"namespace":"Bluetooth","key":"fsChecksumAtLastSync"}}' \
+  --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.PersistentStore.deleteKey","params":{"namespace":"Bluetooth","key":"migrationVersion"}}' \
   http://127.0.0.1:9998/jsonrpc
 
 # Confirm pre-existing AS file
@@ -121,17 +121,17 @@ Note the device addresses, `autoConnectStatus`, and `lastConnectionTimeUTC` valu
 
 **Steps:**
 1. Reboot device and wait for Bluetooth plugin activation.
-2. Verify `fsChecksumAtLastSync` is absent from PS (the authoritative indicator that migration has not been performed). Note: `deviceInfo` is NOT a reliable pre-migration indicator — plugin `init` always writes paired device data from BTRMGR to PS, so `deviceInfo` will already be present after the reboot in step 1:
+2. Verify `migrationVersion` is absent from PS (the authoritative indicator that migration has not been performed). Note: `deviceInfo` is NOT a reliable pre-migration indicator — plugin `init` always writes paired device data from BTRMGR to PS, so `deviceInfo` will already be present after the reboot in step 1:
    ```bash
    curl --header "Content-Type: application/json" --request POST \
-     --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.PersistentStore.getValue","params":{"namespace":"Bluetooth","key":"fsChecksumAtLastSync"}}' \
+     --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.PersistentStore.getValue","params":{"namespace":"Bluetooth","key":"migrationVersion"}}' \
      http://127.0.0.1:9998/jsonrpc
    # Expected: JSON-RPC error response (key not found)
    ```
-2a. Verify that `fsChecksumAtLastSync` is absent from PS (the authoritative indicator that migration has not been performed). Note that `deviceInfo` **will** be present at this point — plugin `init` always writes paired device data from BTRMGR to PS regardless of migration state:
+2a. Verify that `migrationVersion` is absent from PS (the authoritative indicator that migration has not been performed). Note that `deviceInfo` **will** be present at this point — plugin `init` always writes paired device data from BTRMGR to PS regardless of migration state:
    ```bash
    curl --header "Content-Type: application/json" --request POST \
-     --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.PersistentStore.getValue","params":{"namespace":"Bluetooth","key":"fsChecksumAtLastSync"}}' \
+     --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.PersistentStore.getValue","params":{"namespace":"Bluetooth","key":"migrationVersion"}}' \
      http://127.0.0.1:9998/jsonrpc
    # Expected: JSON-RPC error response (key not found)
    ```
@@ -147,10 +147,10 @@ Note the device addresses, `autoConnectStatus`, and `lastConnectionTimeUTC` valu
      --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.PersistentStore.getValue","params":{"namespace":"Bluetooth","key":"deviceInfo"}}' \
      http://127.0.0.1:9998/jsonrpc
    ```
-5. Verify `fsChecksumAtLastSync` is now stored in PersistentStore:
+5. Verify `migrationVersion` is now stored in PersistentStore:
    ```bash
    curl --header "Content-Type: application/json" --request POST \
-     --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.PersistentStore.getValue","params":{"namespace":"Bluetooth","key":"fsChecksumAtLastSync"}}' \
+     --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.PersistentStore.getValue","params":{"namespace":"Bluetooth","key":"migrationVersion"}}' \
      http://127.0.0.1:9998/jsonrpc
    ```
 6. Verify the AS file is semantically equivalent to its pre-migration state. Note: `performMigration` calls `writeFilesystemPersistenceFromCache()` after a successful PersistentStore write, so the file may be rewritten or reformatted (canonicalized) — byte equality and mtime checks are **not** appropriate here. Instead, compare content against the values noted in Setup:
@@ -162,7 +162,7 @@ Note the device addresses, `autoConnectStatus`, and `lastConnectionTimeUTC` valu
 **Expected Results:**
 - `performMigration` returns `{"success": true}`.
 - `Bluetooth/deviceInfo` is populated with device entries matching those from the AS file.
-- `Bluetooth/fsChecksumAtLastSync` contains a non-empty checksum string.
+- `Bluetooth/migrationVersion` is set to `"1"`.
 - Device `autoConnectStatus` and `lastConnectionTimeUTC` values from the AS file are preserved in PS.
  - The AS file may be re-written by rollback-sync, but it should remain semantically equivalent (same pairedDevices data unless expected backfill/normalization occurs).
 
@@ -172,12 +172,12 @@ Note the device addresses, `autoConnectStatus`, and `lastConnectionTimeUTC` valu
 
 ---
 
-### TC-MIG-02: performMigration is a no-op when AS file is unchanged (checksum match)
+### TC-MIG-02: performMigration is a no-op when migrationVersion is already present
 
-**Precondition:** TC-MIG-01 has been completed successfully. Both `deviceInfo` and `fsChecksumAtLastSync` are present in PS.
+**Precondition:** TC-MIG-01 has been completed successfully. Both `deviceInfo` and `migrationVersion` are present in PS.
 
 **Steps:**
-1. Record the current `fsChecksumAtLastSync` value.
+1. Record the current `migrationVersion` value.
 2. Record the current `deviceInfo` value.
 3. Call `performMigration` again **without modifying the AS file**:
    ```bash
@@ -185,25 +185,27 @@ Note the device addresses, `autoConnectStatus`, and `lastConnectionTimeUTC` valu
      --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.performMigration","params":{}}' \
      http://127.0.0.1:9998/jsonrpc
    ```
-4. Read `deviceInfo` and `fsChecksumAtLastSync` again and compare to values from step 1–2.
+4. Read `deviceInfo` and `migrationVersion` again and compare to values from step 1–2.
 
 **Expected Results:**
 - `performMigration` returns `{"success": true}`.
 - `deviceInfo` is **unchanged**.
-- `fsChecksumAtLastSync` is **unchanged**.
+- `migrationVersion` is **unchanged**.
 - No new import occurs.
 
 **Expected Log Entries:**
-- `performMigration: AS file unchanged (checksum match), no sync needed`
+- `performMigration: migration already completed (migrationVersion present), no sync needed`
 
 ---
 
-### TC-MIG-03: performMigration re-syncs when AS file has changed
+### TC-MIG-03: performMigration is always a no-op after first migration (migrationVersion present)
 
-**Precondition:** TC-MIG-01 completed. `deviceInfo` and `fsChecksumAtLastSync` are present in PS.
+> **Note:** The re-sync-on-file-change behaviour (checksum-based) has been removed. After the first successful `performMigration`, subsequent calls are always no-ops regardless of AS file content.
+
+**Precondition:** TC-MIG-01 completed. `deviceInfo` and `migrationVersion` are present in PS.
 
 **Steps:**
-1. Record the current `fsChecksumAtLastSync` value and number of devices in `deviceInfo`.
+1. Record the current `migrationVersion` value and number of devices in `deviceInfo`.
 2. Manually add a valid device entry to the AS file:
    ```bash
    # Edit the file — add a device entry to pairedDevices array
@@ -217,22 +219,21 @@ Note the device addresses, `autoConnectStatus`, and `lastConnectionTimeUTC` valu
      --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.performMigration","params":{}}' \
      http://127.0.0.1:9998/jsonrpc
    ```
-4. Read `deviceInfo` and `fsChecksumAtLastSync` from PS.
+4. Read `deviceInfo` and `migrationVersion` from PS.
 
 **Expected Results:**
 - `performMigration` returns `{"success": true}`.
-- `fsChecksumAtLastSync` has a **different** value than recorded in step 1.
-- `deviceInfo` reflects the updated AS file contents (re-import occurred).
+- `migrationVersion` is **unchanged** (`"1"`) — no re-import occurs.
+- `deviceInfo` is **unchanged** — the modified AS file is ignored.
 
 **Expected Log Entries:**
-- `performMigration: re-sync succeeded`
-- `Filesystem persistence sync succeeded: Persistence payload updated from cache, cache_size=N`
+- `performMigration: migration already completed (migrationVersion present), no sync needed`
 
 ---
 
 ### TC-MIG-04: performMigration with empty AS file
 
-**Precondition:** Both `deviceInfo` and `fsChecksumAtLastSync` are absent from PS.
+**Precondition:** Both `deviceInfo` and `migrationVersion` are absent from PS.
 
 **Steps:**
 1. Write a valid but empty AS file:
@@ -246,12 +247,12 @@ Note the device addresses, `autoConnectStatus`, and `lastConnectionTimeUTC` valu
      http://127.0.0.1:9998/jsonrpc
    ```
 3. Read `deviceInfo` from PS.
-4. Read `fsChecksumAtLastSync` from PS.
+4. Read `migrationVersion` from PS.
 
 **Expected Results:**
 - `performMigration` returns `{"success": true}`.
 - `deviceInfo` is present but contains an empty array (`[]`).
-- `fsChecksumAtLastSync` is present (checksum of empty content).
+- `migrationVersion` is present and set to `"1"`.
 - Plugin continues operating normally.
 
 **Expected Log Entries:**
@@ -262,7 +263,7 @@ Note the device addresses, `autoConnectStatus`, and `lastConnectionTimeUTC` valu
 
 ### TC-MIG-05: performMigration when AS file does not exist
 
-**Precondition:** Both `deviceInfo` and `fsChecksumAtLastSync` are absent from PS. AS file is deleted.
+**Precondition:** Both `deviceInfo` and `migrationVersion` are absent from PS. AS file is deleted.
 
 **Steps:**
 1. Remove the AS file:
@@ -276,12 +277,12 @@ Note the device addresses, `autoConnectStatus`, and `lastConnectionTimeUTC` valu
      http://127.0.0.1:9998/jsonrpc
    ```
 3. Read `deviceInfo` from PS.
-4. Read `fsChecksumAtLastSync` from PS.
+4. Read `migrationVersion` from PS.
 
 **Expected Results:**
 - `performMigration` returns `{"success": true}` (absent file treated as empty, not an error).
 - `deviceInfo` is present and contains an empty or minimal array.
-- `fsChecksumAtLastSync` is present (checksum of empty string).
+- `migrationVersion` is present and set to `"1"`.
 
 **Expected Log Entries:**
 - `filesystem persistence file does not exist: /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json` (logged by the persistence adapter when the file is not found; absent file is treated as empty — no error is returned)
@@ -293,7 +294,7 @@ Note the device addresses, `autoConnectStatus`, and `lastConnectionTimeUTC` valu
 
 ### TC-CLR-01: clearMigration wipes PersistentStore and resets migration state
 
-**Precondition:** `performMigration` has been successfully called. `deviceInfo` and `fsChecksumAtLastSync` are both present in PS.
+**Precondition:** `performMigration` has been successfully called. `deviceInfo` and `migrationVersion` are both present in PS.
 
 **Steps:**
 1. Confirm both PS keys exist (see Curl Reference Commands).
@@ -310,10 +311,10 @@ Note the device addresses, `autoConnectStatus`, and `lastConnectionTimeUTC` valu
      http://127.0.0.1:9998/jsonrpc
    # Expected: key absent / error
    ```
-4. Verify `fsChecksumAtLastSync` is gone from PS:
+4. Verify `migrationVersion` is gone from PS:
    ```bash
    curl --header "Content-Type: application/json" --request POST \
-     --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.PersistentStore.getValue","params":{"namespace":"Bluetooth","key":"fsChecksumAtLastSync"}}' \
+     --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.PersistentStore.getValue","params":{"namespace":"Bluetooth","key":"migrationVersion"}}' \
      http://127.0.0.1:9998/jsonrpc
    # Expected: key absent / error
    ```
@@ -325,7 +326,7 @@ Note the device addresses, `autoConnectStatus`, and `lastConnectionTimeUTC` valu
 **Expected Results:**
 - `clearMigration` returns `{"success": true}`.
 - `Bluetooth/deviceInfo` is absent from PS.
-- `Bluetooth/fsChecksumAtLastSync` is absent from PS.
+- `Bluetooth/migrationVersion` is absent from PS.
 - AS file is intact and unmodified.
 - In-memory device cache is cleared (`getPairedDevices` will return no entries).
 
@@ -336,7 +337,7 @@ Note the device addresses, `autoConnectStatus`, and `lastConnectionTimeUTC` valu
 
 ### TC-CLR-02: clearMigration on already-empty PersistentStore (idempotent)
 
-**Precondition:** Neither `deviceInfo` nor `fsChecksumAtLastSync` exist in PS (either a clean device, or after a prior `clearMigration`).
+**Precondition:** Neither `deviceInfo` nor `migrationVersion` exist in PS (either a clean device, or after a prior `clearMigration`).
 
 **Steps:**
 1. Confirm both PS keys are absent.
@@ -368,7 +369,7 @@ Note the device addresses, `autoConnectStatus`, and `lastConnectionTimeUTC` valu
      --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.performMigration","params":{}}' \
      http://127.0.0.1:9998/jsonrpc
    ```
-4. Verify `deviceInfo` and `fsChecksumAtLastSync` are present in PS again.
+4. Verify `deviceInfo` and `migrationVersion` are present in PS again.
 5. Verify device data matches the AS file.
 
 **Expected Results:**
@@ -385,7 +386,7 @@ Note the device addresses, `autoConnectStatus`, and `lastConnectionTimeUTC` valu
 
 ### TC-GUARD-01: setAutoConnect rejected before performMigration
 
-**Precondition:** Migration has not been performed — either the device has never had `performMigration` called, or `clearMigration` has been called since the last `performMigration`. Verify this by confirming `fsChecksumAtLastSync` is absent from PersistentStore.
+**Precondition:** Migration has not been performed — either the device has never had `performMigration` called, or `clearMigration` has been called since the last `performMigration`. Verify this by confirming `migrationVersion` is absent from PersistentStore.
 
 **Setup (ensure pre-migration state):**
 ```bash
@@ -575,7 +576,7 @@ curl --header "Content-Type: application/json" --request POST \
 
 ### TC-RB-05: AS file is NOT modified when performMigration has never been called
 
-**Precondition:** Fresh state — `performMigration` has never been called in this session. Both `deviceInfo` and `fsChecksumAtLastSync` are absent from PS (use `clearMigration` to reset if needed). The AS file exists and has known content.
+**Precondition:** Fresh state — `performMigration` has never been called in this session. Both `deviceInfo` and `migrationVersion` are absent from PS (use `clearMigration` to reset if needed). The AS file exists and has known content.
 
 **Setup:**
 ```bash
@@ -599,7 +600,7 @@ ls -la /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
      http://127.0.0.1:9998/jsonrpc
    # Expected: success — deviceInfo is present and includes the newly paired device
    ```
-   Verify that `fsChecksumAtLastSync` is still absent (migration has not been performed).
+   Verify that `migrationVersion` is still absent (migration has not been performed).
 3. Verify the AS file is **unchanged** (compare checksum or mtime to the baseline recorded in Setup):
    ```bash
    md5sum /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
@@ -657,7 +658,7 @@ md5sum /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
 **Expected Results:**
 - `clearMigration` does not modify the AS file (steps 1–3: checksum unchanged).
 - Pairing and unpairing operations in steps 4–5 do not modify the AS file, because migration has not been re-established.
-- After `performMigration` in step 6, the next pairing operation (step 7) **does** update the AS file (checksum changes, new device appears).
+- After `performMigration` in step 6, the next pairing operation (step 7) **does** update the AS file (new device appears).
 
 **Expected Log Entries for steps 4 and 5**: There is no dedicated skip-log for the AS file write when migration has not been performed. Confirm instead that `Filesystem persistence sync succeeded` does **not** appear in logs during steps 4–5.
 
@@ -702,7 +703,7 @@ This test simulates the "IUI LD Disabled" scenario from the design, where IUI ca
      --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.clearMigration","params":{}}' \
      http://127.0.0.1:9998/jsonrpc
    ```
-3. Verify PS `deviceInfo` and `fsChecksumAtLastSync` are gone.
+3. Verify PS `deviceInfo` and `migrationVersion` are gone.
 4. Verify the AS file is **unchanged** (clearing only affects PS, not the AS file).
 5. Attempt `setAutoConnect` for any device — verify it returns a JSON-RPC error: `{"error":{"code":1,"message":"ERROR_GENERAL"}}`.
 6. Downgrade to old firmware (or simulate old-firmware behaviour by verifying only the AS file is used).
@@ -728,16 +729,16 @@ This test simulates the "IUI LD Disabled" scenario from the design, where IUI ca
 7. Pair 1 more device on OLD firmware (written to AS file only).
 8. Upgrade back to NEW firmware.
 9. Reboot and call `performMigration` again.
-10. Verify `performMigration` **re-syncs** (the AS file changed due to step 7 — checksum differs).
+10. Verify `performMigration` **re-syncs** (the AS file changed due to step 7 — `migrationVersion` key was absent after the second upgrade, so first-time migration runs again).
 11. Verify the device paired in step 7 is now in PS.
 
 **Expected Results:**
 - No data loss at any transition point.
-- On second upgrade (step 9), `performMigration` detects checksum mismatch and re-syncs from the updated AS file.
+- On second upgrade (step 9), `clearMigration` (or absence of `migrationVersion`) allows `performMigration` to run a fresh first-time import from the updated AS file.
 - All 4 devices are present in PS after second upgrade.
 
 **Expected Log Entries (step 9):**
-- `performMigration: re-sync succeeded`
+- `performMigration: initial migration succeeded`
 
 ---
 
@@ -750,7 +751,7 @@ This test simulates the "IUI LD Disabled" scenario from the design, where IUI ca
 **Steps:**
 1. Verify both stores have consistent data before reboot.
 2. Reboot device.
-3. After boot, verify `deviceInfo` and `fsChecksumAtLastSync` are still present in PS.
+3. After boot, verify `deviceInfo` and `migrationVersion` are still present in PS.
 4. Verify AS file still contains expected data.
 5. Verify devices auto-connect per their saved settings.
 6. Verify that `performMigration` does NOT need to be called again (state persists across reboot).
@@ -758,7 +759,7 @@ This test simulates the "IUI LD Disabled" scenario from the design, where IUI ca
 **Expected Results:**
 - All data survives reboot.
 - `autoConnect` and `lastConnectionTimeUTC` are preserved.
-- The plugin recognises that migration was previously completed (because `fsChecksumAtLastSync` is present in PersistentStore) and does not require `performMigration` to be called again.
+- The plugin recognises that migration was previously completed (because `migrationVersion` is present in PersistentStore) and does not require `performMigration` to be called again.
 - `setAutoConnect` works immediately after reboot without needing to re-call `performMigration`.
 
 **Expected Log Entries on boot** (search device logs for these exact strings):
@@ -769,7 +770,7 @@ This test simulates the "IUI LD Disabled" scenario from the design, where IUI ca
 
 ### TC-REBOOT-02: setAutoConnect rejected after reboot when migration was never performed
 
-**Precondition:** Both `deviceInfo` and `fsChecksumAtLastSync` are absent from PersistentStore. `performMigration` has never been successfully called on this device.
+**Precondition:** Both `deviceInfo` and `migrationVersion` are absent from PersistentStore. `performMigration` has never been successfully called on this device.
 
 **Steps:**
 1. Delete both PS keys (or call `clearMigration`) and reboot.
@@ -809,7 +810,7 @@ This test simulates the "IUI LD Disabled" scenario from the design, where IUI ca
 ### TC-EDGE-02: performMigration called multiple times concurrently (stress)
 
 **Steps:**
-1. Ensure `performMigration` has not been called (no `fsChecksumAtLastSync` in PS).
+1. Ensure `performMigration` has not been called (no `migrationVersion` in PS).
 2. Fire multiple concurrent `performMigration` calls in quick succession:
    ```bash
    for i in {1..5}; do
@@ -819,14 +820,14 @@ This test simulates the "IUI LD Disabled" scenario from the design, where IUI ca
    done
    wait
    ```
-3. Verify `deviceInfo` and `fsChecksumAtLastSync` are present and contain valid data.
+3. Verify `deviceInfo` and `migrationVersion` are present and contain valid data.
 4. Verify no duplicate device entries in `deviceInfo`.
 
 **Expected Results:**
 - All calls return `{"success": true}`.
-- Only one import occurs — concurrent calls are serialised and the second through fifth calls will each be no-ops (checksum already matches after the first call completes).
+- Only one import occurs — concurrent calls are serialised and the second through fifth calls will each be no-ops (migrationVersion already present after the first call completes).
 - `deviceInfo` has no duplicate entries.
-- `fsChecksumAtLastSync` has a single consistent value.
+- `migrationVersion` has a single consistent value.
 
 
 

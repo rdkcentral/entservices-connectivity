@@ -156,21 +156,7 @@ namespace WPEFramework {
             }
         }
 
-        std::string BluetoothDeviceManager::computeFNV1aChecksum(const std::string& content) const
-        {
-            // FNV-1a 64-bit
-            static constexpr uint64_t FNV_OFFSET_BASIS = 14695981039346656037ULL;
-            static constexpr uint64_t FNV_PRIME         = 1099511628211ULL;
-
-            uint64_t hash = FNV_OFFSET_BASIS;
-            for (const unsigned char c : content) {
-                hash ^= static_cast<uint64_t>(c);
-                hash *= FNV_PRIME;
-            }
-            return std::to_string(hash);
-        }
-
-        Core::hresult BluetoothDeviceManager::readFsChecksumFromStorage(std::string& checksum) const
+        Core::hresult BluetoothDeviceManager::readMigrationVersionFromStorage(std::string& version) const
         {
             if (_service == nullptr) {
                 LOGERR("Service is null");
@@ -183,17 +169,17 @@ namespace WPEFramework {
                 return Core::ERROR_GENERAL;
             }
 
-            const Core::hresult result = pPersistentStore->GetValue(PERSISTENT_STORE_NAMESPACE, PERSISTENT_STORE_KEY_FS_CHECKSUM, checksum);
+            const Core::hresult result = pPersistentStore->GetValue(PERSISTENT_STORE_NAMESPACE, PERSISTENT_STORE_KEY_MIGRATION_VERSION, version);
             pPersistentStore->Release();
 
             if ((Core::ERROR_NONE != result) && !missingFromPersistentStore(result)) {
-                LOGERR("Failed to read fsChecksumAtLastSync from PersistentStore, hresult=%d", result);
+                LOGERR("Failed to read migrationVersion from PersistentStore, hresult=%d", result);
             }
 
             return result;
         }
 
-        Core::hresult BluetoothDeviceManager::writeFsChecksumToStorage(const std::string& checksum)
+        Core::hresult BluetoothDeviceManager::writeMigrationVersionToStorage()
         {
             if (_service == nullptr) {
                 LOGERR("Service is null");
@@ -206,11 +192,11 @@ namespace WPEFramework {
                 return Core::ERROR_GENERAL;
             }
 
-            const Core::hresult result = pPersistentStore->SetValue(PERSISTENT_STORE_NAMESPACE, PERSISTENT_STORE_KEY_FS_CHECKSUM, checksum);
+            const Core::hresult result = pPersistentStore->SetValue(PERSISTENT_STORE_NAMESPACE, PERSISTENT_STORE_KEY_MIGRATION_VERSION, std::string("1"));
             pPersistentStore->Release();
 
             if (Core::ERROR_NONE != result) {
-                LOGERR("Failed to write fsChecksumAtLastSync to PersistentStore, hresult=%d", result);
+                LOGERR("Failed to write migrationVersion to PersistentStore, hresult=%d", result);
             }
 
             return result;
@@ -220,16 +206,22 @@ namespace WPEFramework {
         {
             Core::SafeSyncType<Core::CriticalSection> lock(_migrationLock);
 
-            std::string storedChecksum;
-            const Core::hresult readChecksumResult = readFsChecksumFromStorage(storedChecksum);
-            const bool firstTime = missingFromPersistentStore(readChecksumResult);
+            std::string storedVersion;
+            const Core::hresult readVersionResult = readMigrationVersionFromStorage(storedVersion);
+            const bool alreadyMigrated = (Core::ERROR_NONE == readVersionResult);
 
-            if ((Core::ERROR_NONE != readChecksumResult) && !firstTime) {
-                LOGERR("performMigration: failed to read stored checksum, hresult=%d", readChecksumResult);
-                return readChecksumResult;
+            if (!missingFromPersistentStore(readVersionResult) && (Core::ERROR_NONE != readVersionResult)) {
+                LOGERR("performMigration: failed to read migrationVersion, hresult=%d", readVersionResult);
+                return readVersionResult;
             }
 
-            // Read the raw AS file content for checksum computation.
+            if (alreadyMigrated) {
+                LOGINFO("performMigration: migration already completed (migrationVersion present), no sync needed");
+                _isMigrated.store(true);
+                return Core::ERROR_NONE;
+            }
+
+            // First-time migration: read the AS file and import devices into the cache.
             BluetoothPersistenceAdapter adapter;
             std::string rawContent;
             const Core::hresult readRawResult = adapter.ReadRaw(rawContent);
@@ -238,15 +230,6 @@ namespace WPEFramework {
                 return readRawResult;
             }
 
-            const std::string newChecksum = computeFNV1aChecksum(rawContent);
-
-            if (!firstTime && (newChecksum == storedChecksum)) {
-                LOGINFO("performMigration: AS file unchanged (checksum match), no sync needed");
-                _isMigrated.store(true);
-                return Core::ERROR_NONE;
-            }
-
-            // Import devices from the AS file into the cache.
             const Core::hresult importResult = writeCacheFromFilesystemPersistence(rawContent);
             if (Core::ERROR_NONE != importResult) {
                 LOGERR("performMigration: failed to import from filesystem persistence, hresult=%d", importResult);
@@ -267,18 +250,18 @@ namespace WPEFramework {
             const Core::hresult writeResult = writeStorageFromCache();
             if (Core::ERROR_NONE != writeResult) {
                 LOGERR("performMigration: failed to persist imported data to PersistentStore, hresult=%d", writeResult);
-                _isMigrated.store(!firstTime); // If this was the first migration attempt, mark as not migrated.
+                _isMigrated.store(false);
                 return writeResult;
             }
 
-            const Core::hresult writeChecksumResult = writeFsChecksumToStorage(newChecksum);
-            if (Core::ERROR_NONE != writeChecksumResult) {
-                LOGERR("performMigration: failed to persist checksum, hresult=%d", writeChecksumResult);
-                _isMigrated.store(!firstTime); // If this was the first migration attempt, mark as not migrated.
-                return writeChecksumResult;
+            const Core::hresult writeVersionResult = writeMigrationVersionToStorage();
+            if (Core::ERROR_NONE != writeVersionResult) {
+                LOGERR("performMigration: failed to persist migrationVersion, hresult=%d", writeVersionResult);
+                _isMigrated.store(false);
+                return writeVersionResult;
             }
 
-            LOGINFO("performMigration: %s succeeded", firstTime ? "initial migration" : "re-sync");
+            LOGINFO("performMigration: initial migration succeeded");
             return Core::ERROR_NONE;
         }
 
@@ -304,9 +287,9 @@ namespace WPEFramework {
                 return result;
             }
 
-            result = pPersistentStore->DeleteKey(PERSISTENT_STORE_NAMESPACE, PERSISTENT_STORE_KEY_FS_CHECKSUM);
+            result = pPersistentStore->DeleteKey(PERSISTENT_STORE_NAMESPACE, PERSISTENT_STORE_KEY_MIGRATION_VERSION);
             if ((Core::ERROR_NONE != result) && !missingFromPersistentStore(result)) {
-                LOGERR("clearMigration: failed to delete fsChecksumAtLastSync from PersistentStore, hresult=%d", result);
+                LOGERR("clearMigration: failed to delete migrationVersion from PersistentStore, hresult=%d", result);
                 pPersistentStore->Release();
                 return result;
             }
@@ -558,9 +541,9 @@ namespace WPEFramework {
 
 #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
             {
-                std::string storedChecksum;
-                const Core::hresult checksumResult = readFsChecksumFromStorage(storedChecksum);
-                const bool isMigrated = (Core::ERROR_NONE == checksumResult);
+                std::string storedVersion;
+                const Core::hresult versionResult = readMigrationVersionFromStorage(storedVersion);
+                const bool isMigrated = (Core::ERROR_NONE == versionResult);
                 _isMigrated.store(isMigrated);
                 LOGINFO("Migration state at init: _isMigrated=%s", isMigrated ? "true" : "false");
             }
