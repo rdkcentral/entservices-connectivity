@@ -955,18 +955,28 @@ protected:
     {
         TEST_LOG("BluetoothPowerModeTest ctor");
 
-        // Pre-populate persistent store with a HID device so that init()
-        // loads it into the paired device cache via updateCacheFromStorage().
+        // Pre-populate the HID device so that onPowerModeChanged can exercise
+        // the "skip HID" branch. On the migration path init() reads migrationVersion
+        // first, so we must supply "1" for that key before the deviceInfo payload.
         const std::string hidDeviceJson =
             "[{\"deviceID\":\"123\",\"deviceType\":\"HUMAN INTERFACE DEVICE\","
             "\"autoconnect\":0,\"lastConnectTimeUtc\":\"\"}]";
         ON_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
-            .WillByDefault(::testing::DoAll(
-                ::testing::SetArgReferee<2>(hidDeviceJson),
-                ::testing::Return(Core::ERROR_NONE)));
+            .WillByDefault(::testing::Invoke(
+                [hidDeviceJson](const std::string&, const std::string& key, std::string& value) -> Core::hresult {
+#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+                    if (key == "migrationVersion") {
+                        value = "1";
+                        return Core::ERROR_NONE;
+                    }
+#endif
+                    value = hidDeviceJson;
+                    return Core::ERROR_NONE;
+                }));
 
-        // Return device handle 123 from BTRMGR so the device is not scrubbed
-        // during updateCacheFromDevice().
+#ifndef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+        // Non-migration path: init() calls BTRMGR to reconcile the cache.
+        // Return device handle 123 so the HID entry survives the scrub step.
         BTRMGR_PairedDevicesList_t hidPairedDevices;
         memset(&hidPairedDevices, 0, sizeof(hidPairedDevices));
         hidPairedDevices.m_numOfDevices = 1;
@@ -975,6 +985,7 @@ protected:
             .WillByDefault(::testing::DoAll(
                 ::testing::SetArgPointee<1>(hidPairedDevices),
                 ::testing::Return(BTRMGR_RESULT_SUCCESS)));
+#endif
 
         EXPECT_CALL(PowerManagerMock::Mock(), GetPowerState(::testing::_, ::testing::_))
             .Times(::testing::AnyNumber())
@@ -1221,12 +1232,13 @@ protected:
 
     bool initializeFromPersistentStorePayload(const std::string& payload)
     {
+        // init() reads migrationVersion first, then deviceInfo (migration path).
         EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
             .WillOnce(::testing::DoAll(
-                ::testing::SetArgReferee<2>(payload),
+                ::testing::SetArgReferee<2>(std::string(BLUETOOTH_MIGRATION_VERSION)),
                 ::testing::Return(Core::ERROR_NONE)))
             .WillOnce(::testing::DoAll(
-                ::testing::SetArgReferee<2>(std::string("1")),
+                ::testing::SetArgReferee<2>(payload),
                 ::testing::Return(Core::ERROR_NONE)));
 
         return plugin->Initialize(&service).empty();
