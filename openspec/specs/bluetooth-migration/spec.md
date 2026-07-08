@@ -94,7 +94,7 @@ During initialization, the plugin SHALL disconnect any currently connected non-H
 - **THEN** the device is left connected regardless of autoconnect setting
 
 ### Requirement: External connect requests SHALL be auto-handled when autoconnect status is known
-When an external Bluetooth device requests a connection and its autoconnect status can be determined, the plugin SHALL resolve the request internally without propagating the event to clients. An unset autoconnect status is treated as disabled.
+When `BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION` is enabled and migration has been performed (`migrationVersion` present in PersistentStore), when an external Bluetooth device requests a connection and its autoconnect status can be determined, the plugin SHALL resolve the request internally without propagating the event to clients. An unset autoconnect status is treated as disabled. Otherwise, the plugin SHALL emit an `onConnectionRequest` event to clients.
 
 #### Scenario: Autoconnect explicitly enabled
 - **WHEN** an external connect request arrives for a device with autoconnect explicitly set to enabled

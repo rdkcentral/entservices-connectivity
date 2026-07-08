@@ -25,9 +25,9 @@ The plugin tracks whether migration has been performed. Migration state becomes 
 
 - `setAutoConnect` is **rejected** (returns a JSON-RPC error response) when migration has not been performed.
 - `setAutoConnect` changes will **not** be written to PersistentStore when migration has not been performed.
-- Pairing and unpairing (`addDevice`/`removeDevice`) always write to PersistentStore regardless of migration state.
+- Pairing and unpairing (`addDevice`/`removeDevice`) update the in-memory device cache but do **not** write to PersistentStore when migration has not been performed.
 - The AS file (filesystem persistence) will **not** be updated by any operation — pairing, unpairing, or `setAutoConnect` — when migration has not been performed.
-- `getAutoConnect` has no migration guard. However, since `clearMigration` also wipes the in-memory device cache, `getAutoConnect` calls will fail with a device-not-found error (not a migration rejection) until the cache is repopulated (e.g. after a reboot or `performMigration`).
+- `getAutoConnect` has a migration guard, but instead of rejecting, it returns `autoconnect: false` (success) for any deviceID when migration has not been performed — it bypasses the cache lookup entirely and returns disabled without error.
 
 ### Curl Reference Commands
 
@@ -121,14 +121,7 @@ Note the device addresses, `autoConnectStatus`, and `lastConnectionTimeUTC` valu
 
 **Steps:**
 1. Reboot device and wait for Bluetooth plugin activation.
-2. Verify `migrationVersion` is absent from PS (the authoritative indicator that migration has not been performed). Note: `deviceInfo` is NOT a reliable pre-migration indicator — plugin `init` always writes paired device data from BTRMGR to PS, so `deviceInfo` will already be present after the reboot in step 1:
-   ```bash
-   curl --header "Content-Type: application/json" --request POST \
-     --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.PersistentStore.getValue","params":{"namespace":"Bluetooth","key":"migrationVersion"}}' \
-     http://127.0.0.1:9998/jsonrpc
-   # Expected: JSON-RPC error response (key not found)
-   ```
-2a. Verify that `migrationVersion` is absent from PS (the authoritative indicator that migration has not been performed). Note that `deviceInfo` **will** be present at this point — plugin `init` always writes paired device data from BTRMGR to PS regardless of migration state:
+2. Verify `migrationVersion` is absent from PS. When the migration-enabled build runs `init` with no valid `migrationVersion` present, the cache is left empty and no data is written to PersistentStore — `deviceInfo` will also be absent (or contain only stale data from a prior firmware, not from this boot):
    ```bash
    curl --header "Content-Type: application/json" --request POST \
      --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.PersistentStore.getValue","params":{"namespace":"Bluetooth","key":"migrationVersion"}}' \
@@ -141,7 +134,7 @@ Note the device addresses, `autoConnectStatus`, and `lastConnectionTimeUTC` valu
      --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.performMigration","params":{}}' \
      http://127.0.0.1:9998/jsonrpc
    ```
-4. Verify `deviceInfo` is now populated in PersistentStore with data imported from the AS file (as opposed to the BTRMGR-only data that was there before):
+4. Verify `deviceInfo` is now populated in PersistentStore with data imported from the AS file:
    ```bash
    curl --header "Content-Type: application/json" --request POST \
      --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.PersistentStore.getValue","params":{"namespace":"Bluetooth","key":"deviceInfo"}}' \
@@ -153,22 +146,22 @@ Note the device addresses, `autoConnectStatus`, and `lastConnectionTimeUTC` valu
      --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.PersistentStore.getValue","params":{"namespace":"Bluetooth","key":"migrationVersion"}}' \
      http://127.0.0.1:9998/jsonrpc
    ```
-6. Verify the AS file is semantically equivalent to its pre-migration state. Note: `performMigration` calls `writeFilesystemPersistenceFromCache()` after a successful PersistentStore write, so the file may be rewritten or reformatted (canonicalized) — byte equality and mtime checks are **not** appropriate here. Instead, compare content against the values noted in Setup:
+6. Verify the AS file is **unchanged** after `performMigration`. The filesystem sync (`writeFilesystemPersistenceFromCache`) is guarded by `_isMigrated`, which is only set to `true` after the PersistentStore write completes — so the AS file is not touched during `performMigration`. Byte equality and mtime checks **are** appropriate here:
    ```bash
-   cat /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
+   md5sum /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
+   ls -la /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
    ```
-   Confirm that every device address, `autoConnectStatus`, and `lastConnectionTimeUTC` recorded before migration is still present and correct.
+   Confirm checksum and mtime are identical to the values recorded in Setup.
 
 **Expected Results:**
 - `performMigration` returns `{"success": true}`.
 - `Bluetooth/deviceInfo` is populated with device entries matching those from the AS file.
 - `Bluetooth/migrationVersion` is set to `"1"`.
 - Device `autoConnectStatus` and `lastConnectionTimeUTC` values from the AS file are preserved in PS.
- - The AS file may be re-written by rollback-sync, but it should remain semantically equivalent (same pairedDevices data unless expected backfill/normalization occurs).
+- The AS file is **not** modified by `performMigration` — its checksum and mtime are unchanged.
 
 **Expected Log Entries:**
 - `performMigration: initial migration succeeded`
-- `Filesystem persistence sync succeeded: Persistence payload updated from cache, cache_size=N`
 
 ---
 
@@ -257,7 +250,6 @@ Note the device addresses, `autoConnectStatus`, and `lastConnectionTimeUTC` valu
 
 **Expected Log Entries:**
 - `performMigration: initial migration succeeded`
-- `Filesystem persistence sync succeeded: Persistence payload updated from cache, cache_size=0`
 
 ---
 
@@ -486,9 +478,9 @@ curl --header "Content-Type: application/json" --request POST \
    ```
 
 **Expected Results:**
-- `getAutoConnect` is NOT rejected with a migration guard error (unlike `setAutoConnect`, there is no `_isMigrated` check in `getAutoConnect`).
-- However, because `clearMigration` wiped the in-memory device cache, `getAutoConnect` will fail with a device-not-found error (`{"error":{"code":1,"message":"ERROR_GENERAL"}}`) rather than returning a value. This failure is caused by the empty cache — **not** by a migration guard. This distinguishes it from `setAutoConnect`, which fails specifically because of the migration guard.
-- To observe `getAutoConnect` succeed with migration state false, reboot the device first (init repopulates the cache from BTRMGR). After reboot, `getAutoConnect` will succeed and return `{"autoconnect": false}` for any device whose auto-connect status was not set.
+- `getAutoConnect` DOES have a migration state check. When `_isMigrated=false`, the code immediately returns `AUTO_CONNECT_STATUS_DISABLED` with success — it bypasses the cache lookup entirely. No device-not-found error is returned.
+- Response: `{"success": true, "autoconnect": false}` for any `deviceID` when migration has not been performed, regardless of whether the device exists in the (empty) cache.
+- This distinguishes it from `setAutoConnect`: `setAutoConnect` explicitly rejects with an error when not migrated; `getAutoConnect` silently returns disabled.
 
 ---
 
@@ -593,12 +585,12 @@ ls -la /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
 
 **Steps:**
 1. Pair a new Bluetooth audio device.
-2. Verify PS `deviceInfo` IS updated (pairing always writes to PersistentStore regardless of migration state — this is expected):
+2. Verify the in-memory cache IS updated (the device appears in `getPairedDevices`), but verify PS `deviceInfo` is **not** written by the pairing — `addDevice` skips the PersistentStore write when `_isMigrated=false`:
    ```bash
+   # Confirm getPairedDevices shows the newly paired device (in-memory cache was updated)
    curl --header "Content-Type: application/json" --request POST \
-     --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.PersistentStore.getValue","params":{"namespace":"Bluetooth","key":"deviceInfo"}}' \
+     --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.Bluetooth.1.getPairedDevices"}' \
      http://127.0.0.1:9998/jsonrpc
-   # Expected: success — deviceInfo is present and includes the newly paired device
    ```
    Verify that `migrationVersion` is still absent (migration has not been performed).
 3. Verify the AS file is **unchanged** (compare checksum or mtime to the baseline recorded in Setup):
@@ -610,8 +602,8 @@ ls -la /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
 5. Verify the AS file is still unchanged.
 
 **Expected Results:**
-- PersistentStore `deviceInfo` is updated on pairing and unpairing (pairing/unpairing are not guarded by migration state).
-- The AS file is **not** modified at any point — only the AS file is protected by migration state.
+- PersistentStore `deviceInfo` is **not** updated on pairing or unpairing. While `addDevice`/`removeDevice` update the in-memory device cache, the PersistentStore write is skipped when `_isMigrated=false`.
+- The AS file is **not** modified at any point — the filesystem sync is also guarded by migration state.
 - AS file checksum and mtime are identical to the baseline recorded before step 1.
 
 **Expected Log Entries** (no migration-specific skip log exists for `writeStorageFromCache`; search device logs for the absence of the filesystem sync success message):
