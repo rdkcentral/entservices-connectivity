@@ -653,7 +653,7 @@ namespace WPEFramework {
             if (Core::ERROR_NONE != result) {
                 LOGERR("Failed to update storage from cache after setting autoConnect for deviceID=%s", deviceID.c_str());
             }
-x
+            
             return result;
         }
 
