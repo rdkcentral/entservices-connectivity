@@ -1864,7 +1864,7 @@ protected:
 
 /* -------------------------------------------------------------------------
  * performMigration — success: filesystem source present
- * When the filesystem file exists and no checksum is stored yet (first-time
+ * When the filesystem file exists and no migrationVersion is stored yet (first-time
  * migration), performMigration must import devices and return success=true.
  * ---------------------------------------------------------------------- */
 TEST_F(BluetoothLegacyPersistenceMigrationParseTest, performMigrationWrapper_Success_FilePresent)

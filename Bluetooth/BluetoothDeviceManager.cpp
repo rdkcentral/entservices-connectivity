@@ -192,7 +192,7 @@ namespace WPEFramework {
                 return Core::ERROR_GENERAL;
             }
 
-            const Core::hresult result = pPersistentStore->SetValue(PERSISTENT_STORE_NAMESPACE, PERSISTENT_STORE_KEY_MIGRATION_VERSION, std::string("1"));
+            const Core::hresult result = pPersistentStore->SetValue(PERSISTENT_STORE_NAMESPACE, PERSISTENT_STORE_KEY_MIGRATION_VERSION, BLUETOOTH_MIGRATION_VERSION);
             pPersistentStore->Release();
 
             if (Core::ERROR_NONE != result) {
@@ -653,7 +653,7 @@ namespace WPEFramework {
             if (Core::ERROR_NONE != result) {
                 LOGERR("Failed to update storage from cache after setting autoConnect for deviceID=%s", deviceID.c_str());
             }
-
+x
             return result;
         }
 

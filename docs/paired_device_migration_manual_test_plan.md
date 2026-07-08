@@ -4,7 +4,7 @@
 **Feature Flag:** `BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION` (compile-time)  
 **AS Persistent File:** `/opt/persistent/sky/sky-asperipherals-bluetoothdevices.json`  
 **PersistentStore Location:** namespace `Bluetooth`, key `deviceInfo`  
-**PersistentStore Checksum Key:** namespace `Bluetooth`, key `migrationVersion`
+**PersistentStore Migration Version Key:** namespace `Bluetooth`, key `migrationVersion`
 
 ---
 
@@ -193,7 +193,7 @@ Note the device addresses, `autoConnectStatus`, and `lastConnectionTimeUTC` valu
 
 ### TC-MIG-03: performMigration is always a no-op after first migration (migrationVersion present)
 
-> **Note:** The re-sync-on-file-change behaviour (checksum-based) has been removed. After the first successful `performMigration`, subsequent calls are always no-ops regardless of AS file content.
+> **Note:** The re-sync-on-file-change behaviour has been removed. After the first successful `performMigration`, subsequent calls are always no-ops regardless of AS file content.
 
 **Precondition:** TC-MIG-01 completed. `deviceInfo` and `migrationVersion` are present in PS.
 
@@ -370,7 +370,7 @@ Note the device addresses, `autoConnectStatus`, and `lastConnectionTimeUTC` valu
 - `performMigration` returns `{"success": true}`.
 
 **Expected Log Entries (step 3):**
-- `performMigration: initial migration succeeded` (treated as first time since checksum key was absent)
+- `performMigration: initial migration succeeded` (treated as first time since migrationVersion key was absent)
 
 ---
 
@@ -756,7 +756,7 @@ This test simulates the "IUI LD Disabled" scenario from the design, where IUI ca
 
 **Expected Log Entries on boot** (search device logs for these exact strings):
 - `Migration state at init: _isMigrated=true`
-- `Filesystem persistence sync succeeded: Persistence payload updated from cache, cache_size=N` (the in-memory hash resets on process restart, so the AS file is always rewritten on the first `writeStorageFromCache` call after boot, even if the content is unchanged)
+- `Filesystem persistence sync succeeded: Persistence payload updated from cache, cache_size=N` (the AS file is always rewritten on the first `writeStorageFromCache` call after boot)
 
 ---
 
@@ -770,7 +770,7 @@ This test simulates the "IUI LD Disabled" scenario from the design, where IUI ca
 
 **Expected Results:**
 - `setAutoConnect` returns a JSON-RPC error: `{"error":{"code":1,"message":"ERROR_GENERAL"}}`.
-- The plugin correctly identifies on boot that no prior migration has been performed (no checksum key in PersistentStore) and enforces the guard.
+- The plugin correctly identifies on boot that no prior migration has been performed (no migrationVersion key in PersistentStore) and enforces the guard.
 
 **Expected Log Entries on boot** (search device logs for this exact string):
 - `Migration state at init: _isMigrated=false`
