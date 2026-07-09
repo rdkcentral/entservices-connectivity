@@ -633,7 +633,7 @@ namespace WPEFramework {
 #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
             if (!_isMigrated.load()) {
                 LOGWARN("setAutoConnect rejected: migration has not been performed yet for deviceID=%s", deviceID.c_str());
-                return Core::ERROR_ILLEGAL_STATE;
+                return Core::ERROR_GENERAL;
             }
 #endif
 

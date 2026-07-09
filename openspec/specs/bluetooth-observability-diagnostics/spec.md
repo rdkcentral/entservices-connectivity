@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Migration lifecycle SHALL emit structured diagnostics
-Migration flow SHALL emit structured logs for attempted, successful, and failed migration outcomes so AC1 diagnostics are traceable in validation runs. These markers are emitted by `performMigration()`, which is a client-triggered API call; initialization does not perform auto-migration and does not emit these markers.
+Migration flow SHALL emit structured logs for attempted and completed migration outcomes — including the empty-payload case where the AS source is absent — and for failed migration outcomes, so AC1 diagnostics are traceable in validation runs. These markers are emitted by `performMigration()`, which is a client-triggered API call; initialization does not perform auto-migration and does not emit these markers.
 
 #### Scenario: Migration attempted
 - **WHEN** a client invokes `performMigration()`
@@ -11,9 +11,9 @@ Migration flow SHALL emit structured logs for attempted, successful, and failed 
 - **WHEN** `performMigration()` imports AS data and persists it to PersistentStore successfully
 - **THEN** a structured migration-success log is emitted and the call returns `ERROR_NONE`
 
-#### Scenario: Migration skipped (source not found)
+#### Scenario: Migration success (source not found — empty payload)
 - **WHEN** `performMigration()` is called but the AS filesystem persistence source does not exist
-- **THEN** a structured migration-skipped log is emitted and the call returns without importing migration data
+- **THEN** the adapter logs that the file does not exist, the missing source is treated as an empty payload, migration completes with an empty device list persisted to PersistentStore and migrationVersion written, a structured migration-success log is emitted, and the call returns `ERROR_NONE`
 
 #### Scenario: Migration failure or fallback
 - **WHEN** `performMigration()` is called and the migration source exists but is malformed or unreadable, or the import or persistence step fails for another reason
@@ -31,7 +31,7 @@ Rollback synchronization flow SHALL emit structured success and failure diagnost
 - **THEN** a structured rollback-sync-failure log is emitted and PersistentStore update remains authoritative
 
 ### Requirement: Log markers SHALL map to section-7 lifecycle events
-Log emission points SHALL include migration_attempted, migration_success, migration_skipped, migration_failure, rollback_sync_success, and rollback_sync_failure markers. The migration_* markers are owned by `performMigration()` and are only observable when that API is explicitly called; they are not emitted during plugin initialization.
+Log emission points SHALL include migration_attempted, migration_success, migration_failure, rollback_sync_success, and rollback_sync_failure markers. The migration_* markers are owned by `performMigration()` and are only observable when that API is explicitly called; they are not emitted during plugin initialization. There is no distinct migration_skipped marker — a missing source produces an empty payload and the call completes under migration_success.
 
 #### Scenario: Marker coverage validation
 - **WHEN** section-7 validation evidence is captured
