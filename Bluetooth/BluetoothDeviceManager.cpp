@@ -550,6 +550,11 @@ namespace WPEFramework {
             {
                 std::string storedVersion;
                 const Core::hresult versionResult = readMigrationVersionFromStorage(storedVersion);
+
+                if(Core::ERROR_NONE != versionResult && !missingFromPersistentStore(versionResult)) {
+                    LOGERR("Migration state at init: failed to read migrationVersion from PersistentStore, hresult=%d", versionResult);
+                }
+
                 const bool isMigrated = (Core::ERROR_NONE == versionResult) && (storedVersion == BLUETOOTH_MIGRATION_VERSION);
                 _isMigrated.store(isMigrated);
                 LOGINFO("Migration state at init: _isMigrated=%s", isMigrated ? "true" : "false");
@@ -653,7 +658,7 @@ namespace WPEFramework {
             if (Core::ERROR_NONE != result) {
                 LOGERR("Failed to update storage from cache after setting autoConnect for deviceID=%s", deviceID.c_str());
             }
-            
+
             return result;
         }
 
