@@ -211,6 +211,11 @@ Core::hresult BluetoothPersistenceAdapter::Read(std::vector<BluetoothDeviceInfo>
     std::stringstream buffer;
     buffer << input.rdbuf();
 
+    if (input.bad()) {
+        LOGWARN("filesystem persistence file read failed: %s", _filesystemPersistencePath.c_str());
+        return Core::ERROR_GENERAL;
+    }
+
     std::vector<BluetoothDeviceInfo> loaded;
     const Core::hresult parseResult = Parse(buffer.str(), loaded);
     if (Core::ERROR_NONE != parseResult) {
@@ -255,9 +260,9 @@ Core::hresult BluetoothPersistenceAdapter::ReadRaw(std::string& content) const
     buffer << input.rdbuf();
 
     if (input.bad()) {
-         LOGWARN("filesystem persistence file read failed: %s", _filesystemPersistencePath.c_str());
-         return Core::ERROR_GENERAL;
-     }
+        LOGWARN("filesystem persistence file read failed: %s", _filesystemPersistencePath.c_str());
+        return Core::ERROR_GENERAL;
+    }
      
     content = buffer.str();
     return Core::ERROR_NONE;
