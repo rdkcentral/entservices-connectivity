@@ -107,6 +107,16 @@ protected:
                         return &comLinkMock;
                     }));
 
+#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+    // Simulate a previously-migrated device so that _isMigrated=true after init().
+    // Derived fixtures that need _isMigrated=false (e.g. BluetoothLegacyPersistenceMigrationParseTest)
+    // override this with a broader ON_CALL that returns ERROR_NOT_EXIST for all keys.
+    ON_CALL(*p_storeMock, GetValue(::testing::_, PERSISTENT_STORE_KEY_MIGRATION_VERSION, ::testing::_))
+        .WillByDefault(::testing::DoAll(
+            ::testing::SetArgReferee<2>(std::string(BLUETOOTH_MIGRATION_VERSION)),
+            ::testing::Return(Core::ERROR_NONE)));
+#endif
+
         PluginHost::IFactories::Assign(&factoriesImplementation);
 
         Core::IWorkerPool::Assign(&(*workerPool));
@@ -1719,6 +1729,12 @@ TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, write_InitialDeviceAut
 
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
 
+    // performMigration does not write to the filesystem; trigger the first sync via a mutation
+    // so that Write() is exercised with the UNSET autoConnectStatus (no setAutoConnect call,
+    // which would change the status from UNSET to DISABLED).
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setDeviceVolumeMuteInfo"),
+        _T("{\"deviceID\":\"123\",\"deviceType\":\"HEADPHONES\",\"volume\":0,\"mute\":0}"), response));
+
     std::string filesystemPayload;
     ASSERT_TRUE(readFilesystemPersistencePayload(filesystemPayload));
     EXPECT_TRUE(filesystemPayload.find("\"deviceAddr\":\"123\"") != string::npos);
@@ -1744,6 +1760,11 @@ TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, write_LastConnectTimeU
     EXPECT_TRUE(plugin->Initialize(&service).empty());
 
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
+
+    // performMigration does not write to the filesystem; trigger the first sync via a mutation
+    // so that Write() is exercised with the empty lastConnectTimeUtc.
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
+        _T("{\"deviceID\":\"123\",\"enable\":false}"), response));
 
     std::string filesystemPayload;
     ASSERT_TRUE(readFilesystemPersistencePayload(filesystemPayload));
@@ -1785,6 +1806,11 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, write_DeviceTypeMissingInFi
     }
 
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
+
+    // performMigration does not write to the filesystem; trigger the first sync via a mutation
+    // so that the backfilled deviceType is written to the file.
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
+        _T("{\"deviceID\":\"123\",\"enable\":true}"), response));
 
     std::string filesystemPayload;
     ASSERT_TRUE(readFilesystemPersistencePayload(filesystemPayload));
@@ -1988,6 +2014,9 @@ TEST_F(BluetoothClearMigrationTest, clearMigrationWrapper_Success_DeletesBothSto
  * ---------------------------------------------------------------------- */
 TEST_F(BluetoothClearMigrationTest, clearMigrationWrapper_ReEnablesGuard_SetAutoConnectRejected)
 {
+    // Add device 123 to the cache so that setAutoConnect can find it while _isMigrated=true.
+    setupDevice();
+
     // Verify initial state: _isMigrated=true → setAutoConnect must succeed.
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
         _T("{\"deviceID\":\"123\",\"enable\":true}"), response));
