@@ -221,22 +221,11 @@ namespace WPEFramework {
                 return Core::ERROR_NONE;
             }
 
-            // Step 1: Clear stale Bluetooth store data before migrating. A partially-rolled-out
-            // device may have written deviceInfo during a previous init without completing migration.
-            if (_service != nullptr) {
-                Exchange::IStore* pPersistentStore = _service->QueryInterfaceByCallsign<Exchange::IStore>(PERSISTENT_STORE_CALLSIGN);
-                if (pPersistentStore != nullptr) {
-                    const Core::hresult clearResult = pPersistentStore->DeleteKey(PERSISTENT_STORE_NAMESPACE, PERSISTENT_STORE_KEY_DEVICE_INFO);
-                    if ((Core::ERROR_NONE != clearResult) && !missingFromPersistentStore(clearResult)) {
-                        LOGERR("performMigration: failed to clear stale deviceInfo from PersistentStore, hresult=%d", clearResult);
-                        pPersistentStore->Release();
-                        return clearResult;
-                    }
-                    pPersistentStore->Release();
-                }
-            }
-
-            // Step 2: Read the AS file and import devices into the cache.
+            // Step 1: Read the AS file and import devices into the cache.
+            // NOTE: Do NOT delete existing deviceInfo from PersistentStore before this point.
+            // If ReadRaw()/Parse() fails, the existing store data must be preserved to avoid data
+            // loss. Any stale deviceInfo written by a prior partial run is safely overwritten by
+            // writeStorageFromCache() (SetValue) only after all steps below succeed.
             BluetoothPersistenceAdapter adapter;
             std::string rawContent;
             const Core::hresult readRawResult = adapter.ReadRaw(rawContent);
@@ -251,7 +240,7 @@ namespace WPEFramework {
                 return importResult;
             }
 
-            // Step 3: Mandatory BTRMGR enrichment. AS lacks some fields (e.g. deviceType) required
+            // Step 2: Mandatory BTRMGR enrichment. AS lacks some fields (e.g. deviceType) required
             // by the RDK store schema; enrichment is a hard requirement for migration correctness.
             // Skip when the imported cache is empty — there is nothing to enrich, and an error from
             // BTRMGR_GetPairedDevices() should not abort migration in that case.
@@ -269,21 +258,21 @@ namespace WPEFramework {
                 LOGINFO("performMigration: imported cache is empty, skipping BTRMGR enrichment");
             }
 
-            // Step 4: Write enriched deviceInfo to RDK Persistent Store (before migration marker).
+            // Step 3: Write enriched deviceInfo to RDK Persistent Store (before migration marker).
             const Core::hresult writeResult = writeStorageFromCache();
             if (Core::ERROR_NONE != writeResult) {
                 LOGERR("performMigration: failed to persist imported data to PersistentStore, hresult=%d", writeResult);
                 return writeResult;
             }
 
-            // Step 5: Write migration marker last so it cannot indicate success unless store is written.
+            // Step 4: Write migration marker last so it cannot indicate success unless store is written.
             const Core::hresult writeVersionResult = writeMigrationVersionToStorage();
             if (Core::ERROR_NONE != writeVersionResult) {
                 LOGERR("performMigration: failed to persist migrationVersion, hresult=%d", writeVersionResult);
                 return writeVersionResult;
             }
 
-            // Step 6: Transfer AS ownership, set migrated true.
+            // Step 5: Transfer AS ownership, set migrated true.
             _isMigrated.store(true);
 
             LOGINFO("performMigration: initial migration succeeded");
