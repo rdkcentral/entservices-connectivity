@@ -1432,6 +1432,16 @@ TEST_F(Bluetooth_L2Test, BluetoothPerformMigration_Success_FilePresent)
 {
     static constexpr const char* kFilePath = "/tmp/paired_bluetooth_devices.json";
 
+    /* Reset any prior migration state (e.g. migrationVersion written by an earlier
+     * test or a previous run) so that performMigration exercises the full import
+     * path rather than short-circuiting as a no-op. */
+    {
+        JsonObject clearResult;
+        uint32_t clearStatus = InvokeServiceMethod("org.rdk.Bluetooth.1", "clearMigration", clearResult);
+        ASSERT_EQ(Core::ERROR_NONE, clearStatus);
+        ASSERT_TRUE(clearResult["success"].Boolean());
+    }
+
     /* Write a valid AS filesystem persistence payload.
      * deviceAddr must match m_deviceAddress returned by the mock below. */
     std::ofstream fs(kFilePath, std::ios::trunc);
@@ -1493,6 +1503,15 @@ TEST_F(Bluetooth_L2Test, BluetoothPerformMigration_MissingSource_TreatsAsEmpty)
 {
     static constexpr const char* kFilePath = "/tmp/paired_bluetooth_devices.json";
 
+    /* Reset migration state so performMigration reaches the file-open branch
+     * and does not return early as a no-op. */
+    {
+        JsonObject clearResult;
+        uint32_t clearStatus = InvokeServiceMethod("org.rdk.Bluetooth.1", "clearMigration", clearResult);
+        ASSERT_EQ(Core::ERROR_NONE, clearStatus);
+        ASSERT_TRUE(clearResult["success"].Boolean());
+    }
+
     /* Ensure the filesystem persistence file does not exist. */
     std::remove(kFilePath);
 
@@ -1525,6 +1544,16 @@ TEST_F(Bluetooth_L2Test, BluetoothClearMigration_Success)
 TEST_F(Bluetooth_L2Test, BluetoothClearMigration_ReEnablesPreMigrationGuard)
 {
     static constexpr const char* kFilePath = "/tmp/paired_bluetooth_devices.json";
+
+    /* Reset migration state so Step 1's performMigration is not a no-op.
+     * TC-31 normally leaves the state clear, but an explicit reset here makes
+     * the test order-independent and safe when run in isolation. */
+    {
+        JsonObject clearResult;
+        uint32_t clearStatus = InvokeServiceMethod("org.rdk.Bluetooth.1", "clearMigration", clearResult);
+        ASSERT_EQ(Core::ERROR_NONE, clearStatus);
+        ASSERT_TRUE(clearResult["success"].Boolean());
+    }
 
     /* Step 1: Write filesystem file and perform migration → _isMigrated=true. */
     {
