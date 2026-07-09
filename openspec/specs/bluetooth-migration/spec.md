@@ -11,21 +11,25 @@ Bluetooth initialization SHALL read PersistentStore device info to seed the in-m
 #### Scenario: Initialization with no PersistentStore data
 - **WHEN** initialization finds no Bluetooth/deviceInfo data in PersistentStore
 - **THEN** the cache starts empty
-- **THEN** no migration import is attempted
-- **THEN** initialization continues with baseline reconciliation flow
+- **THEN** no migration import is attempted (filesystem import is deferred to an explicit client invocation of `performMigration()`)
 
 ### Requirement: `performMigration` SHALL use migrationVersion-based import semantics
-The `performMigration()` API SHALL determine whether to import from the filesystem source solely by checking for the presence of the `migrationVersion` key in PersistentStore. If `migrationVersion` is present, migration is considered complete and no import is performed. If absent, migration data is imported and `migrationVersion` is set to `"1"` on success.
+The `performMigration()` API SHALL determine whether to import from the filesystem source by checking both the presence and value of the `migrationVersion` key in PersistentStore. If `migrationVersion` is present and its value equals `"1"`, migration is considered complete and no import is performed. If absent, or if the stored value does not equal `"1"`, migration data is imported and `migrationVersion` is set to `"1"` on success.
 
 #### Scenario: First call (no stored migrationVersion)
 - **WHEN** `performMigration()` is called and `migrationVersion` is absent from PersistentStore
 - **THEN** migration data is imported from the filesystem source into cache and persisted to PersistentStore
 - **THEN** `migrationVersion` is written with value `"1"`
 
-#### Scenario: Subsequent call (migrationVersion already present)
-- **WHEN** `performMigration()` is called and `migrationVersion` is present in PersistentStore
+#### Scenario: Subsequent call (migrationVersion already present with expected value)
+- **WHEN** `performMigration()` is called and `migrationVersion` is present in PersistentStore with value `"1"`
 - **THEN** filesystem migration import is skipped
 - **THEN** `performMigration()` returns success indicating migration was already complete
+
+#### Scenario: Subsequent call (migrationVersion present with unexpected value)
+- **WHEN** `performMigration()` is called and `migrationVersion` is present in PersistentStore but its value does not equal `"1"` (e.g., future version string or corrupted value)
+- **THEN** migration is not considered complete
+- **THEN** migration data is re-imported from the filesystem source and `migrationVersion` is overwritten with `"1"` on success
 
 #### Scenario: Missing filesystem source
 - **WHEN** `performMigration()` is called and the filesystem source file does not exist
@@ -75,7 +79,7 @@ Disabling migration support SHALL NOT break non-migration Bluetooth persistence 
 Power-state-driven connection management on transitions to and from `POWER_STATE_ON`, `POWER_STATE_STANDBY`, `POWER_STATE_STANDBY_LIGHT_SLEEP`, and `POWER_STATE_STANDBY_DEEP_SLEEP` SHALL be compiled only when `BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION` is enabled, and SHALL execute only after a successful `performMigration()` (i.e., when migration state is active).
 
 #### Scenario: Power state transitions active with migration enabled
-- **WHEN** Bluetooth is built with `BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION` enabled and migration has been performed (`migrationVersion` present in PersistentStore)
+- **WHEN** Bluetooth is built with `BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION` enabled and migration has been performed (`migrationVersion` present in PersistentStore with value `"1"`)
 - **THEN** power-state-driven connection management executes on relevant transitions (e.g., Bluetooth auto-enabled on wake when paired non-HID devices exist; non-HID devices disconnected on standby or deep sleep based on their autoconnect setting)
 
 #### Scenario: Power state transitions inactive with migration disabled
@@ -94,7 +98,7 @@ During initialization, the plugin SHALL disconnect any currently connected non-H
 - **THEN** the device is left connected regardless of autoconnect setting
 
 ### Requirement: External connect requests SHALL be auto-handled when autoconnect status is known
-When `BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION` is enabled and migration has been performed (`migrationVersion` present in PersistentStore), when an external Bluetooth device requests a connection and its autoconnect status can be determined, the plugin SHALL resolve the request internally without propagating the event to clients. An unset autoconnect status is treated as disabled. Otherwise, the plugin SHALL emit an `onConnectionRequest` event to clients.
+When `BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION` is enabled and migration has been performed (`migrationVersion` present in PersistentStore with value `"1"`), when an external Bluetooth device requests a connection and its autoconnect status can be determined, the plugin SHALL resolve the request internally without propagating the event to clients. An unset autoconnect status is treated as disabled. Otherwise, the plugin SHALL emit an `onConnectionRequest` event to clients.
 
 #### Scenario: Autoconnect explicitly enabled
 - **WHEN** an external connect request arrives for a device with autoconnect explicitly set to enabled

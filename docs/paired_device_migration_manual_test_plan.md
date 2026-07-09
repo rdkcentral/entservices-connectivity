@@ -16,8 +16,8 @@ Migration is **client-triggered**, not automatic. The plugin does **not** auto-m
 
 | API | Method | Description |
 |-----|--------|-------------|
-| `performMigration` | `org.rdk.Bluetooth.performMigration` | **First call:** imports AS file → RDK PersistentStore, writes `migrationVersion=1`. **Subsequent calls:** no-op (migrationVersion already present). |
-| `clearMigration` | `org.rdk.Bluetooth.clearMigration` | Deletes `deviceInfo` and `migrationVersion` from RDK PersistentStore, clears the plugin's paired device cache, and resets migration state. AS file is **not** touched. |
+| `performMigration` | `org.rdk.Bluetooth.1.performMigration` | **First call:** imports AS file → RDK PersistentStore, writes `migrationVersion=1`. **Subsequent calls:** no-op (migrationVersion already present). |
+| `clearMigration` | `org.rdk.Bluetooth.1.clearMigration` | Deletes `deviceInfo` and `migrationVersion` from RDK PersistentStore, clears the plugin's paired device cache, and resets migration state. AS file is **not** touched. |
 
 ### Migration State
 
@@ -34,12 +34,12 @@ The plugin tracks whether migration has been performed. Migration state becomes 
 ```bash
 # Invoke performMigration (simulating IUI "LD Enabled" first-boot behaviour)
 curl --header "Content-Type: application/json" --request POST \
-  --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.performMigration","params":{}}' \
+  --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.1.performMigration","params":{}}' \
   http://127.0.0.1:9998/jsonrpc
 
 # Invoke clearMigration (simulating IUI "LD Disabled" / rollback behaviour)
 curl --header "Content-Type: application/json" --request POST \
-  --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.clearMigration","params":{}}' \
+  --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.1.clearMigration","params":{}}' \
   http://127.0.0.1:9998/jsonrpc
 
 # Read deviceInfo from PersistentStore
@@ -59,12 +59,12 @@ curl --header "Content-Type: application/json" --request POST \
 
 # Set autoConnect for a device (requires prior performMigration)
 curl --header "Content-Type: application/json" --request POST \
-  --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.Bluetooth.setAutoConnect","params":{"deviceID":"<ID>","enable":true}}' \
+  --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.Bluetooth.1.setAutoConnect","params":{"deviceID":"<ID>","enable":true}}' \
   http://127.0.0.1:9998/jsonrpc
 
 # Get autoConnect for a device
 curl --header "Content-Type: application/json" --request POST \
-  --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.Bluetooth.getAutoConnect","params":{"deviceID":"<ID>"}}' \
+  --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.Bluetooth.1.getAutoConnect","params":{"deviceID":"<ID>"}}' \
   http://127.0.0.1:9998/jsonrpc
 
 # Get paired devices
@@ -131,7 +131,7 @@ Note the device addresses, `autoConnectStatus`, and `lastConnectionTimeUTC` valu
 3. Call `performMigration`:
    ```bash
    curl --header "Content-Type: application/json" --request POST \
-     --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.performMigration","params":{}}' \
+     --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.1.performMigration","params":{}}' \
      http://127.0.0.1:9998/jsonrpc
    ```
 4. Verify `deviceInfo` is now populated in PersistentStore with data imported from the AS file:
@@ -175,7 +175,7 @@ Note the device addresses, `autoConnectStatus`, and `lastConnectionTimeUTC` valu
 3. Call `performMigration` again **without modifying the AS file**:
    ```bash
    curl --header "Content-Type: application/json" --request POST \
-     --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.performMigration","params":{}}' \
+     --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.1.performMigration","params":{}}' \
      http://127.0.0.1:9998/jsonrpc
    ```
 4. Read `deviceInfo` and `migrationVersion` again and compare to values from step 1–2.
@@ -209,7 +209,7 @@ Note the device addresses, `autoConnectStatus`, and `lastConnectionTimeUTC` valu
 3. Call `performMigration`:
    ```bash
    curl --header "Content-Type: application/json" --request POST \
-     --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.performMigration","params":{}}' \
+     --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.1.performMigration","params":{}}' \
      http://127.0.0.1:9998/jsonrpc
    ```
 4. Read `deviceInfo` and `migrationVersion` from PS.
@@ -236,7 +236,7 @@ Note the device addresses, `autoConnectStatus`, and `lastConnectionTimeUTC` valu
 2. Call `performMigration`:
    ```bash
    curl --header "Content-Type: application/json" --request POST \
-     --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.performMigration","params":{}}' \
+     --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.1.performMigration","params":{}}' \
      http://127.0.0.1:9998/jsonrpc
    ```
 3. Read `deviceInfo` from PS.
@@ -265,7 +265,7 @@ Note the device addresses, `autoConnectStatus`, and `lastConnectionTimeUTC` valu
 2. Call `performMigration`:
    ```bash
    curl --header "Content-Type: application/json" --request POST \
-     --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.performMigration","params":{}}' \
+     --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.1.performMigration","params":{}}' \
      http://127.0.0.1:9998/jsonrpc
    ```
 3. Read `deviceInfo` from PS.
@@ -293,7 +293,7 @@ Note the device addresses, `autoConnectStatus`, and `lastConnectionTimeUTC` valu
 2. Call `clearMigration`:
    ```bash
    curl --header "Content-Type: application/json" --request POST \
-     --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.clearMigration","params":{}}' \
+     --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.1.clearMigration","params":{}}' \
      http://127.0.0.1:9998/jsonrpc
    ```
 3. Verify `deviceInfo` is gone from PS:
@@ -336,7 +336,7 @@ Note the device addresses, `autoConnectStatus`, and `lastConnectionTimeUTC` valu
 2. Call `clearMigration`:
    ```bash
    curl --header "Content-Type: application/json" --request POST \
-     --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.clearMigration","params":{}}' \
+     --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.1.clearMigration","params":{}}' \
      http://127.0.0.1:9998/jsonrpc
    ```
 
@@ -358,7 +358,7 @@ Note the device addresses, `autoConnectStatus`, and `lastConnectionTimeUTC` valu
 3. Call `performMigration`:
    ```bash
    curl --header "Content-Type: application/json" --request POST \
-     --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.performMigration","params":{}}' \
+     --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.1.performMigration","params":{}}' \
      http://127.0.0.1:9998/jsonrpc
    ```
 4. Verify `deviceInfo` and `migrationVersion` are present in PS again.
@@ -383,7 +383,7 @@ Note the device addresses, `autoConnectStatus`, and `lastConnectionTimeUTC` valu
 **Setup (ensure pre-migration state):**
 ```bash
 curl --header "Content-Type: application/json" --request POST \
-  --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.clearMigration","params":{}}' \
+  --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.1.clearMigration","params":{}}' \
   http://127.0.0.1:9998/jsonrpc
 ```
 
@@ -398,7 +398,7 @@ curl --header "Content-Type: application/json" --request POST \
 2. Attempt to call `setAutoConnect` without first calling `performMigration`:
    ```bash
    curl --header "Content-Type: application/json" --request POST \
-     --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.Bluetooth.setAutoConnect","params":{"deviceID":"<ID>","enable":true}}' \
+     --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.Bluetooth.1.setAutoConnect","params":{"deviceID":"<ID>","enable":true}}' \
      http://127.0.0.1:9998/jsonrpc
    ```
 
@@ -419,13 +419,13 @@ curl --header "Content-Type: application/json" --request POST \
 1. Call `performMigration`:
    ```bash
    curl --header "Content-Type: application/json" --request POST \
-     --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.performMigration","params":{}}' \
+     --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.1.performMigration","params":{}}' \
      http://127.0.0.1:9998/jsonrpc
    ```
 2. Call `setAutoConnect` with the same device ID from TC-GUARD-01:
    ```bash
    curl --header "Content-Type: application/json" --request POST \
-     --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.Bluetooth.setAutoConnect","params":{"deviceID":"<ID>","enable":true}}' \
+     --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.Bluetooth.1.setAutoConnect","params":{"deviceID":"<ID>","enable":true}}' \
      http://127.0.0.1:9998/jsonrpc
    ```
 3. Verify the change is reflected in PS `deviceInfo` (`autoconnect: 1`).
@@ -446,13 +446,13 @@ curl --header "Content-Type: application/json" --request POST \
 1. Call `clearMigration` to reset migration state:
    ```bash
    curl --header "Content-Type: application/json" --request POST \
-     --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.clearMigration","params":{}}' \
+     --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.1.clearMigration","params":{}}' \
      http://127.0.0.1:9998/jsonrpc
    ```
 2. Attempt `setAutoConnect` on the same device:
    ```bash
    curl --header "Content-Type: application/json" --request POST \
-     --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.Bluetooth.setAutoConnect","params":{"deviceID":"<ID>","enable":false}}' \
+     --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.Bluetooth.1.setAutoConnect","params":{"deviceID":"<ID>","enable":false}}' \
      http://127.0.0.1:9998/jsonrpc
    ```
 
@@ -473,7 +473,7 @@ curl --header "Content-Type: application/json" --request POST \
 1. Call `getAutoConnect` for a known paired device:
    ```bash
    curl --header "Content-Type: application/json" --request POST \
-     --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.Bluetooth.getAutoConnect","params":{"deviceID":"<ID>"}}' \
+     --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.Bluetooth.1.getAutoConnect","params":{"deviceID":"<ID>"}}' \
      http://127.0.0.1:9998/jsonrpc
    ```
 
@@ -522,7 +522,7 @@ curl --header "Content-Type: application/json" --request POST \
 1. Set `autoConnect` for a paired device:
    ```bash
    curl --header "Content-Type: application/json" --request POST \
-     --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.Bluetooth.setAutoConnect","params":{"deviceID":"<ID>","enable":true}}' \
+     --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.Bluetooth.1.setAutoConnect","params":{"deviceID":"<ID>","enable":true}}' \
      http://127.0.0.1:9998/jsonrpc
    ```
 2. Verify PersistentStore reflects `"autoconnect": 1`.
@@ -574,7 +574,7 @@ curl --header "Content-Type: application/json" --request POST \
 ```bash
 # Reset to pre-migration state
 curl --header "Content-Type: application/json" --request POST \
-  --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.clearMigration","params":{}}' \
+  --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.1.clearMigration","params":{}}' \
   http://127.0.0.1:9998/jsonrpc
 
 # Record a checksum of the AS file before the test
@@ -625,7 +625,7 @@ md5sum /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
 1. Call `clearMigration`:
    ```bash
    curl --header "Content-Type: application/json" --request POST \
-     --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.clearMigration","params":{}}' \
+     --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.1.clearMigration","params":{}}' \
      http://127.0.0.1:9998/jsonrpc
    ```
 2. Verify PS `deviceInfo` is gone.
@@ -638,7 +638,7 @@ md5sum /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
 6. Now call `performMigration` to restore migration state:
    ```bash
    curl --header "Content-Type: application/json" --request POST \
-     --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.performMigration","params":{}}' \
+     --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.1.performMigration","params":{}}' \
      http://127.0.0.1:9998/jsonrpc
    ```
 7. Pair another new Bluetooth device. Verify the AS file **is** now updated (migration is active again):
@@ -692,7 +692,7 @@ This test simulates the "IUI LD Disabled" scenario from the design, where IUI ca
 2. Call `clearMigration` (simulating IUI LD Disabled first-boot behaviour):
    ```bash
    curl --header "Content-Type: application/json" --request POST \
-     --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.clearMigration","params":{}}' \
+     --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.1.clearMigration","params":{}}' \
      http://127.0.0.1:9998/jsonrpc
    ```
 3. Verify PS `deviceInfo` and `migrationVersion` are gone.
@@ -756,7 +756,7 @@ This test simulates the "IUI LD Disabled" scenario from the design, where IUI ca
 
 **Expected Log Entries on boot** (search device logs for these exact strings):
 - `Migration state at init: _isMigrated=true`
-- `Filesystem persistence sync succeeded: Persistence payload updated from cache, cache_size=N` (the AS file is always rewritten on the first `writeStorageFromCache` call after boot)
+- `Filesystem persistence sync succeeded: Persistence payload updated from cache, cache_size=N` (emitted only when a persistence mutation triggers `writeStorageFromCache()` after boot; it may not appear during initialization)
 
 ---
 
@@ -807,7 +807,7 @@ This test simulates the "IUI LD Disabled" scenario from the design, where IUI ca
    ```bash
    for i in {1..5}; do
      curl --header "Content-Type: application/json" --request POST \
-       --data '{"jsonrpc":"2.0","id":'"$i"',"method":"org.rdk.Bluetooth.performMigration","params":{}}' \
+       --data '{"jsonrpc":"2.0","id":'"$i"',"method":"org.rdk.Bluetooth.1.performMigration","params":{}}' \
        http://127.0.0.1:9998/jsonrpc &
    done
    wait

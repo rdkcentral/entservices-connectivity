@@ -253,6 +253,12 @@ Core::hresult BluetoothPersistenceAdapter::ReadRaw(std::string& content) const
 
     std::stringstream buffer;
     buffer << input.rdbuf();
+
+    if (input.bad()) {
+         LOGWARN("filesystem persistence file read failed: %s", _filesystemPersistencePath.c_str());
+         return Core::ERROR_GENERAL;
+     }
+     
     content = buffer.str();
     return Core::ERROR_NONE;
 }
