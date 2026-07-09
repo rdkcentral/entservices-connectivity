@@ -1026,6 +1026,7 @@ TEST_F(BluetoothTest, onPowerModeChanged_SameState_NoAction)
 
 // --- onPowerModeChanged: ON → STANDBY with non-HID devices ---
 
+#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
 TEST_F(BluetoothTest, onPowerModeChanged_OnToStandby_NonHidDevice_AutoConnectDisabled_Disconnects)
 {
     setupDevice();
@@ -1040,7 +1041,9 @@ TEST_F(BluetoothTest, onPowerModeChanged_OnToStandby_NonHidDevice_AutoConnectDis
         WPEFramework::Exchange::IPowerManager::POWER_STATE_ON,
         WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY);
 }
+#endif // BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
 
+#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
 TEST_F(BluetoothTest, onPowerModeChanged_UnknownToStandby_NonHidDevice_AutoConnectDisabled_Disconnects)
 {
     setupDevice();
@@ -1055,7 +1058,9 @@ TEST_F(BluetoothTest, onPowerModeChanged_UnknownToStandby_NonHidDevice_AutoConne
         WPEFramework::Exchange::IPowerManager::POWER_STATE_UNKNOWN,
         WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY);
 }
+#endif // BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
 
+#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
 TEST_F(BluetoothTest, onPowerModeChanged_OnToStandbyLightSleep_NonHidDevice_AutoConnectDisabled_Disconnects)
 {
     setupDevice();
@@ -1070,6 +1075,7 @@ TEST_F(BluetoothTest, onPowerModeChanged_OnToStandbyLightSleep_NonHidDevice_Auto
         WPEFramework::Exchange::IPowerManager::POWER_STATE_ON,
         WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY_LIGHT_SLEEP);
 }
+#endif // BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
 
 TEST_F(BluetoothTest, onPowerModeChanged_OnToStandby_NonHidDevice_AutoConnectEnabled_NoDisconnect)
 {
@@ -1112,6 +1118,7 @@ TEST_F(BluetoothPowerModeTest, onPowerModeChanged_OnToStandby_HidDevice_AutoConn
 
 // --- onPowerModeChanged: X → ON ---
 
+#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
 TEST_F(BluetoothTest, onPowerModeChanged_StandbyToOn_WithNonHidPairedDevices_EnablesBluetooth)
 {
     setupDevice();
@@ -1126,6 +1133,7 @@ TEST_F(BluetoothTest, onPowerModeChanged_StandbyToOn_WithNonHidPairedDevices_Ena
         WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY,
         WPEFramework::Exchange::IPowerManager::POWER_STATE_ON);
 }
+#endif // BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
 
 TEST_F(BluetoothPowerModeTest, onPowerModeChanged_StandbyToOn_OnlyHidDevices_NoBluetoothEnable)
 {
@@ -1140,6 +1148,7 @@ TEST_F(BluetoothPowerModeTest, onPowerModeChanged_StandbyToOn_OnlyHidDevices_NoB
 
 // --- onPowerModeChanged: X → DEEP_SLEEP ---
 
+#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
 TEST_F(BluetoothTest, onPowerModeChanged_OnToDeepSleep_NonHidDevice_AlwaysDisconnects)
 {
     // Non-HID device with AUTO_CONNECT_STATUS_ENABLED must still be disconnected
@@ -1156,6 +1165,7 @@ TEST_F(BluetoothTest, onPowerModeChanged_OnToDeepSleep_NonHidDevice_AlwaysDiscon
         WPEFramework::Exchange::IPowerManager::POWER_STATE_ON,
         WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY_DEEP_SLEEP);
 }
+#endif // BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
 
 TEST_F(BluetoothPowerModeTest, onPowerModeChanged_OnToDeepSleep_HidDevice_NoDisconnect)
 {

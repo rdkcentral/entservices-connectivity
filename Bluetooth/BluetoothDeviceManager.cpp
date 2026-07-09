@@ -253,10 +253,20 @@ namespace WPEFramework {
 
             // Step 3: Mandatory BTRMGR enrichment. AS lacks some fields (e.g. deviceType) required
             // by the RDK store schema; enrichment is a hard requirement for migration correctness.
-            const Core::hresult deviceResult = updateCacheFromDevice(/* backfillOnly= */ true);
-            if (Core::ERROR_NONE != deviceResult) {
-                LOGERR("performMigration: mandatory BTRMGR enrichment failed (hresult=%d); aborting migration", deviceResult);
-                return deviceResult;
+            // Skip when the imported cache is empty — there is nothing to enrich, and an error from
+            // BTRMGR_GetPairedDevices() should not abort migration in that case.
+            _adminLock.Lock();
+            const bool importedCacheEmpty = _pairedDeviceCache.empty();
+            _adminLock.Unlock();
+
+            if (!importedCacheEmpty) {
+                const Core::hresult deviceResult = updateCacheFromDevice(/* backfillOnly= */ true);
+                if (Core::ERROR_NONE != deviceResult) {
+                    LOGERR("performMigration: mandatory BTRMGR enrichment failed (hresult=%d); aborting migration", deviceResult);
+                    return deviceResult;
+                }
+            } else {
+                LOGINFO("performMigration: imported cache is empty, skipping BTRMGR enrichment");
             }
 
             // Step 4: Write enriched deviceInfo to RDK Persistent Store (before migration marker).
