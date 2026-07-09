@@ -1431,6 +1431,11 @@ TEST_F(Bluetooth_L2Test, BluetoothOnPlaybackNewTrack)
 TEST_F(Bluetooth_L2Test, BluetoothPerformMigration_Success_FilePresent)
 {
     static constexpr const char* kFilePath = "/tmp/paired_bluetooth_devices.json";
+    // Guarantee removal even when an ASSERT fires before the explicit std::remove at the end.
+    struct ScopedRemove {
+        const char* path;
+        ~ScopedRemove() { std::remove(path); }
+    } const fileCleanup{kFilePath};
 
     /* Reset any prior migration state (e.g. migrationVersion written by an earlier
      * test or a previous run) so that performMigration exercises the full import
@@ -1544,6 +1549,11 @@ TEST_F(Bluetooth_L2Test, BluetoothClearMigration_Success)
 TEST_F(Bluetooth_L2Test, BluetoothClearMigration_ReEnablesPreMigrationGuard)
 {
     static constexpr const char* kFilePath = "/tmp/paired_bluetooth_devices.json";
+    // Guarantee removal even when an ASSERT fires before the explicit std::remove at the end.
+    struct ScopedRemove {
+        const char* path;
+        ~ScopedRemove() { std::remove(path); }
+    } const fileCleanup{kFilePath};
 
     /* Reset migration state so Step 1's performMigration is not a no-op.
      * TC-31 normally leaves the state clear, but an explicit reset here makes
