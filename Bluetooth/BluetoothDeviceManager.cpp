@@ -206,17 +206,19 @@ namespace WPEFramework {
         {
             Core::SafeSyncType<Core::CriticalSection> lock(_migrationLock);
 
+            LOGINFO("migration_attempted");
+
             std::string storedVersion;
             const Core::hresult readVersionResult = readMigrationVersionFromStorage(storedVersion);
             const bool alreadyMigrated = (Core::ERROR_NONE == readVersionResult) && (storedVersion == BLUETOOTH_MIGRATION_VERSION);
 
             if (!missingFromPersistentStore(readVersionResult) && (Core::ERROR_NONE != readVersionResult)) {
-                LOGERR("performMigration: failed to read migrationVersion, hresult=%d", readVersionResult);
+                LOGERR("failed to read migrationVersion, hresult=%d", readVersionResult);
                 return readVersionResult;
             }
 
             if (alreadyMigrated) {
-                LOGINFO("performMigration: migration already completed (migrationVersion=%s present), no sync needed", BLUETOOTH_MIGRATION_VERSION);
+                LOGINFO("migration already completed (migrationVersion=%s present), no sync needed", BLUETOOTH_MIGRATION_VERSION);
                 _isMigrated.store(true);
                 return Core::ERROR_NONE;
             }
@@ -230,13 +232,13 @@ namespace WPEFramework {
             std::string rawContent;
             const Core::hresult readRawResult = adapter.ReadRaw(rawContent);
             if ((Core::ERROR_NONE != readRawResult) && (Core::ERROR_NOT_EXIST != readRawResult)) {
-                LOGERR("performMigration: failed to read AS filesystem persistence source, hresult=%d", readRawResult);
+                LOGERR("failed to read AS filesystem persistence source, hresult=%d", readRawResult);
                 return readRawResult;
             }
 
             const Core::hresult importResult = writeCacheFromFilesystemPersistence(rawContent);
             if (Core::ERROR_NONE != importResult) {
-                LOGERR("performMigration: failed to import from filesystem persistence, hresult=%d", importResult);
+                LOGERR("failed to import from filesystem persistence, hresult=%d", importResult);
                 return importResult;
             }
 
@@ -251,31 +253,31 @@ namespace WPEFramework {
             if (!importedCacheEmpty) {
                 const Core::hresult deviceResult = updateCacheFromDevice(/* backfillOnly= */ true);
                 if (Core::ERROR_NONE != deviceResult) {
-                    LOGERR("performMigration: mandatory BTRMGR enrichment failed (hresult=%d); aborting migration", deviceResult);
+                    LOGERR("mandatory BTRMGR enrichment failed (hresult=%d); aborting migration", deviceResult);
                     return deviceResult;
                 }
             } else {
-                LOGINFO("performMigration: imported cache is empty, skipping BTRMGR enrichment");
+                LOGINFO("imported cache is empty, skipping BTRMGR enrichment");
             }
 
             // Step 3: Write enriched deviceInfo to RDK Persistent Store (before migration marker).
             const Core::hresult writeResult = writeStorageFromCache();
             if (Core::ERROR_NONE != writeResult) {
-                LOGERR("performMigration: failed to persist imported data to PersistentStore, hresult=%d", writeResult);
+                LOGERR("failed to persist imported data to PersistentStore, hresult=%d", writeResult);
                 return writeResult;
             }
 
             // Step 4: Write migration marker last so it cannot indicate success unless store is written.
             const Core::hresult writeVersionResult = writeMigrationVersionToStorage();
             if (Core::ERROR_NONE != writeVersionResult) {
-                LOGERR("performMigration: failed to persist migrationVersion, hresult=%d", writeVersionResult);
+                LOGERR("failed to persist migrationVersion, hresult=%d", writeVersionResult);
                 return writeVersionResult;
             }
 
             // Step 5: Transfer AS ownership, set migrated true.
             _isMigrated.store(true);
 
-            LOGINFO("performMigration: initial migration succeeded");
+            LOGINFO("initial migration succeeded");
             return Core::ERROR_NONE;
         }
 
@@ -284,26 +286,26 @@ namespace WPEFramework {
             Core::SafeSyncType<Core::CriticalSection> lock(_migrationLock);
 
             if (_service == nullptr) {
-                LOGERR("clearMigration: service is null");
+                LOGERR("service is null");
                 return Core::ERROR_GENERAL;
             }
 
             Exchange::IStore* pPersistentStore = _service->QueryInterfaceByCallsign<Exchange::IStore>(PERSISTENT_STORE_CALLSIGN);
             if (pPersistentStore == nullptr) {
-                LOGERR("clearMigration: failed to get PersistentStore interface");
+                LOGERR("failed to get PersistentStore interface");
                 return Core::ERROR_GENERAL;
             }
 
             Core::hresult result = pPersistentStore->DeleteKey(PERSISTENT_STORE_NAMESPACE, PERSISTENT_STORE_KEY_DEVICE_INFO);
             if ((Core::ERROR_NONE != result) && !missingFromPersistentStore(result)) {
-                LOGERR("clearMigration: failed to delete deviceInfo from PersistentStore, hresult=%d", result);
+                LOGERR("failed to delete deviceInfo from PersistentStore, hresult=%d", result);
                 pPersistentStore->Release();
                 return result;
             }
 
             result = pPersistentStore->DeleteKey(PERSISTENT_STORE_NAMESPACE, PERSISTENT_STORE_KEY_MIGRATION_VERSION);
             if ((Core::ERROR_NONE != result) && !missingFromPersistentStore(result)) {
-                LOGERR("clearMigration: failed to delete migrationVersion from PersistentStore, hresult=%d", result);
+                LOGERR("failed to delete migrationVersion from PersistentStore, hresult=%d", result);
                 pPersistentStore->Release();
                 return result;
             }
@@ -316,7 +318,7 @@ namespace WPEFramework {
 
             _isMigrated.store(false);
 
-            LOGINFO("clearMigration: PersistentStore cleared and migration state reset");
+            LOGINFO("PersistentStore cleared and migration state reset");
             return Core::ERROR_NONE;
         }
 #endif
@@ -569,7 +571,7 @@ namespace WPEFramework {
                     }
                 } else {
                     // No valid migration marker: any store data is stale/untrusted. Cache stays empty.
-                    LOGINFO("init: migration not yet complete, ignoring any stale store data");
+                    LOGINFO("migration not yet complete, ignoring any stale store data");
                 }
 
                 return Core::ERROR_NONE;
@@ -667,7 +669,7 @@ namespace WPEFramework {
 
 #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
             if (!_isMigrated.load()) {
-                LOGINFO("getAutoConnect: migration not complete, returning disabled for deviceID=%s", deviceID.c_str());
+                LOGINFO("migration not complete, returning disabled for deviceID=%s", deviceID.c_str());
                 status = AUTO_CONNECT_STATUS_DISABLED;
                 return Core::ERROR_NONE;
             }
@@ -715,7 +717,7 @@ namespace WPEFramework {
 
 #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
             if (!_isMigrated.load()) {
-                LOGINFO("setLastConnectTimeUtc: migration not complete, skipping persistence write for deviceID=%s", deviceID.c_str());
+                LOGINFO("migration not complete, skipping persistence write for deviceID=%s", deviceID.c_str());
                 return;
             }
 #endif
@@ -747,7 +749,7 @@ namespace WPEFramework {
 
 #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
             if (!_isMigrated.load()) {
-                LOGINFO("setLastVolumeSetting: migration not complete, skipping persistence write for deviceID=%s", deviceID.c_str());
+                LOGINFO("migration not complete, skipping persistence write for deviceID=%s", deviceID.c_str());
                 return Core::ERROR_NONE;
             }
 #endif
@@ -812,7 +814,7 @@ namespace WPEFramework {
 
 #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
             if (!_isMigrated.load()) {
-                LOGINFO("addDevice: migration not complete, skipping persistence write for deviceID=%s", deviceID.c_str());
+                LOGINFO("migration not complete, skipping persistence write for deviceID=%s", deviceID.c_str());
                 return Core::ERROR_NONE;
             }
 #endif
@@ -838,7 +840,7 @@ namespace WPEFramework {
 
 #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
             if (!_isMigrated.load()) {
-                LOGINFO("removeDevice: migration not complete, skipping persistence write for deviceID=%s", deviceID.c_str());
+                LOGINFO("migration not complete, skipping persistence write for deviceID=%s", deviceID.c_str());
                 return Core::ERROR_NONE;
             }
 #endif
