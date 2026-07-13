@@ -93,7 +93,6 @@ namespace WPEFramework {
                 void writeFilesystemPersistenceFromCache();
                 Core::hresult readMigrationVersionFromStorage(std::string& version) const;
                 Core::hresult writeMigrationVersionToStorage();
-                std::size_t _lastFilesystemPersistenceHash = 0;
                 std::atomic<bool> _isMigrated{false};
                 mutable Core::CriticalSection _migrationLock;
         #endif

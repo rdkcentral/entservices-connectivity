@@ -26,7 +26,7 @@ The plugin tracks whether migration has been performed. Migration state becomes 
 - `setAutoConnect` is **rejected** (returns a JSON-RPC error response) when migration has not been performed.
 - `setAutoConnect` changes will **not** be written to PersistentStore when migration has not been performed.
 - Pairing and unpairing (`addDevice`/`removeDevice`) update the in-memory device cache but do **not** write to PersistentStore when migration has not been performed.
-- The AS file (filesystem persistence) will **not** be updated by any operation — pairing, unpairing, or `setAutoConnect` — when migration has not been performed.
+- The AS file (filesystem persistence) will **not** be updated by any operation external to IUI/AS (e.g. CURL'd plug-in requests) — pairing, unpairing, or `setAutoConnect` — when migration has not been performed.
 - `getAutoConnect` has a migration guard, but instead of rejecting, it returns `autoconnect: false` (success) for any deviceID when migration has not been performed — it bypasses the cache lookup entirely and returns disabled without error.
 
 ### Curl Reference Commands
@@ -89,7 +89,7 @@ curl --header "Content-Type: application/json" --request POST \
 
 ---
 
-## IMPORTANT NOTE
+## IMPORTANT NOTE`
 
 For any test cases requiring a change in the bluetooth device's auto-connect status, the guide UI should **NOT** be used. The UI isn't currently using the new Bluetooth Thunder plug-in APIs to set the auto-connect status, and as such would not be reflected in PersistentStore. Use the `setAutoConnect` curl command from the Curl Reference Commands section above.
 
@@ -97,7 +97,9 @@ For any test cases requiring a change in the bluetooth device's auto-connect sta
 
 ---
 
-## Section 1: performMigration — Initial Migration
+## Section 1: performMigration — Initial Migration (Happy Path)
+
+> **State entering this section:** AS file exists and contains paired device entries. Both `deviceInfo` and `migrationVersion` are absent from PersistentStore. The TC-MIG-01 **Setup** block immediately below establishes this clean state before testing begins.
 
 ### TC-MIG-01: First-time migration from AS filesystem to PersistentStore
 
@@ -114,10 +116,12 @@ curl --header "Content-Type: application/json" --request POST \
   --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.PersistentStore.deleteKey","params":{"namespace":"Bluetooth","key":"migrationVersion"}}' \
   http://127.0.0.1:9998/jsonrpc
 
-# Confirm pre-existing AS file
+# Confirm pre-existing AS file and record its checksum and mtime for later comparison
 cat /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
+md5sum /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
+ls -la /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
 ```
-Note the device addresses, `autoConnectStatus`, and `lastConnectionTimeUTC` values listed in the file.
+Note the device addresses, `autoConnectStatus`, and `lastConnectionTimeUTC` values listed in the file. Also record the md5sum output and the last-modified timestamp (`ls -la`) — these baseline values are required for the AS file integrity check in step 6.
 
 **Steps:**
 1. Reboot device and wait for Bluetooth plugin activation.
@@ -161,7 +165,8 @@ Note the device addresses, `autoConnectStatus`, and `lastConnectionTimeUTC` valu
 - The AS file is **not** modified by `performMigration` — its checksum and mtime are unchanged.
 
 **Expected Log Entries:**
-- `performMigration: initial migration succeeded`
+- `migration_attempted`
+- `initial migration succeeded`
 
 ---
 
@@ -187,13 +192,14 @@ Note the device addresses, `autoConnectStatus`, and `lastConnectionTimeUTC` valu
 - No new import occurs.
 
 **Expected Log Entries:**
-- `performMigration: migration already completed (migrationVersion present), no sync needed`
+- `migration_attempted`
+- `migration already completed (migrationVersion=1 present), no sync needed`
 
 ---
 
 ### TC-MIG-03: performMigration is always a no-op after first migration (migrationVersion present)
 
-> **Note:** The re-sync-on-file-change behaviour has been removed. After the first successful `performMigration`, subsequent calls are always no-ops regardless of AS file content.
+> **Note:** After the first successful `performMigration`, subsequent calls are always no-ops regardless of AS file content.
 
 **Precondition:** TC-MIG-01 completed. `deviceInfo` and `migrationVersion` are present in PS.
 
@@ -220,76 +226,52 @@ Note the device addresses, `autoConnectStatus`, and `lastConnectionTimeUTC` valu
 - `deviceInfo` is **unchanged** — the modified AS file is ignored.
 
 **Expected Log Entries:**
-- `performMigration: migration already completed (migrationVersion present), no sync needed`
-
----
-
-### TC-MIG-04: performMigration with empty AS file
-
-**Precondition:** Both `deviceInfo` and `migrationVersion` are absent from PS.
-
-**Steps:**
-1. Write a valid but empty AS file:
-   ```bash
-   echo '{"pairedDevices":[]}' > /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
-   ```
-2. Call `performMigration`:
-   ```bash
-   curl --header "Content-Type: application/json" --request POST \
-     --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.1.performMigration","params":{}}' \
-     http://127.0.0.1:9998/jsonrpc
-   ```
-3. Read `deviceInfo` from PS.
-4. Read `migrationVersion` from PS.
-
-**Expected Results:**
-- `performMigration` returns `{"success": true}`.
-- `deviceInfo` is present but contains an empty array (`[]`).
-- `migrationVersion` is present and set to `"1"`.
-- Plugin continues operating normally.
-
-**Expected Log Entries:**
-- `performMigration: initial migration succeeded`
-
----
-
-### TC-MIG-05: performMigration when AS file does not exist
-
-**Precondition:** Both `deviceInfo` and `migrationVersion` are absent from PS. AS file is deleted.
-
-**Steps:**
-1. Remove the AS file:
-   ```bash
-   rm -f /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
-   ```
-2. Call `performMigration`:
-   ```bash
-   curl --header "Content-Type: application/json" --request POST \
-     --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.1.performMigration","params":{}}' \
-     http://127.0.0.1:9998/jsonrpc
-   ```
-3. Read `deviceInfo` from PS.
-4. Read `migrationVersion` from PS.
-
-**Expected Results:**
-- `performMigration` returns `{"success": true}` (absent file treated as empty, not an error).
-- `deviceInfo` is present and contains an empty or minimal array.
-- `migrationVersion` is present and set to `"1"`.
-
-**Expected Log Entries:**
-- `filesystem persistence file does not exist: /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json` (logged by the persistence adapter when the file is not found; absent file is treated as empty — no error is returned)
-- `performMigration: initial migration succeeded`
+- `migration_attempted`
+- `migration already completed (migrationVersion=1 present), no sync needed`
 
 ---
 
 ## Section 2: clearMigration — Rollback
 
-### TC-CLR-01: clearMigration wipes PersistentStore and resets migration state
+> **State entering this section:** Both `deviceInfo` and `migrationVersion` are present in PS (migration is active from TC-MIG-01). The AS file is present (possibly with the additional device entry manually added in TC-MIG-03).
 
-**Precondition:** `performMigration` has been successfully called. `deviceInfo` and `migrationVersion` are both present in PS.
+### TC-CLR-03: clearMigration then performMigration re-migrates successfully
+
+**Precondition:** TC-MIG-01 through TC-MIG-03 have completed. Migration is active — both `deviceInfo` and `migrationVersion` are present in PS. The AS file is present.
 
 **Steps:**
-1. Confirm both PS keys exist (see Curl Reference Commands).
+1. Call `clearMigration` to reset state.
+2. Verify both PS keys are absent.
+3. Call `performMigration`:
+   ```bash
+   curl --header "Content-Type: application/json" --request POST \
+     --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.1.performMigration","params":{}}' \
+     http://127.0.0.1:9998/jsonrpc
+   ```
+4. Verify `deviceInfo` and `migrationVersion` are present in PS again.
+5. Verify device data matches the AS file.
+
+**Expected Results:**
+- After `clearMigration`, both keys are absent.
+- After `performMigration`, both keys are restored with data from the AS file.
+- `performMigration` returns `{"success": true}`.
+
+**Expected Log Entries (step 3):**
+- `migration_attempted`
+- `initial migration succeeded` (treated as first time since migrationVersion key was absent)
+
+---
+
+### TC-CLR-01: clearMigration wipes PersistentStore and resets migration state
+
+**Precondition:** TC-CLR-03 has completed. `performMigration` was called in TC-CLR-03 step 3; both `deviceInfo` and `migrationVersion` are present in PS. The AS file is present.
+
+**Steps:**
+1. Confirm both PS keys exist (see Curl Reference Commands). Record the current AS file content and checksum for the unchanged check in step 5:
+   ```bash
+   md5sum /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
+   ls -la /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
+   ```
 2. Call `clearMigration`:
    ```bash
    curl --header "Content-Type: application/json" --request POST \
@@ -310,26 +292,27 @@ Note the device addresses, `autoConnectStatus`, and `lastConnectionTimeUTC` valu
      http://127.0.0.1:9998/jsonrpc
    # Expected: key absent / error
    ```
-5. Verify the AS file is **unchanged**:
+5. Verify the AS file is **unchanged** by comparing checksum and mtime to the values recorded in step 1:
    ```bash
-   cat /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
+   md5sum /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
+   ls -la /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
    ```
 
 **Expected Results:**
 - `clearMigration` returns `{"success": true}`.
 - `Bluetooth/deviceInfo` is absent from PS.
 - `Bluetooth/migrationVersion` is absent from PS.
-- AS file is intact and unmodified.
+- AS file checksum and mtime are identical to the values recorded in step 1.
 - In-memory device cache is cleared (`getPairedDevices` will return no entries).
 
 **Expected Log Entries:**
-- `clearMigration: PersistentStore cleared and migration state reset`
+- `PersistentStore cleared and migration state reset`
 
 ---
 
 ### TC-CLR-02: clearMigration on already-empty PersistentStore (idempotent)
 
-**Precondition:** Neither `deviceInfo` nor `migrationVersion` exist in PS (either a clean device, or after a prior `clearMigration`).
+**Precondition:** TC-CLR-01 has completed. Neither `deviceInfo` nor `migrationVersion` exist in PS.
 
 **Steps:**
 1. Confirm both PS keys are absent.
@@ -344,43 +327,19 @@ Note the device addresses, `autoConnectStatus`, and `lastConnectionTimeUTC` valu
 - `clearMigration` returns `{"success": true}` — deleting absent keys is not an error.
 
 **Expected Log Entries:**
-- `clearMigration: PersistentStore cleared and migration state reset`
-
----
-
-### TC-CLR-03: clearMigration then performMigration re-migrates successfully
-
-**Precondition:** A prior migration has been completed. AS file has paired device entries.
-
-**Steps:**
-1. Call `clearMigration` to reset state.
-2. Verify both PS keys are absent.
-3. Call `performMigration`:
-   ```bash
-   curl --header "Content-Type: application/json" --request POST \
-     --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.1.performMigration","params":{}}' \
-     http://127.0.0.1:9998/jsonrpc
-   ```
-4. Verify `deviceInfo` and `migrationVersion` are present in PS again.
-5. Verify device data matches the AS file.
-
-**Expected Results:**
-- After `clearMigration`, both keys are absent.
-- After `performMigration`, both keys are restored with data from the AS file.
-- `performMigration` returns `{"success": true}`.
-
-**Expected Log Entries (step 3):**
-- `performMigration: initial migration succeeded` (treated as first time since migrationVersion key was absent)
+- `PersistentStore cleared and migration state reset`
 
 ---
 
 ## Section 3: Pre-Migration Guard on setAutoConnect
 
+> **State entering this section:** PS is empty and migration state is `false` (from TC-CLR-02). The `clearMigration` call in TC-GUARD-01's Setup is a no-op confirmation of this state.
+
 ### TC-GUARD-01: setAutoConnect rejected before performMigration
 
 **Precondition:** Migration has not been performed — either the device has never had `performMigration` called, or `clearMigration` has been called since the last `performMigration`. Verify this by confirming `migrationVersion` is absent from PersistentStore.
 
-**Setup (ensure pre-migration state):**
+**Setup (confirm pre-migration state — this is a no-op from TC-CLR-02, which already left PS empty):**
 ```bash
 curl --header "Content-Type: application/json" --request POST \
   --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.1.clearMigration","params":{}}' \
@@ -486,9 +445,65 @@ curl --header "Content-Type: application/json" --request POST \
 
 ## Section 4: Rollback Synchronization (Ongoing Filesystem Sync)
 
+> **State entering this section:** Migration state is `false` and PS is empty (clearMigration was last called in TC-GUARD-03). The AS file exists with known content.
+
+### TC-RB-05: AS file is NOT modified when performMigration has never been called
+
+**Precondition:** Continuing from TC-GUARD-04: migration state is `false` and PS is empty (clearMigration was last called in TC-GUARD-03). The AS file exists with known content. The `clearMigration` call in Setup confirms this state.
+
+**Setup:**
+```bash
+# Confirm pre-migration state (clearMigration is a no-op here; PS is already empty from TC-GUARD-03)
+curl --header "Content-Type: application/json" --request POST \
+  --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.1.clearMigration","params":{}}' \
+  http://127.0.0.1:9998/jsonrpc
+
+# Record a checksum of the AS file before the test
+md5sum /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
+# OR note the last-modified timestamp
+ls -la /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
+```
+
+**Steps:**
+1. Pair a new Bluetooth audio device.
+2. Verify the in-memory cache IS updated (the device appears in `getPairedDevices`), but verify PS `deviceInfo` is **not** written by the pairing — `addDevice` skips the PersistentStore write when `_isMigrated=false`:
+   ```bash
+   # Confirm getPairedDevices shows the newly paired device (in-memory cache was updated)
+   curl --header "Content-Type: application/json" --request POST \
+     --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.Bluetooth.1.getPairedDevices"}' \
+     http://127.0.0.1:9998/jsonrpc
+   ```
+   Verify that `migrationVersion` is still absent (migration has not been performed).
+3. Verify the AS file is **unchanged** (compare checksum or mtime to the baseline recorded in Setup):
+   ```bash
+   md5sum /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
+   ls -la /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
+   ```
+4. Unpair the device.
+5. Verify the AS file is still unchanged.
+
+**Expected Results:**
+- PersistentStore `deviceInfo` is **not** updated on pairing or unpairing. While `addDevice`/`removeDevice` update the in-memory device cache, the PersistentStore write is skipped when `_isMigrated=false`.
+- The AS file is **not** modified at any point — the filesystem sync is also guarded by migration state.
+- AS file checksum and mtime are identical to the baseline recorded before step 1.
+
+**Expected Log Entries** (no migration-specific skip log exists for `writeStorageFromCache`; search device logs for the absence of the filesystem sync success message):
+- Confirm that `Filesystem persistence sync succeeded` does **not** appear in device logs during this test (the AS file write is skipped silently when `_isMigrated` is false).
+
+---
+
+> **Section Transition — establish migration state before TC-RB-01:**
+> TC-RB-05 leaves migration state as `false`. The tests TC-RB-01 through TC-RB-06 require migration to be active. Call `performMigration` once now before proceeding:
+> ```bash
+> curl --header "Content-Type: application/json" --request POST \
+>   --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.1.performMigration","params":{}}' \
+>   http://127.0.0.1:9998/jsonrpc
+> ```
+> Verify that `migrationVersion` is present in PS before continuing to TC-RB-01.
+
 ### TC-RB-01: New device pairing updates both PersistentStore AND filesystem
 
-**Precondition:** `performMigration` has been completed. Both stores are in sync.
+**Precondition:** `performMigration` was called in the transition step above. Both stores are in sync.
 
 **Steps:**
 1. Note current content of both stores.
@@ -566,54 +581,9 @@ curl --header "Content-Type: application/json" --request POST \
 
 ---
 
-### TC-RB-05: AS file is NOT modified when performMigration has never been called
-
-**Precondition:** Fresh state — `performMigration` has never been called in this session. Both `deviceInfo` and `migrationVersion` are absent from PS (use `clearMigration` to reset if needed). The AS file exists and has known content.
-
-**Setup:**
-```bash
-# Reset to pre-migration state
-curl --header "Content-Type: application/json" --request POST \
-  --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.1.clearMigration","params":{}}' \
-  http://127.0.0.1:9998/jsonrpc
-
-# Record a checksum of the AS file before the test
-md5sum /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
-# OR note the last-modified timestamp
-ls -la /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
-```
-
-**Steps:**
-1. Pair a new Bluetooth audio device.
-2. Verify the in-memory cache IS updated (the device appears in `getPairedDevices`), but verify PS `deviceInfo` is **not** written by the pairing — `addDevice` skips the PersistentStore write when `_isMigrated=false`:
-   ```bash
-   # Confirm getPairedDevices shows the newly paired device (in-memory cache was updated)
-   curl --header "Content-Type: application/json" --request POST \
-     --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.Bluetooth.1.getPairedDevices"}' \
-     http://127.0.0.1:9998/jsonrpc
-   ```
-   Verify that `migrationVersion` is still absent (migration has not been performed).
-3. Verify the AS file is **unchanged** (compare checksum or mtime to the baseline recorded in Setup):
-   ```bash
-   md5sum /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
-   ls -la /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
-   ```
-4. Unpair the device.
-5. Verify the AS file is still unchanged.
-
-**Expected Results:**
-- PersistentStore `deviceInfo` is **not** updated on pairing or unpairing. While `addDevice`/`removeDevice` update the in-memory device cache, the PersistentStore write is skipped when `_isMigrated=false`.
-- The AS file is **not** modified at any point — the filesystem sync is also guarded by migration state.
-- AS file checksum and mtime are identical to the baseline recorded before step 1.
-
-**Expected Log Entries** (no migration-specific skip log exists for `writeStorageFromCache`; search device logs for the absence of the filesystem sync success message):
-- Confirm that `Filesystem persistence sync succeeded` does **not** appear in device logs during this test (the AS file write is skipped silently when `_isMigrated` is false).
-
----
-
 ### TC-RB-06: AS file is NOT modified after clearMigration (until performMigration is called again)
 
-**Precondition:** `performMigration` has previously been completed. Devices are paired. Both PS and the AS file are in sync. At least one device is paired with a known `autoConnectStatus`.
+**Precondition:** TC-RB-04 has completed. Migration is active (`performMigration` was called in TC-RB-04 step 1 or in the section-transition step before TC-RB-01). Both PS and the AS file are in sync. Ensure at least one device is paired with a known `autoConnectStatus` (configured in TC-RB-02; if TC-RB-03 removed that device, use `setAutoConnect` to configure a currently paired device).
 
 **Setup:**
 ```bash
@@ -659,7 +629,257 @@ md5sum /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
 
 ---
 
-## Section 5: Firmware Rollback Scenario
+## Section 5: performMigration — Edge Cases (Destructive AS File Operations)
+
+> **State entering this section:** Migration is active after TC-RB-06 (step 7 called `performMigration`). The following tests modify or delete the AS persistence file. Each test includes a Setup block that clears PS state and prepares the AS file before the test steps run.
+
+### TC-MIG-04: performMigration with empty AS file
+
+**Precondition:** Both `deviceInfo` and `migrationVersion` must be absent from PS, and the AS file must contain only an empty device list.
+
+**Setup:**
+```bash
+# 1. Clear PS state from TC-RB-06 (migration is currently active)
+curl --header "Content-Type: application/json" --request POST \
+  --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.1.clearMigration","params":{}}' \
+  http://127.0.0.1:9998/jsonrpc
+
+# 2. Write an empty AS file
+echo '{"pairedDevices":[]}' > /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
+
+# 3. Confirm both PS keys are now absent
+curl --header "Content-Type: application/json" --request POST \
+  --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.PersistentStore.getValue","params":{"namespace":"Bluetooth","key":"migrationVersion"}}' \
+  http://127.0.0.1:9998/jsonrpc
+# Expected: error response (key not found)
+```
+
+**Steps:**
+1. Call `performMigration`:
+   ```bash
+   curl --header "Content-Type: application/json" --request POST \
+     --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.1.performMigration","params":{}}' \
+     http://127.0.0.1:9998/jsonrpc
+   ```
+2. Read `deviceInfo` from PS.
+3. Read `migrationVersion` from PS.
+
+**Expected Results:**
+- `performMigration` returns `{"success": true}`.
+- `deviceInfo` is present but contains an empty array (`[]`).
+- `migrationVersion` is present and set to `"1"`.
+- Plugin continues operating normally.
+
+**Expected Log Entries:**
+- `migration_attempted`
+- `imported cache is empty, skipping BTRMGR enrichment`
+- `initial migration succeeded`
+
+---
+
+### TC-MIG-05: performMigration when AS file does not exist
+
+**Precondition:** Both `deviceInfo` and `migrationVersion` must be absent from PS, and the AS file must not exist.
+
+**Setup:**
+```bash
+# 1. Clear PS state from TC-MIG-04 (both PS keys are present from that test)
+curl --header "Content-Type: application/json" --request POST \
+  --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.1.clearMigration","params":{}}' \
+  http://127.0.0.1:9998/jsonrpc
+
+# 2. Delete the AS file
+rm -f /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
+
+# 3. Confirm both PS keys are now absent
+curl --header "Content-Type: application/json" --request POST \
+  --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.PersistentStore.getValue","params":{"namespace":"Bluetooth","key":"migrationVersion"}}' \
+  http://127.0.0.1:9998/jsonrpc
+# Expected: error response (key not found)
+```
+
+**Steps:**
+1. Call `performMigration`:
+   ```bash
+   curl --header "Content-Type: application/json" --request POST \
+     --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.1.performMigration","params":{}}' \
+     http://127.0.0.1:9998/jsonrpc
+   ```
+2. Read `deviceInfo` from PS.
+3. Read `migrationVersion` from PS.
+
+**Expected Results:**
+- `performMigration` returns `{"success": true}` (absent file treated as empty, not an error).
+- `deviceInfo` is present and contains an empty or minimal array.
+- `migrationVersion` is present and set to `"1"`.
+
+**Expected Log Entries:**
+- `migration_attempted`
+- `filesystem persistence file does not exist: /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json` (logged by the persistence adapter when the file is not found; absent file is treated as empty — no error is returned)
+- `imported cache is empty, skipping BTRMGR enrichment`
+- `initial migration succeeded`
+
+---
+
+## Section 6: Edge Cases
+
+> **State entering this section:** After TC-MIG-05, the AS file does not exist and both PS keys are present (from TC-MIG-05's `performMigration`). TC-EDGE-01 includes a Setup block to restore the required state.
+
+### TC-EDGE-01: Device in AS file but no longer paired in BTRMGR
+
+**Precondition:** Both PS keys must be absent and the AS file must contain a device entry whose address is not in the platform's paired device list.
+
+**Setup:**
+```bash
+# 1. Clear PS state from TC-MIG-05 (both PS keys are present from that test)
+curl --header "Content-Type: application/json" --request POST \
+  --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.1.clearMigration","params":{}}' \
+  http://127.0.0.1:9998/jsonrpc
+
+# 2. Create a test AS file containing one non-paired device address.
+#    Replace AA:BB:CC:DD:EE:FF with a MAC address that is NOT currently in the platform paired list.
+cat > /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json << 'EOF'
+{
+  "pairedDevices": [
+    {
+      "deviceAddr": "AA:BB:CC:DD:EE:FF",
+      "friendlyName": "Phantom Device",
+      "deviceType": "AUDIO OUTPUT",
+      "autoConnectStatus": false,
+      "lastVolumeSetting": 50,
+      "lastConnectionTimeUTC": "2024-01-01T00:00:00Z"
+    }
+  ]
+}
+EOF
+
+# 3. Confirm both PS keys are now absent
+curl --header "Content-Type: application/json" --request POST \
+  --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.PersistentStore.getValue","params":{"namespace":"Bluetooth","key":"migrationVersion"}}' \
+  http://127.0.0.1:9998/jsonrpc
+# Expected: error response (key not found)
+```
+
+**Steps:**
+1. Call `performMigration`:
+   ```bash
+   curl --header "Content-Type: application/json" --request POST \
+     --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.1.performMigration","params":{}}' \
+     http://127.0.0.1:9998/jsonrpc
+   ```
+2. Read `deviceInfo` from PS.
+
+**Expected Results:**
+- Device with address `AA:BB:CC:DD:EE:FF` is skipped during import because it is no longer in the platform's paired device list.
+- Other valid devices import normally.
+- `performMigration` returns `{"success": true}`.
+
+**Expected Log Entries:**
+- `migration_attempted`
+- `No paired device handle found for addr=AA:BB:CC:DD:EE:FF during filesystem persistence import, skipping`
+- `initial migration succeeded`
+
+---
+
+### TC-EDGE-02: performMigration called multiple times concurrently (stress)
+
+**Precondition:** `migrationVersion` must be absent from PS. TC-EDGE-01 left both PS keys present (from its `performMigration` call). Call `clearMigration` in Setup to reset state.
+
+**Setup:**
+```bash
+# Clear PS state from TC-EDGE-01
+curl --header "Content-Type: application/json" --request POST \
+  --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.1.clearMigration","params":{}}' \
+  http://127.0.0.1:9998/jsonrpc
+
+# Confirm migrationVersion is absent
+curl --header "Content-Type: application/json" --request POST \
+  --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.PersistentStore.getValue","params":{"namespace":"Bluetooth","key":"migrationVersion"}}' \
+  http://127.0.0.1:9998/jsonrpc
+# Expected: error response (key not found)
+```
+
+**Steps:**
+1. Fire multiple concurrent `performMigration` calls in quick succession:
+   ```bash
+   for i in {1..5}; do
+     curl --header "Content-Type: application/json" --request POST \
+       --data '{"jsonrpc":"2.0","id":'"$i"',"method":"org.rdk.Bluetooth.1.performMigration","params":{}}' \
+       http://127.0.0.1:9998/jsonrpc &
+   done
+   wait
+   ```
+2. Verify `deviceInfo` and `migrationVersion` are present and contain valid data.
+3. Verify no duplicate device entries in `deviceInfo`.
+
+**Expected Results:**
+- All calls return `{"success": true}`.
+- Only one import occurs — concurrent calls are serialised and the second through fifth calls will each be no-ops (migrationVersion already present after the first call completes).
+- `deviceInfo` has no duplicate entries.
+- `migrationVersion` has a single consistent value.
+
+---
+
+## Section 7: Reboot Persistence Validation
+
+> **State entering this section:** After TC-EDGE-02, migration is active (`migrationVersion` is present in PS). Ensure at least one real Bluetooth audio device is paired with a known `autoConnect` setting before TC-REBOOT-01. If edge-case testing left only a phantom device in the AS file, re-pair a real device and configure its `autoConnect` state via `setAutoConnect` before proceeding.
+
+### TC-REBOOT-01: PersistentStore and filesystem survive reboot after migration
+
+**Precondition:** TC-EDGE-02 has completed; migration is active (`migrationVersion` is present in PS). At least one real Bluetooth audio device is paired with `autoConnect` configured via `setAutoConnect`. If no real device is currently paired (edge-case tests may have left only a phantom device in the AS file), re-pair a real device and call `setAutoConnect` to configure its `autoConnect` state before rebooting.
+
+**Steps:**
+1. Verify both stores have consistent data before reboot.
+2. Reboot device.
+3. After boot, verify `deviceInfo` and `migrationVersion` are still present in PS.
+4. Verify AS file still contains expected data.
+5. Verify devices auto-connect per their saved settings.
+6. Verify that `performMigration` does NOT need to be called again (state persists across reboot).
+
+**Expected Results:**
+- All data survives reboot.
+- `autoConnect` and `lastConnectionTimeUTC` are preserved.
+- The plugin recognises that migration was previously completed (because `migrationVersion` is present in PersistentStore) and does not require `performMigration` to be called again.
+- `setAutoConnect` works immediately after reboot without needing to re-call `performMigration`.
+
+**Expected Log Entries on boot** (search device logs for these exact strings):
+- `Migration state at init: _isMigrated=true`
+- `Filesystem persistence sync succeeded: Persistence payload updated from cache, cache_size=N` (emitted only when a persistence mutation triggers `writeStorageFromCache()` after boot; it may not appear during initialization)
+
+---
+
+### TC-REBOOT-02: setAutoConnect rejected after reboot when migration was never performed
+
+**Precondition:** TC-REBOOT-01 has completed. Migration is active (`migrationVersion` is present in PS). Call `clearMigration` to clear PS state before rebooting.
+
+**Setup:**
+```bash
+# 1. Clear PS state from TC-REBOOT-01
+curl --header "Content-Type: application/json" --request POST \
+  --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.1.clearMigration","params":{}}' \
+  http://127.0.0.1:9998/jsonrpc
+
+# 2. Confirm both PS keys are absent before rebooting
+curl --header "Content-Type: application/json" --request POST \
+  --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.PersistentStore.getValue","params":{"namespace":"Bluetooth","key":"migrationVersion"}}' \
+  http://127.0.0.1:9998/jsonrpc
+# Expected: error response (key not found)
+```
+
+**Steps:**
+1. Reboot the device (`clearMigration` was already called in Setup).
+2. After boot, attempt `setAutoConnect` for any paired device **before** calling `performMigration`.
+
+**Expected Results:**
+- `setAutoConnect` returns a JSON-RPC error: `{"error":{"code":1,"message":"ERROR_GENERAL"}}`.
+- The plugin correctly identifies on boot that no prior migration has been performed (no migrationVersion key in PersistentStore) and enforces the guard.
+
+**Expected Log Entries on boot** (search device logs for this exact string):
+- `Migration state at init: _isMigrated=false`
+
+---
+
+## Section 8: Firmware Rollback Scenario
 
 ### TC-ROLL-01: Rollback — downgrade firmware and verify AS reads correct data
 
@@ -730,96 +950,6 @@ This test simulates the "IUI LD Disabled" scenario from the design, where IUI ca
 - All 4 devices are present in PS after second upgrade.
 
 **Expected Log Entries (step 9):**
-- `performMigration: initial migration succeeded`
-
----
-
-## Section 6: Reboot Persistence Validation
-
-### TC-REBOOT-01: PersistentStore and filesystem survive reboot after migration
-
-**Precondition:** `performMigration` has been called. Devices are paired with `autoConnect` settings configured.
-
-**Steps:**
-1. Verify both stores have consistent data before reboot.
-2. Reboot device.
-3. After boot, verify `deviceInfo` and `migrationVersion` are still present in PS.
-4. Verify AS file still contains expected data.
-5. Verify devices auto-connect per their saved settings.
-6. Verify that `performMigration` does NOT need to be called again (state persists across reboot).
-
-**Expected Results:**
-- All data survives reboot.
-- `autoConnect` and `lastConnectionTimeUTC` are preserved.
-- The plugin recognises that migration was previously completed (because `migrationVersion` is present in PersistentStore) and does not require `performMigration` to be called again.
-- `setAutoConnect` works immediately after reboot without needing to re-call `performMigration`.
-
-**Expected Log Entries on boot** (search device logs for these exact strings):
-- `Migration state at init: _isMigrated=true`
-- `Filesystem persistence sync succeeded: Persistence payload updated from cache, cache_size=N` (emitted only when a persistence mutation triggers `writeStorageFromCache()` after boot; it may not appear during initialization)
-
----
-
-### TC-REBOOT-02: setAutoConnect rejected after reboot when migration was never performed
-
-**Precondition:** Both `deviceInfo` and `migrationVersion` are absent from PersistentStore. `performMigration` has never been successfully called on this device.
-
-**Steps:**
-1. Delete both PS keys (or call `clearMigration`) and reboot.
-2. After boot, attempt `setAutoConnect` for any paired device **before** calling `performMigration`.
-
-**Expected Results:**
-- `setAutoConnect` returns a JSON-RPC error: `{"error":{"code":1,"message":"ERROR_GENERAL"}}`.
-- The plugin correctly identifies on boot that no prior migration has been performed (no migrationVersion key in PersistentStore) and enforces the guard.
-
-**Expected Log Entries on boot** (search device logs for this exact string):
-- `Migration state at init: _isMigrated=false`
-
----
-
-## Section 7: Edge Cases
-
-### TC-EDGE-01: Device in AS file but no longer paired in BTRMGR
-
-**Precondition:** AS file has a device entry with address `AA:BB:CC:DD:EE:FF`. That device is NOT in the platform's paired device list.
-
-**Steps:**
-1. Ensure both PS keys are absent.
-2. Call `performMigration`.
-3. Read `deviceInfo` from PS.
-
-**Expected Results:**
-- Device with address `AA:BB:CC:DD:EE:FF` is skipped during import because it is no longer in the platform's paired device list.
-- Other valid devices import normally.
-- `performMigration` returns `{"success": true}`.
-
-**Expected Log Entries:**
-- `performMigration: initial migration succeeded`
-- `[WARN] No paired device handle found for addr=AA:BB:CC:DD:EE:FF during filesystem persistence import, skipping`
-
----
-
-### TC-EDGE-02: performMigration called multiple times concurrently (stress)
-
-**Steps:**
-1. Ensure `performMigration` has not been called (no `migrationVersion` in PS).
-2. Fire multiple concurrent `performMigration` calls in quick succession:
-   ```bash
-   for i in {1..5}; do
-     curl --header "Content-Type: application/json" --request POST \
-       --data '{"jsonrpc":"2.0","id":'"$i"',"method":"org.rdk.Bluetooth.1.performMigration","params":{}}' \
-       http://127.0.0.1:9998/jsonrpc &
-   done
-   wait
-   ```
-3. Verify `deviceInfo` and `migrationVersion` are present and contain valid data.
-4. Verify no duplicate device entries in `deviceInfo`.
-
-**Expected Results:**
-- All calls return `{"success": true}`.
-- Only one import occurs — concurrent calls are serialised and the second through fifth calls will each be no-ops (migrationVersion already present after the first call completes).
-- `deviceInfo` has no duplicate entries.
-- `migrationVersion` has a single consistent value.
-
-
+- `migration_attempted`
+- `initial migration succeeded`
 
