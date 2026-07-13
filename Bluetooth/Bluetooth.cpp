@@ -1132,7 +1132,7 @@ namespace WPEFramework
                     break;
 
                 case BTRMGR_EVENT_DEVICE_PAIRING_FAILED:
-                    LOGERR("Received %s Event from BTRMgr", C_STR(STATUS_PAIRING_FAILED));
+                    LOGINFO("Received %s Event from BTRMgr", C_STR(STATUS_PAIRING_FAILED));
                     params["newStatus"] = STATUS_PAIRING_FAILED;
                     params["deviceID"] = std::to_string(eventMsg.m_discoveredDevice.m_deviceHandle);
                     params["name"] = string(eventMsg.m_discoveredDevice.m_name);
@@ -1147,7 +1147,7 @@ namespace WPEFramework
                     break;
 
                 case BTRMGR_EVENT_DEVICE_UNPAIRING_FAILED:
-                    LOGERR("Received %s Event from BTRMgr", C_STR(STATUS_PAIRING_FAILED));
+                    LOGINFO("Received %s Event from BTRMgr", C_STR(STATUS_PAIRING_FAILED));
                     params["newStatus"] = STATUS_PAIRING_FAILED;
                     params["deviceID"] = std::to_string(eventMsg.m_pairedDevice.m_deviceHandle);
                     params["name"] = string(eventMsg.m_pairedDevice.m_name);
@@ -1162,7 +1162,7 @@ namespace WPEFramework
                     break;
 
                 case BTRMGR_EVENT_DEVICE_CONNECTION_FAILED:
-                    LOGERR("Received %s Event from BTRMgr", C_STR(STATUS_CONNECTION_FAILED));
+                    LOGINFO("Received %s Event from BTRMgr", C_STR(STATUS_CONNECTION_FAILED));
                     params["newStatus"] = STATUS_CONNECTION_FAILED;
                     params["deviceID"] = std::to_string(eventMsg.m_pairedDevice.m_deviceHandle);
                     params["name"] = string(eventMsg.m_pairedDevice.m_name);
@@ -1177,7 +1177,7 @@ namespace WPEFramework
                     break;
 
                 case BTRMGR_EVENT_RECEIVED_EXTERNAL_CONNECT_REQUEST: {
-                    LOGERR("Received %s Event from BTRMgr", "external connection request");
+                    LOGINFO("Received %s Event from BTRMgr", "external connection request");
 
                     #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
                     if (m_bluetoothDeviceManager.isMigrated()) {
@@ -1225,7 +1225,7 @@ namespace WPEFramework
                 }
 
                 case BTRMGR_EVENT_RECEIVED_EXTERNAL_PLAYBACK_REQUEST:
-                    LOGERR("Received %s Event from BTRMgr", "external playback request");
+                    LOGINFO("Received %s Event from BTRMgr", "external playback request");
                     params["deviceID"] = std::to_string(eventMsg.m_externalDevice.m_deviceHandle);
                     params["name"] = string(eventMsg.m_externalDevice.m_name);
                     params["deviceType"] = BTRMGR_GetDeviceTypeAsString(eventMsg.m_externalDevice.m_deviceType);
