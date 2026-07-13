@@ -89,7 +89,7 @@ curl --header "Content-Type: application/json" --request POST \
 
 ---
 
-## IMPORTANT NOTE`
+## IMPORTANT NOTE
 
 For any test cases requiring a change in the bluetooth device's auto-connect status, the guide UI should **NOT** be used. The UI isn't currently using the new Bluetooth Thunder plug-in APIs to set the auto-connect status, and as such would not be reflected in PersistentStore. Use the `setAutoConnect` curl command from the Curl Reference Commands section above.
 
