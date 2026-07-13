@@ -107,51 +107,10 @@ namespace WPEFramework {
                 }
             }
 
-            // Build a deterministic canonical string from the snapshot for change detection.
-            std::vector<std::string> keys;
-            keys.reserve(cacheSnapshot.size());
-            for (const auto& entry : cacheSnapshot) {
-                keys.push_back(entry.first);
-            }
-            std::sort(keys.begin(), keys.end());
-
-            std::string canonical;
-            for (const auto& key : keys) {
-                const BluetoothDeviceInfo& info = cacheSnapshot.at(key);
-                canonical += key;
-                canonical += '|';
-                canonical += info.deviceAddr;
-                canonical += '|';
-                canonical += info.deviceType;
-                canonical += '|';
-                canonical += info.friendlyName;
-                canonical += '|';
-                canonical += std::to_string(info.lastVolumeSetting);
-                canonical += '|';
-                canonical += std::to_string(static_cast<int>(info.autoConnectStatus));
-                canonical += '|';
-                canonical += info.lastConnectTimeUtc;
-                canonical += ';';
-            }
-
-            const std::size_t newHash = std::hash<std::string>{}(canonical);
-
-            _adminLock.Lock();
-            const bool unchanged = (newHash == _lastFilesystemPersistenceHash);
-            _adminLock.Unlock();
-
-            if (unchanged) {
-                LOGINFO("Filesystem persistence sync skipped: cache unchanged since last write, cache_size=%zu", cacheSnapshot.size());
-                return;
-            }
-
             const Core::hresult result = adapter.Write(cacheSnapshot);
             if (Core::ERROR_NONE != result) {
                 LOGERR("Filesystem persistence sync failed: Unable to update persistence payload from cache, hresult=%d cache_size=%zu", result, cacheSnapshot.size());
             } else {
-                _adminLock.Lock();
-                _lastFilesystemPersistenceHash = newHash;
-                _adminLock.Unlock();
                 LOGINFO("Filesystem persistence sync succeeded: Persistence payload updated from cache, cache_size=%zu", cacheSnapshot.size());
             }
         }
