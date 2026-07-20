@@ -18,6 +18,7 @@
 **/
 
 #include <fstream>
+#include <chrono>
 
 #include "Bluetooth.h"
 
@@ -272,6 +273,13 @@ namespace WPEFramework
 
         void Bluetooth::Deinitialize(PluginHost::IShell* service)
         {
+            // Stop the BT enable retry thread if it is running
+            m_btEnableRetryStop = true;
+            if (m_btEnableRetryThread.joinable())
+            {
+                m_btEnableRetryThread.join();
+            }
+
             m_bluetoothDeviceManager.deinit();
 
             if (m_powerManagerPlugin) {
@@ -705,11 +713,39 @@ namespace WPEFramework
             BTRMGR_Result_t rc = BTRMGR_RESULT_GENERIC_FAILURE;
             if (enabled == "BLUETOOTH_DISABLED")
             {
-                rc = BTRMGR_SetAdapterPowerStatus (0, 0 /* FALSE */);
+                // Stop any pending enable-retry thread before disabling to avoid a race
+                // where the retry thread re-enables BT after the disable call succeeds.
+                m_btEnableRetryStop = true;
+                if (m_btEnableRetryThread.joinable())
+                {
+                    m_btEnableRetryThread.join();
+                }
+                rc = BTRMGR_SetAdapterPowerStatus(0, 0 /* FALSE */);
             }
             else if (enabled == "BLUETOOTH_ENABLED")
             {
-                rc = BTRMGR_SetAdapterPowerStatus (0, 1 /* TRUE */);
+                // Stop any previous retry thread before attempting.
+                m_btEnableRetryStop = true;
+                if (m_btEnableRetryThread.joinable())
+                {
+                    m_btEnableRetryThread.join(); // waits at most ~50ms (interruptible sleep)
+                }
+                m_btEnableRetryStop = false;
+
+                // Quick first attempt: if BTRMgrBus is already ready, succeed immediately
+                // and return an accurate result to the caller without launching a thread.
+                rc = BTRMGR_SetAdapterPowerStatus(0, 1 /* TRUE */);
+
+                if (rc == BTRMGR_RESULT_GENERIC_FAILURE)
+                {
+                    // BTRMgrBus is not ready yet (transient IARM race condition after wakeup).
+                    // Launch a background thread to retry indefinitely until it becomes
+                    // available, so the calling thread is not blocked. The caller receives
+                    // the real failure result; the retry thread will complete the enable
+                    // asynchronously and the result will be communicated via onStatusChanged.
+                    LOGWARN("setBluetoothEnabled: BTRMgrBus not ready, launching retry thread");
+                    m_btEnableRetryThread = std::thread(&Bluetooth::enableBluetoothWithRetry, this);
+                }
             }
             else if (enabled == "BLUETOOTH_INPUT_ENABLED")
             {
@@ -717,12 +753,57 @@ namespace WPEFramework
                 LOGERR("Bluetooth IN is not supported by STB");
             }
 
-            if (BTRMGR_RESULT_SUCCESS != rc)
+            if (BTRMGR_RESULT_SUCCESS != rc && !m_btEnableRetryThread.joinable())
             {
+                // Log error only when not retrying in background — if retry thread is
+                // running, the outcome will be reported by enableBluetoothWithRetry().
                 LOGERR("Failed to do setBluetoothEnabled");
             }
 
             return BTRMGR_RESULT_SUCCESS == rc;
+        }
+
+        void Bluetooth::enableBluetoothWithRetry()
+        {
+            // Retries BTRMGR_SetAdapterPowerStatus until BTRMgrBus becomes available.
+            // Uses a fixed 500ms interruptible sleep between attempts so Deinitialize()
+            // can stop this thread within ~50ms by setting m_btEnableRetryStop.
+            const int kRetryDelayMs  = 500;
+            const int kSleepSliceMs  = 50;
+            int attempt = 0;
+
+            LOGINFO("enableBluetoothWithRetry: started, waiting for BTRMgrBus");
+
+            while (!m_btEnableRetryStop)
+            {
+                ++attempt;
+                BTRMGR_Result_t rc = BTRMGR_SetAdapterPowerStatus(0, 1 /* TRUE */);
+
+                if (BTRMGR_RESULT_SUCCESS == rc)
+                {
+                    LOGINFO("enableBluetoothWithRetry: BTRMgrBus ready on attempt %d", attempt);
+                    return;
+                }
+
+                if (rc != BTRMGR_RESULT_GENERIC_FAILURE)
+                {
+                    // Non-transient error (e.g. INVALID_INPUT) — no point retrying
+                    LOGERR("enableBluetoothWithRetry: non-transient error rc=%d on attempt %d, stopping",
+                           static_cast<int>(rc), attempt);
+                    return;
+                }
+
+                LOGWARN("enableBluetoothWithRetry: BTRMgrBus not ready (attempt %d, rc=%d), retrying in %dms",
+                        attempt, static_cast<int>(rc), kRetryDelayMs);
+
+                // Interruptible sleep: wake up within kSleepSliceMs if stop is requested
+                for (int elapsed = 0; elapsed < kRetryDelayMs && !m_btEnableRetryStop; elapsed += kSleepSliceMs)
+                {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(kSleepSliceMs));
+                }
+            }
+
+            LOGINFO("enableBluetoothWithRetry: stopped after %d attempt(s) (shutdown requested)", attempt);
         }
 
         bool Bluetooth::setBluetoothDiscoverable(bool enabled, int timeout)

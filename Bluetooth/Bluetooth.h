@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <thread>
 
 #include "Module.h"
@@ -158,6 +159,7 @@ namespace WPEFramework {
             bool setAudioStream(long long int deviceID, const string &audioStreamName);
             bool setDevicePairing(long long int deviceID, bool pair);
             bool setBluetoothEnabled(const string &enabled);
+            void enableBluetoothWithRetry();
             bool setBluetoothDiscoverable(bool enabled, int timeout);
             bool getBluetoothProperties(JsonObject* rp);
             bool setBluetoothProperties(const JsonObject& properties);
@@ -275,6 +277,8 @@ namespace WPEFramework {
             // Assuming that there will be only one threaded call at a time (which is the case for Bluetooth)
             // Otherwise we might need a thread for each async command for better performance
             Utils::ThreadRAII m_executionThread;
+            std::atomic<bool> m_btEnableRetryStop{false};
+            std::thread m_btEnableRetryThread;
             bool m_discoveryRunning;
             DiscoveryTimer m_discoveryTimer;
             friend class DiscoveryTimer;
