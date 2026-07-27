@@ -16,5 +16,6 @@ jobs:
 
   trigger-L2:
     uses: ./.github/workflows/L2-tests.yml
+    secrets: inherit
     with:
       caller_source: local
