@@ -180,7 +180,6 @@ Core::hresult BluetoothPersistenceAdapter::Parse(const std::string& payload, std
 
 Core::hresult BluetoothPersistenceAdapter::Read(std::vector<BluetoothDeviceInfo>& devices) const
 {
-    errno = 0;
     if (access(_filesystemPersistencePath.c_str(), F_OK) != 0) {
         if (errno == ENOENT) {
             LOGINFO("filesystem persistence file does not exist: %s", _filesystemPersistencePath.c_str());
@@ -212,6 +211,11 @@ Core::hresult BluetoothPersistenceAdapter::Read(std::vector<BluetoothDeviceInfo>
     std::stringstream buffer;
     buffer << input.rdbuf();
 
+    if (input.bad()) {
+        LOGWARN("filesystem persistence file read failed: %s", _filesystemPersistencePath.c_str());
+        return Core::ERROR_GENERAL;
+    }
+
     std::vector<BluetoothDeviceInfo> loaded;
     const Core::hresult parseResult = Parse(buffer.str(), loaded);
     if (Core::ERROR_NONE != parseResult) {
@@ -219,6 +223,48 @@ Core::hresult BluetoothPersistenceAdapter::Read(std::vector<BluetoothDeviceInfo>
     }
 
     devices = std::move(loaded);
+    return Core::ERROR_NONE;
+}
+
+Core::hresult BluetoothPersistenceAdapter::ReadRaw(std::string& content) const
+{
+    if (access(_filesystemPersistencePath.c_str(), F_OK) != 0) {
+        if (errno == ENOENT) {
+            LOGINFO("filesystem persistence file does not exist: %s", _filesystemPersistencePath.c_str());
+            return Core::ERROR_NOT_EXIST;
+        }
+        LOGWARN("filesystem persistence file is not accessible: %s", _filesystemPersistencePath.c_str());
+        return Core::ERROR_GENERAL;
+    }
+
+    std::ifstream input(_filesystemPersistencePath, std::ios::in | std::ios::binary);
+    if (!input.is_open()) {
+        LOGWARN("filesystem persistence file is not readable: %s", _filesystemPersistencePath.c_str());
+        return Core::ERROR_GENERAL;
+    }
+
+    input.seekg(0, std::ios::end);
+    const std::streamoff fileSize = static_cast<std::streamoff>(input.tellg());
+    if (fileSize < 0) {
+        LOGWARN("filesystem persistence file size query failed: %s", _filesystemPersistencePath.c_str());
+        return Core::ERROR_GENERAL;
+    }
+    if (fileSize > kMaxFilesystemPersistencePayloadBytes) {
+        LOGWARN("filesystem persistence file too large (%lld bytes): %s",
+            static_cast<long long>(fileSize), _filesystemPersistencePath.c_str());
+        return Core::ERROR_GENERAL;
+    }
+    input.seekg(0, std::ios::beg);
+
+    std::stringstream buffer;
+    buffer << input.rdbuf();
+
+    if (input.bad()) {
+        LOGWARN("filesystem persistence file read failed: %s", _filesystemPersistencePath.c_str());
+        return Core::ERROR_GENERAL;
+    }
+     
+    content = buffer.str();
     return Core::ERROR_NONE;
 }
 
