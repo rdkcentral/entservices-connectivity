@@ -23,7 +23,7 @@ Migration is **client-triggered**, not automatic. The plugin does **not** auto-m
 
 The plugin tracks whether migration has been performed. Migration state becomes active after a successful `performMigration` call and is cleared by `clearMigration`. Key observable effects:
 
-- `setAutoConnect` is **rejected** (returns a JSON-RPC error response) when migration has not been performed.
+- `setAutoConnect` is **rejected** (returns `{"result":{"success":false}}` in the response body) when migration has not been performed.
 - `setAutoConnect` changes will **not** be written to PersistentStore when migration has not been performed.
 - Pairing and unpairing (`addDevice`/`removeDevice`) update the in-memory device cache but do **not** write to PersistentStore when migration has not been performed.
 - The AS file (filesystem persistence) will **not** be updated by any operation external to IUI/AS (e.g. CURL'd plug-in requests) — pairing, unpairing, or `setAutoConnect` — when migration has not been performed.
@@ -93,7 +93,7 @@ curl --header "Content-Type: application/json" --request POST \
 
 For any test cases requiring a change in the bluetooth device's auto-connect status, the guide UI should **NOT** be used. The UI isn't currently using the new Bluetooth Thunder plug-in APIs to set the auto-connect status, and as such would not be reflected in PersistentStore. Use the `setAutoConnect` curl command from the Curl Reference Commands section above.
 
-`setAutoConnect` will be **rejected** (returns a JSON-RPC error: `{"error":{"code":1,"message":"ERROR_GENERAL"}}`) until a successful `performMigration` has occurred since the last `clearMigration`, or equivalently, until the `migrationVersion` key is present in PersistentStore. Because the plugin re-derives migration state from that key at init, migration remains enabled across reboots without needing `performMigration` to be called again.
+`setAutoConnect` will be **rejected** (returns `{"result":{"success":false}}` in the response body) until a successful `performMigration` has occurred since the last `clearMigration`, or equivalently, until the `migrationVersion` key is present in PersistentStore. Because the plugin re-derives migration state from that key at init, migration remains enabled across reboots without needing `performMigration` to be called again.
 
 ---
 
@@ -362,7 +362,7 @@ curl --header "Content-Type: application/json" --request POST \
    ```
 
 **Expected Results:**
-- Response returns a JSON-RPC error: `{"error":{"code":1,"message":"ERROR_GENERAL"}}`.
+- Response returns `{"result":{"success":false}}`.
 - No changes are made to PS.
 
 **Expected Log Entries:**
@@ -416,7 +416,7 @@ curl --header "Content-Type: application/json" --request POST \
    ```
 
 **Expected Results:**
-- `setAutoConnect` returns a JSON-RPC error: `{"error":{"code":1,"message":"ERROR_GENERAL"}}`.
+- `setAutoConnect` returns `{"result":{"success":false}}`.
 - Rejection is immediate without attempting a PS write.
 
 **Expected Log Entries:**
@@ -871,7 +871,7 @@ curl --header "Content-Type: application/json" --request POST \
 2. After boot, attempt `setAutoConnect` for any paired device **before** calling `performMigration`.
 
 **Expected Results:**
-- `setAutoConnect` returns a JSON-RPC error: `{"error":{"code":1,"message":"ERROR_GENERAL"}}`.
+- `setAutoConnect` returns `{"result":{"success":false}}`.
 - The plugin correctly identifies on boot that no prior migration has been performed (no migrationVersion key in PersistentStore) and enforces the guard.
 
 **Expected Log Entries on boot** (search device logs for this exact string):
@@ -917,7 +917,7 @@ This test simulates the "IUI LD Disabled" scenario from the design, where IUI ca
    ```
 3. Verify PS `deviceInfo` and `migrationVersion` are gone.
 4. Verify the AS file is **unchanged** (clearing only affects PS, not the AS file).
-5. Attempt `setAutoConnect` for any device — verify it returns a JSON-RPC error: `{"error":{"code":1,"message":"ERROR_GENERAL"}}`.
+5. Attempt `setAutoConnect` for any device — verify it returns `{"result":{"success":false}}`.
 6. Downgrade to old firmware (or simulate old-firmware behaviour by verifying only the AS file is used).
 7. Verify all devices in the AS file are recognised.
 
