@@ -303,7 +303,7 @@ Note the device addresses, `autoConnectStatus`, and `lastConnectionTimeUTC` valu
 - `Bluetooth/deviceInfo` is absent from PS.
 - `Bluetooth/migrationVersion` is absent from PS.
 - AS file checksum and mtime are identical to the values recorded in step 1.
-- In-memory device cache is cleared (`getPairedDevices` will return no entries).
+- `getPairedDevices` will return expected entries but with `autoconnect` fields set to `false`.
 
 **Expected Log Entries:**
 - `PersistentStore cleared and migration state reset`
