@@ -261,7 +261,8 @@ TEST_F(BluetoothTest, startScanWrapper_StartDiscoveryFailed_Failure)
 
 TEST_F(BluetoothTest, startScanWrapper_MissingParameters_Failure)
 {
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("startScan"), _T("{}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("startScan"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, stopScanWrapper_Success)
@@ -329,7 +330,8 @@ TEST_F(BluetoothTest, setDiscoverableWrapper_Disable_Success)
 
 TEST_F(BluetoothTest, setDiscoverableWrapper_MissingParameter_Failure)
 {
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("setDiscoverable"), _T("{}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setDiscoverable"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, setDiscoverableWrapper_Failed)
@@ -337,7 +339,8 @@ TEST_F(BluetoothTest, setDiscoverableWrapper_Failed)
     EXPECT_CALL(*p_btmgrMock, BTRMGR_SetAdapterDiscoverable(::testing::_, ::testing::_, ::testing::_))
         .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
     
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("setDiscoverable"), _T("{\"discoverable\":true}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setDiscoverable"), _T("{\"discoverable\":true}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, getDiscoveredDevicesWrapper_Success)
@@ -462,7 +465,8 @@ TEST_F(BluetoothTest, connectWrapper_LEDevice_Success)
 
 TEST_F(BluetoothTest, connectWrapper_MissingDeviceID_Failure)
 {
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("connect"), _T("{\"deviceType\":\"SMARTPHONE\"}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("connect"), _T("{\"deviceType\":\"SMARTPHONE\"}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, connectWrapper_Failed)
@@ -470,7 +474,8 @@ TEST_F(BluetoothTest, connectWrapper_Failed)
     EXPECT_CALL(*p_btmgrMock, BTRMGR_StartAudioStreamingIn(::testing::_, ::testing::_, ::testing::_))
         .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
     
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("connect"), _T("{\"deviceID\":\"123\",\"deviceType\":\"SMARTPHONE\"}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("connect"), _T("{\"deviceID\":\"123\",\"deviceType\":\"SMARTPHONE\"}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, disconnectWrapper_Smartphone_Success)
@@ -499,7 +504,8 @@ TEST_F(BluetoothTest, disconnectWrapper_HIDDevice_Success)
 
 TEST_F(BluetoothTest, disconnectWrapper_MissingDeviceID_Failure)
 {
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("disconnect"), _T("{}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("disconnect"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, disconnectWrapper_Failed)
@@ -507,7 +513,8 @@ TEST_F(BluetoothTest, disconnectWrapper_Failed)
     EXPECT_CALL(*p_btmgrMock, BTRMGR_StopAudioStreamingOut(::testing::_, ::testing::_))
         .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
     
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("disconnect"), _T("{\"deviceID\":\"123\"}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("disconnect"), _T("{\"deviceID\":\"123\"}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, setAudioStreamWrapper_Primary_Success)
@@ -528,7 +535,8 @@ TEST_F(BluetoothTest, setAudioStreamWrapper_Auxiliary_Success)
 
 TEST_F(BluetoothTest, setAudioStreamWrapper_MissingParameters_Failure)
 {
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("setAudioStream"), _T("{\"deviceID\":\"123\"}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAudioStream"), _T("{\"deviceID\":\"123\"}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, setAudioStreamWrapper_Failed)
@@ -536,7 +544,8 @@ TEST_F(BluetoothTest, setAudioStreamWrapper_Failed)
     EXPECT_CALL(*p_btmgrMock, BTRMGR_SetAudioStreamingOutType(::testing::_, ::testing::_))
         .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
     
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("setAudioStream"), _T("{\"deviceID\":\"123\",\"audioStreamName\":\"PRIMARY\"}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAudioStream"), _T("{\"deviceID\":\"123\",\"audioStreamName\":\"PRIMARY\"}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, pairWrapper_Success)
@@ -549,7 +558,8 @@ TEST_F(BluetoothTest, pairWrapper_Success)
 
 TEST_F(BluetoothTest, pairWrapper_MissingDeviceID_Failure)
 {
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("pair"), _T("{}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("pair"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, pairWrapper_Failed)
@@ -557,7 +567,8 @@ TEST_F(BluetoothTest, pairWrapper_Failed)
     EXPECT_CALL(*p_btmgrMock, BTRMGR_PairDevice(::testing::_, ::testing::_))
         .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
     
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("pair"), _T("{\"deviceID\":\"123\"}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("pair"), _T("{\"deviceID\":\"123\"}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, unpairWrapper_Success)
@@ -570,7 +581,8 @@ TEST_F(BluetoothTest, unpairWrapper_Success)
 
 TEST_F(BluetoothTest, unpairWrapper_MissingDeviceID_Failure)
 {
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("unpair"), _T("{}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("unpair"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, unpairWrapper_Failed)
@@ -578,7 +590,8 @@ TEST_F(BluetoothTest, unpairWrapper_Failed)
     EXPECT_CALL(*p_btmgrMock, BTRMGR_UnpairDevice(::testing::_, ::testing::_))
         .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
     
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("unpair"), _T("{\"deviceID\":\"123\"}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("unpair"), _T("{\"deviceID\":\"123\"}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, enableWrapper_Success)
@@ -594,7 +607,8 @@ TEST_F(BluetoothTest, enableWrapper_Failed)
     EXPECT_CALL(*p_btmgrMock, BTRMGR_SetAdapterPowerStatus(::testing::_, 1))
         .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
     
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("enable"), _T("{}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("enable"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, disableWrapper_Success)
@@ -610,7 +624,8 @@ TEST_F(BluetoothTest, disableWrapper_Failed)
     EXPECT_CALL(*p_btmgrMock, BTRMGR_SetAdapterPowerStatus(::testing::_, 0))
         .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
     
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("disable"), _T("{}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("disable"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, getNameWrapper_Success)
@@ -628,7 +643,8 @@ TEST_F(BluetoothTest, getNameWrapper_Failed)
     EXPECT_CALL(*p_btmgrMock, BTRMGR_GetAdapterName(::testing::_, ::testing::_))
         .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
     
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("getName"), _T("{}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getName"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, setNameWrapper_Success)
@@ -644,7 +660,8 @@ TEST_F(BluetoothTest, setNameWrapper_Failed)
     EXPECT_CALL(*p_btmgrMock, BTRMGR_SetAdapterName(::testing::_, ::testing::_))
         .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
     
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("setName"), _T("{\"name\":\"NewName\"}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setName"), _T("{\"name\":\"NewName\"}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, sendAudioPlaybackCommandWrapper_Play_Success)
@@ -729,7 +746,8 @@ TEST_F(BluetoothTest, sendAudioPlaybackCommandWrapper_VolumeDown_Success)
 
 TEST_F(BluetoothTest, sendAudioPlaybackCommandWrapper_MissingParameters_Failure)
 {
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("sendAudioPlaybackCommand"), _T("{\"deviceID\":\"123\"}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("sendAudioPlaybackCommand"), _T("{\"deviceID\":\"123\"}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, sendAudioPlaybackCommandWrapper_Failed)
@@ -737,7 +755,8 @@ TEST_F(BluetoothTest, sendAudioPlaybackCommandWrapper_Failed)
     EXPECT_CALL(*p_btmgrMock, BTRMGR_MediaControl(::testing::_, ::testing::_, ::testing::_))
         .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
     
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("sendAudioPlaybackCommand"), _T("{\"deviceID\":\"123\",\"command\":\"PAUSE\"}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("sendAudioPlaybackCommand"), _T("{\"deviceID\":\"123\",\"command\":\"PAUSE\"}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, setEventResponseWrapper_PairingAccepted_Success)
@@ -766,7 +785,8 @@ TEST_F(BluetoothTest, setEventResponseWrapper_PlaybackAccepted_Success)
 
 TEST_F(BluetoothTest, setEventResponseWrapper_MissingParameters_Failure)
 {
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("respondToEvent"), _T("{\"deviceID\":\"123\"}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("respondToEvent"), _T("{\"deviceID\":\"123\"}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, setEventResponseWrapper_Failed)
@@ -774,7 +794,8 @@ TEST_F(BluetoothTest, setEventResponseWrapper_Failed)
     EXPECT_CALL(*p_btmgrMock, BTRMGR_SetEventResponse(::testing::_, ::testing::_))
         .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
     
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("respondToEvent"), _T("{\"deviceID\":\"123\",\"eventType\":\"onPairingRequest\",\"responseValue\":\"ACCEPTED\"}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("respondToEvent"), _T("{\"deviceID\":\"123\",\"eventType\":\"onPairingRequest\",\"responseValue\":\"ACCEPTED\"}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, getDeviceInfoWrapper_Success)
@@ -803,7 +824,8 @@ TEST_F(BluetoothTest, getDeviceInfoWrapper_Success)
 
 TEST_F(BluetoothTest, getDeviceInfoWrapper_MissingDeviceID_Failure)
 {
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("getDeviceInfo"), _T("{}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getDeviceInfo"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, getDeviceInfoWrapper_Failed)
@@ -836,7 +858,8 @@ TEST_F(BluetoothTest, getMediaTrackInfoWrapper_Success)
 
 TEST_F(BluetoothTest, getMediaTrackInfoWrapper_MissingDeviceID_Failure)
 {
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("getAudioInfo"), _T("{}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getAudioInfo"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, getMediaTrackInfoWrapper_Failed)
@@ -859,7 +882,8 @@ TEST_F(BluetoothTest, getDeviceVolumeMuteInfoWrapper_Success)
 
 TEST_F(BluetoothTest, getDeviceVolumeMuteInfoWrapper_MissingParameters_Failure)
 {
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("getDeviceVolumeMuteInfo"), _T("{\"deviceID\":\"123\"}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getDeviceVolumeMuteInfo"), _T("{\"deviceID\":\"123\"}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, getDeviceVolumeMuteInfoWrapper_Failed)
@@ -889,7 +913,8 @@ TEST_F(BluetoothTest, setDeviceVolumeMuteInfoWrapper_WithMute_Success)
 
 TEST_F(BluetoothTest, setDeviceVolumeMuteInfoWrapper_MissingParameters_Failure)
 {
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("setDeviceVolumeMuteInfo"), _T("{\"deviceID\":\"123\",\"deviceType\":\"HEADPHONES\"}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setDeviceVolumeMuteInfo"), _T("{\"deviceID\":\"123\",\"deviceType\":\"HEADPHONES\"}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, setDeviceVolumeMuteInfoWrapper_Failed)
@@ -897,7 +922,8 @@ TEST_F(BluetoothTest, setDeviceVolumeMuteInfoWrapper_Failed)
     EXPECT_CALL(*p_btmgrMock, BTRMGR_SetDeviceVolumeMute(::testing::_, ::testing::_, ::testing::_, ::testing::_, ::testing::_))
         .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
     
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("setDeviceVolumeMuteInfo"), _T("{\"deviceID\":\"123\",\"deviceType\":\"HEADPHONES\",\"volume\":150,\"mute\":0}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setDeviceVolumeMuteInfo"), _T("{\"deviceID\":\"123\",\"deviceType\":\"HEADPHONES\",\"volume\":150,\"mute\":0}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, setAutoConnectWrapper_Enable_Success)
@@ -916,7 +942,8 @@ TEST_F(BluetoothTest, setAutoConnectWrapper_Disable_Success)
 
 TEST_F(BluetoothTest, setAutoConnectWrapper_MissingParameters_Failure)
 {
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("setAutoConnect"), _T("{\"deviceID\":\"123\"}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"), _T("{\"deviceID\":\"123\"}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, getAutoConnectWrapper_Enabled_Success)
@@ -943,12 +970,14 @@ TEST_F(BluetoothTest, getAutoConnectWrapper_Disabled_Success)
 
 TEST_F(BluetoothTest, getAutoConnectWrapper_MissingDeviceID_Failure)
 {
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("getAutoConnect"), _T("{}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getAutoConnect"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, getAutoConnectWrapper_NotFound_Failure)
 {
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("getAutoConnect"), _T("{\"deviceID\":\"999\"}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getAutoConnect"), _T("{\"deviceID\":\"999\"}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 // ============================================================================
@@ -1953,8 +1982,9 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, performMigrationWrapper_Set
     }
 
     // Before migration: _isMigrated=false → setAutoConnect must be rejected.
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("setAutoConnect"),
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
         _T("{\"deviceID\":\"123\",\"enable\":true}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 
     // Perform migration.
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
@@ -2037,8 +2067,9 @@ TEST_F(BluetoothClearMigrationTest, clearMigrationWrapper_ReEnablesGuard_SetAuto
     EXPECT_TRUE(response.find("\"success\":true") != string::npos);
 
     // After clearMigration: _isMigrated=false → setAutoConnect must be rejected.
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("setAutoConnect"),
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
         _T("{\"deviceID\":\"123\",\"enable\":true}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, featureGateCompileCoverage_FlagOn)
