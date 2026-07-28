@@ -20,6 +20,7 @@
 #pragma once
 
 #include "Module.h"
+#include <atomic>
 #include <unordered_map>
 #include <chrono>
 #include <ctime>
@@ -30,6 +31,10 @@
 #define PERSISTENT_STORE_CALLSIGN "org.rdk.PersistentStore"
 #define PERSISTENT_STORE_NAMESPACE "Bluetooth"
 #define PERSISTENT_STORE_KEY_DEVICE_INFO "deviceInfo"
+#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+#define PERSISTENT_STORE_KEY_MIGRATION_VERSION "migrationVersion"
+#define BLUETOOTH_MIGRATION_VERSION "1"
+#endif
 
 namespace WPEFramework {
     namespace Plugin {
@@ -67,6 +72,11 @@ namespace WPEFramework {
                 Core::hresult addDevice(const std::string& deviceID);
                 Core::hresult removeDevice(const std::string& deviceID);
                 std::unordered_map<std::string /* deviceID */, BluetoothDeviceInfo /* deviceInfo */> getPairedDeviceInfos();
+        #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+                Core::hresult performMigration();
+                Core::hresult clearMigration();
+                bool isMigrated() const { return _isMigrated.load(); }
+        #endif
 
             private:
 
@@ -76,12 +86,15 @@ namespace WPEFramework {
 
                 Core::hresult getPairedDeviceInfo(const std::string& deviceID, BluetoothDeviceInfo& deviceInfo);
                 Core::hresult updateCacheFromStorage();
-                Core::hresult updateCacheFromDevice();
+                Core::hresult updateCacheFromDevice(bool backfillOnly = false);
                 Core::hresult writeStorageFromCache();
         #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
-                Core::hresult writeCacheFromFilesystemPersistence();
+                Core::hresult writeCacheFromFilesystemPersistence(const std::string& rawContent);
                 void writeFilesystemPersistenceFromCache();
-                std::size_t _lastFilesystemPersistenceHash = 0;
+                Core::hresult readMigrationVersionFromStorage(std::string& version) const;
+                Core::hresult writeMigrationVersionToStorage();
+                std::atomic<bool> _isMigrated{false};
+                mutable Core::CriticalSection _migrationLock;
         #endif
         };
 

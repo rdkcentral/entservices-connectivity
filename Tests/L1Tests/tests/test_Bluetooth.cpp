@@ -107,6 +107,16 @@ protected:
                         return &comLinkMock;
                     }));
 
+#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+    // Simulate a previously-migrated device so that _isMigrated=true after init().
+    // Derived fixtures that need _isMigrated=false (e.g. BluetoothLegacyPersistenceMigrationParseTest)
+    // override this with a broader ON_CALL that returns ERROR_NOT_EXIST for all keys.
+    ON_CALL(*p_storeMock, GetValue(::testing::_, PERSISTENT_STORE_KEY_MIGRATION_VERSION, ::testing::_))
+        .WillByDefault(::testing::DoAll(
+            ::testing::SetArgReferee<2>(std::string(BLUETOOTH_MIGRATION_VERSION)),
+            ::testing::Return(Core::ERROR_NONE)));
+#endif
+
         PluginHost::IFactories::Assign(&factoriesImplementation);
 
         Core::IWorkerPool::Assign(&(*workerPool));
@@ -251,7 +261,8 @@ TEST_F(BluetoothTest, startScanWrapper_StartDiscoveryFailed_Failure)
 
 TEST_F(BluetoothTest, startScanWrapper_MissingParameters_Failure)
 {
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("startScan"), _T("{}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("startScan"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, stopScanWrapper_Success)
@@ -319,7 +330,8 @@ TEST_F(BluetoothTest, setDiscoverableWrapper_Disable_Success)
 
 TEST_F(BluetoothTest, setDiscoverableWrapper_MissingParameter_Failure)
 {
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("setDiscoverable"), _T("{}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setDiscoverable"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, setDiscoverableWrapper_Failed)
@@ -327,7 +339,8 @@ TEST_F(BluetoothTest, setDiscoverableWrapper_Failed)
     EXPECT_CALL(*p_btmgrMock, BTRMGR_SetAdapterDiscoverable(::testing::_, ::testing::_, ::testing::_))
         .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
     
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("setDiscoverable"), _T("{\"discoverable\":true}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setDiscoverable"), _T("{\"discoverable\":true}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, getDiscoveredDevicesWrapper_Success)
@@ -452,7 +465,8 @@ TEST_F(BluetoothTest, connectWrapper_LEDevice_Success)
 
 TEST_F(BluetoothTest, connectWrapper_MissingDeviceID_Failure)
 {
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("connect"), _T("{\"deviceType\":\"SMARTPHONE\"}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("connect"), _T("{\"deviceType\":\"SMARTPHONE\"}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, connectWrapper_Failed)
@@ -460,7 +474,8 @@ TEST_F(BluetoothTest, connectWrapper_Failed)
     EXPECT_CALL(*p_btmgrMock, BTRMGR_StartAudioStreamingIn(::testing::_, ::testing::_, ::testing::_))
         .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
     
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("connect"), _T("{\"deviceID\":\"123\",\"deviceType\":\"SMARTPHONE\"}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("connect"), _T("{\"deviceID\":\"123\",\"deviceType\":\"SMARTPHONE\"}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, disconnectWrapper_Smartphone_Success)
@@ -489,7 +504,8 @@ TEST_F(BluetoothTest, disconnectWrapper_HIDDevice_Success)
 
 TEST_F(BluetoothTest, disconnectWrapper_MissingDeviceID_Failure)
 {
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("disconnect"), _T("{}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("disconnect"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, disconnectWrapper_Failed)
@@ -497,7 +513,8 @@ TEST_F(BluetoothTest, disconnectWrapper_Failed)
     EXPECT_CALL(*p_btmgrMock, BTRMGR_StopAudioStreamingOut(::testing::_, ::testing::_))
         .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
     
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("disconnect"), _T("{\"deviceID\":\"123\"}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("disconnect"), _T("{\"deviceID\":\"123\"}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, setAudioStreamWrapper_Primary_Success)
@@ -518,7 +535,8 @@ TEST_F(BluetoothTest, setAudioStreamWrapper_Auxiliary_Success)
 
 TEST_F(BluetoothTest, setAudioStreamWrapper_MissingParameters_Failure)
 {
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("setAudioStream"), _T("{\"deviceID\":\"123\"}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAudioStream"), _T("{\"deviceID\":\"123\"}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, setAudioStreamWrapper_Failed)
@@ -526,7 +544,8 @@ TEST_F(BluetoothTest, setAudioStreamWrapper_Failed)
     EXPECT_CALL(*p_btmgrMock, BTRMGR_SetAudioStreamingOutType(::testing::_, ::testing::_))
         .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
     
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("setAudioStream"), _T("{\"deviceID\":\"123\",\"audioStreamName\":\"PRIMARY\"}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAudioStream"), _T("{\"deviceID\":\"123\",\"audioStreamName\":\"PRIMARY\"}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, pairWrapper_Success)
@@ -539,7 +558,8 @@ TEST_F(BluetoothTest, pairWrapper_Success)
 
 TEST_F(BluetoothTest, pairWrapper_MissingDeviceID_Failure)
 {
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("pair"), _T("{}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("pair"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, pairWrapper_Failed)
@@ -547,7 +567,8 @@ TEST_F(BluetoothTest, pairWrapper_Failed)
     EXPECT_CALL(*p_btmgrMock, BTRMGR_PairDevice(::testing::_, ::testing::_))
         .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
     
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("pair"), _T("{\"deviceID\":\"123\"}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("pair"), _T("{\"deviceID\":\"123\"}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, unpairWrapper_Success)
@@ -560,7 +581,8 @@ TEST_F(BluetoothTest, unpairWrapper_Success)
 
 TEST_F(BluetoothTest, unpairWrapper_MissingDeviceID_Failure)
 {
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("unpair"), _T("{}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("unpair"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, unpairWrapper_Failed)
@@ -568,7 +590,8 @@ TEST_F(BluetoothTest, unpairWrapper_Failed)
     EXPECT_CALL(*p_btmgrMock, BTRMGR_UnpairDevice(::testing::_, ::testing::_))
         .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
     
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("unpair"), _T("{\"deviceID\":\"123\"}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("unpair"), _T("{\"deviceID\":\"123\"}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, enableWrapper_Success)
@@ -584,7 +607,8 @@ TEST_F(BluetoothTest, enableWrapper_Failed)
     EXPECT_CALL(*p_btmgrMock, BTRMGR_SetAdapterPowerStatus(::testing::_, 1))
         .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
     
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("enable"), _T("{}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("enable"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, disableWrapper_Success)
@@ -600,7 +624,8 @@ TEST_F(BluetoothTest, disableWrapper_Failed)
     EXPECT_CALL(*p_btmgrMock, BTRMGR_SetAdapterPowerStatus(::testing::_, 0))
         .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
     
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("disable"), _T("{}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("disable"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, getNameWrapper_Success)
@@ -618,7 +643,8 @@ TEST_F(BluetoothTest, getNameWrapper_Failed)
     EXPECT_CALL(*p_btmgrMock, BTRMGR_GetAdapterName(::testing::_, ::testing::_))
         .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
     
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("getName"), _T("{}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getName"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, setNameWrapper_Success)
@@ -634,7 +660,8 @@ TEST_F(BluetoothTest, setNameWrapper_Failed)
     EXPECT_CALL(*p_btmgrMock, BTRMGR_SetAdapterName(::testing::_, ::testing::_))
         .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
     
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("setName"), _T("{\"name\":\"NewName\"}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setName"), _T("{\"name\":\"NewName\"}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, sendAudioPlaybackCommandWrapper_Play_Success)
@@ -719,7 +746,8 @@ TEST_F(BluetoothTest, sendAudioPlaybackCommandWrapper_VolumeDown_Success)
 
 TEST_F(BluetoothTest, sendAudioPlaybackCommandWrapper_MissingParameters_Failure)
 {
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("sendAudioPlaybackCommand"), _T("{\"deviceID\":\"123\"}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("sendAudioPlaybackCommand"), _T("{\"deviceID\":\"123\"}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, sendAudioPlaybackCommandWrapper_Failed)
@@ -727,7 +755,8 @@ TEST_F(BluetoothTest, sendAudioPlaybackCommandWrapper_Failed)
     EXPECT_CALL(*p_btmgrMock, BTRMGR_MediaControl(::testing::_, ::testing::_, ::testing::_))
         .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
     
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("sendAudioPlaybackCommand"), _T("{\"deviceID\":\"123\",\"command\":\"PAUSE\"}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("sendAudioPlaybackCommand"), _T("{\"deviceID\":\"123\",\"command\":\"PAUSE\"}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, setEventResponseWrapper_PairingAccepted_Success)
@@ -756,7 +785,8 @@ TEST_F(BluetoothTest, setEventResponseWrapper_PlaybackAccepted_Success)
 
 TEST_F(BluetoothTest, setEventResponseWrapper_MissingParameters_Failure)
 {
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("respondToEvent"), _T("{\"deviceID\":\"123\"}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("respondToEvent"), _T("{\"deviceID\":\"123\"}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, setEventResponseWrapper_Failed)
@@ -764,7 +794,8 @@ TEST_F(BluetoothTest, setEventResponseWrapper_Failed)
     EXPECT_CALL(*p_btmgrMock, BTRMGR_SetEventResponse(::testing::_, ::testing::_))
         .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
     
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("respondToEvent"), _T("{\"deviceID\":\"123\",\"eventType\":\"onPairingRequest\",\"responseValue\":\"ACCEPTED\"}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("respondToEvent"), _T("{\"deviceID\":\"123\",\"eventType\":\"onPairingRequest\",\"responseValue\":\"ACCEPTED\"}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, getDeviceInfoWrapper_Success)
@@ -793,7 +824,8 @@ TEST_F(BluetoothTest, getDeviceInfoWrapper_Success)
 
 TEST_F(BluetoothTest, getDeviceInfoWrapper_MissingDeviceID_Failure)
 {
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("getDeviceInfo"), _T("{}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getDeviceInfo"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, getDeviceInfoWrapper_Failed)
@@ -826,7 +858,8 @@ TEST_F(BluetoothTest, getMediaTrackInfoWrapper_Success)
 
 TEST_F(BluetoothTest, getMediaTrackInfoWrapper_MissingDeviceID_Failure)
 {
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("getAudioInfo"), _T("{}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getAudioInfo"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, getMediaTrackInfoWrapper_Failed)
@@ -849,7 +882,8 @@ TEST_F(BluetoothTest, getDeviceVolumeMuteInfoWrapper_Success)
 
 TEST_F(BluetoothTest, getDeviceVolumeMuteInfoWrapper_MissingParameters_Failure)
 {
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("getDeviceVolumeMuteInfo"), _T("{\"deviceID\":\"123\"}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getDeviceVolumeMuteInfo"), _T("{\"deviceID\":\"123\"}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, getDeviceVolumeMuteInfoWrapper_Failed)
@@ -879,7 +913,8 @@ TEST_F(BluetoothTest, setDeviceVolumeMuteInfoWrapper_WithMute_Success)
 
 TEST_F(BluetoothTest, setDeviceVolumeMuteInfoWrapper_MissingParameters_Failure)
 {
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("setDeviceVolumeMuteInfo"), _T("{\"deviceID\":\"123\",\"deviceType\":\"HEADPHONES\"}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setDeviceVolumeMuteInfo"), _T("{\"deviceID\":\"123\",\"deviceType\":\"HEADPHONES\"}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, setDeviceVolumeMuteInfoWrapper_Failed)
@@ -887,7 +922,8 @@ TEST_F(BluetoothTest, setDeviceVolumeMuteInfoWrapper_Failed)
     EXPECT_CALL(*p_btmgrMock, BTRMGR_SetDeviceVolumeMute(::testing::_, ::testing::_, ::testing::_, ::testing::_, ::testing::_))
         .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
     
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("setDeviceVolumeMuteInfo"), _T("{\"deviceID\":\"123\",\"deviceType\":\"HEADPHONES\",\"volume\":150,\"mute\":0}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setDeviceVolumeMuteInfo"), _T("{\"deviceID\":\"123\",\"deviceType\":\"HEADPHONES\",\"volume\":150,\"mute\":0}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, setAutoConnectWrapper_Enable_Success)
@@ -906,7 +942,8 @@ TEST_F(BluetoothTest, setAutoConnectWrapper_Disable_Success)
 
 TEST_F(BluetoothTest, setAutoConnectWrapper_MissingParameters_Failure)
 {
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("setAutoConnect"), _T("{\"deviceID\":\"123\"}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"), _T("{\"deviceID\":\"123\"}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, getAutoConnectWrapper_Enabled_Success)
@@ -933,12 +970,14 @@ TEST_F(BluetoothTest, getAutoConnectWrapper_Disabled_Success)
 
 TEST_F(BluetoothTest, getAutoConnectWrapper_MissingDeviceID_Failure)
 {
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("getAutoConnect"), _T("{}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getAutoConnect"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, getAutoConnectWrapper_NotFound_Failure)
 {
-    EXPECT_EQ(Core::ERROR_GENERAL, handler.Invoke(connection, _T("getAutoConnect"), _T("{\"deviceID\":\"999\"}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getAutoConnect"), _T("{\"deviceID\":\"999\"}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 // ============================================================================
@@ -955,18 +994,28 @@ protected:
     {
         TEST_LOG("BluetoothPowerModeTest ctor");
 
-        // Pre-populate persistent store with a HID device so that init()
-        // loads it into the paired device cache via updateCacheFromStorage().
+        // Pre-populate the HID device so that onPowerModeChanged can exercise
+        // the "skip HID" branch. On the migration path init() reads migrationVersion
+        // first, so we must supply "1" for that key before the deviceInfo payload.
         const std::string hidDeviceJson =
             "[{\"deviceID\":\"123\",\"deviceType\":\"HUMAN INTERFACE DEVICE\","
             "\"autoconnect\":0,\"lastConnectTimeUtc\":\"\"}]";
         ON_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
-            .WillByDefault(::testing::DoAll(
-                ::testing::SetArgReferee<2>(hidDeviceJson),
-                ::testing::Return(Core::ERROR_NONE)));
+            .WillByDefault(::testing::Invoke(
+                [hidDeviceJson](const std::string&, const std::string& key, std::string& value) -> Core::hresult {
+#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+                    if (key == "migrationVersion") {
+                        value = "1";
+                        return Core::ERROR_NONE;
+                    }
+#endif
+                    value = hidDeviceJson;
+                    return Core::ERROR_NONE;
+                }));
 
-        // Return device handle 123 from BTRMGR so the device is not scrubbed
-        // during updateCacheFromDevice().
+#ifndef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+        // Non-migration path: init() calls BTRMGR to reconcile the cache.
+        // Return device handle 123 so the HID entry survives the scrub step.
         BTRMGR_PairedDevicesList_t hidPairedDevices;
         memset(&hidPairedDevices, 0, sizeof(hidPairedDevices));
         hidPairedDevices.m_numOfDevices = 1;
@@ -975,6 +1024,7 @@ protected:
             .WillByDefault(::testing::DoAll(
                 ::testing::SetArgPointee<1>(hidPairedDevices),
                 ::testing::Return(BTRMGR_RESULT_SUCCESS)));
+#endif
 
         EXPECT_CALL(PowerManagerMock::Mock(), GetPowerState(::testing::_, ::testing::_))
             .Times(::testing::AnyNumber())
@@ -1005,6 +1055,7 @@ TEST_F(BluetoothTest, onPowerModeChanged_SameState_NoAction)
 
 // --- onPowerModeChanged: ON → STANDBY with non-HID devices ---
 
+#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
 TEST_F(BluetoothTest, onPowerModeChanged_OnToStandby_NonHidDevice_AutoConnectDisabled_Disconnects)
 {
     setupDevice();
@@ -1019,7 +1070,9 @@ TEST_F(BluetoothTest, onPowerModeChanged_OnToStandby_NonHidDevice_AutoConnectDis
         WPEFramework::Exchange::IPowerManager::POWER_STATE_ON,
         WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY);
 }
+#endif // BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
 
+#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
 TEST_F(BluetoothTest, onPowerModeChanged_UnknownToStandby_NonHidDevice_AutoConnectDisabled_Disconnects)
 {
     setupDevice();
@@ -1034,7 +1087,9 @@ TEST_F(BluetoothTest, onPowerModeChanged_UnknownToStandby_NonHidDevice_AutoConne
         WPEFramework::Exchange::IPowerManager::POWER_STATE_UNKNOWN,
         WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY);
 }
+#endif // BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
 
+#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
 TEST_F(BluetoothTest, onPowerModeChanged_OnToStandbyLightSleep_NonHidDevice_AutoConnectDisabled_Disconnects)
 {
     setupDevice();
@@ -1049,6 +1104,7 @@ TEST_F(BluetoothTest, onPowerModeChanged_OnToStandbyLightSleep_NonHidDevice_Auto
         WPEFramework::Exchange::IPowerManager::POWER_STATE_ON,
         WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY_LIGHT_SLEEP);
 }
+#endif // BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
 
 TEST_F(BluetoothTest, onPowerModeChanged_OnToStandby_NonHidDevice_AutoConnectEnabled_NoDisconnect)
 {
@@ -1091,6 +1147,7 @@ TEST_F(BluetoothPowerModeTest, onPowerModeChanged_OnToStandby_HidDevice_AutoConn
 
 // --- onPowerModeChanged: X → ON ---
 
+#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
 TEST_F(BluetoothTest, onPowerModeChanged_StandbyToOn_WithNonHidPairedDevices_EnablesBluetooth)
 {
     setupDevice();
@@ -1105,6 +1162,7 @@ TEST_F(BluetoothTest, onPowerModeChanged_StandbyToOn_WithNonHidPairedDevices_Ena
         WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY,
         WPEFramework::Exchange::IPowerManager::POWER_STATE_ON);
 }
+#endif // BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
 
 TEST_F(BluetoothPowerModeTest, onPowerModeChanged_StandbyToOn_OnlyHidDevices_NoBluetoothEnable)
 {
@@ -1119,6 +1177,7 @@ TEST_F(BluetoothPowerModeTest, onPowerModeChanged_StandbyToOn_OnlyHidDevices_NoB
 
 // --- onPowerModeChanged: X → DEEP_SLEEP ---
 
+#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
 TEST_F(BluetoothTest, onPowerModeChanged_OnToDeepSleep_NonHidDevice_AlwaysDisconnects)
 {
     // Non-HID device with AUTO_CONNECT_STATUS_ENABLED must still be disconnected
@@ -1135,6 +1194,7 @@ TEST_F(BluetoothTest, onPowerModeChanged_OnToDeepSleep_NonHidDevice_AlwaysDiscon
         WPEFramework::Exchange::IPowerManager::POWER_STATE_ON,
         WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY_DEEP_SLEEP);
 }
+#endif // BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
 
 TEST_F(BluetoothPowerModeTest, onPowerModeChanged_OnToDeepSleep_HidDevice_NoDisconnect)
 {
@@ -1221,7 +1281,11 @@ protected:
 
     bool initializeFromPersistentStorePayload(const std::string& payload)
     {
+        // init() reads migrationVersion first, then deviceInfo (migration path).
         EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
+            .WillOnce(::testing::DoAll(
+                ::testing::SetArgReferee<2>(std::string(BLUETOOTH_MIGRATION_VERSION)),
+                ::testing::Return(Core::ERROR_NONE)))
             .WillOnce(::testing::DoAll(
                 ::testing::SetArgReferee<2>(payload),
                 ::testing::Return(Core::ERROR_NONE)));
@@ -1242,6 +1306,7 @@ protected:
 
         return true;
     }
+
 };
 
 TEST_F(BluetoothLegacyPersistenceMigrationParseTest, legacyPersistenceMigrationStorePresent_BypassesFilesystemPersistenceImport)
@@ -1297,12 +1362,15 @@ TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, legacyPersistenceMigra
 {
     std::string persistedJson;
     EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(GetParam()));
-    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, ::testing::_, ::testing::_))
+        .WillOnce(::testing::Return(GetParam()))
+        .WillRepeatedly(::testing::Return(Core::ERROR_NOT_EXIST));
+    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, PERSISTENT_STORE_KEY_DEVICE_INFO, ::testing::_))
         .Times(::testing::AtLeast(1))
         .WillRepeatedly(::testing::DoAll(
             ::testing::SaveArg<2>(&persistedJson),
             ::testing::Return(Core::ERROR_NONE)));
+    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, PERSISTENT_STORE_KEY_MIGRATION_VERSION, ::testing::_))
+        .WillRepeatedly(::testing::Return(Core::ERROR_NONE));
 
     const std::string payload =
         "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"friendlyName\":\"TVRemote\","
@@ -1312,6 +1380,8 @@ TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, legacyPersistenceMigra
     if (!initializeFromFilesystemPersistencePayload(payload)) {
         GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
     }
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
 
     EXPECT_FALSE(persistedJson.empty());
     EXPECT_TRUE(persistedJson.find("\"deviceID\":\"123\"") != string::npos);
@@ -1329,9 +1399,12 @@ TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, legacyPersistenceMigra
     }
 
     EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(GetParam()));
+        .WillOnce(::testing::Return(GetParam()))
+        .WillRepeatedly(::testing::Return(Core::ERROR_NOT_EXIST));
 
     EXPECT_TRUE(plugin->Initialize(&service).empty());
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
 
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
         _T("{\"deviceID\":\"123\",\"enable\":true}"), response));
@@ -1345,7 +1418,8 @@ TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, legacyPersistenceMigra
 TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, legacyPersistenceMigrationMissingStore_MalformedFilesystemPersistencePayloadNonFatal)
 {
     EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(GetParam()));
+        .WillOnce(::testing::Return(GetParam()))
+        .WillRepeatedly(::testing::Return(Core::ERROR_NOT_EXIST));
 
     const std::string malformedPayload = "{\"pairedDevices\":[{\"deviceAddr\":\"123\"";
     if (!initializeFromFilesystemPersistencePayload(malformedPayload)) {
@@ -1378,9 +1452,12 @@ TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, rollbackSyncMutations_
     }
 
     EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(GetParam()));
+        .WillOnce(::testing::Return(GetParam()))
+        .WillRepeatedly(::testing::Return(Core::ERROR_NOT_EXIST));
 
     EXPECT_TRUE(plugin->Initialize(&service).empty());
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
 
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
         _T("{\"deviceID\":\"123\",\"enable\":true}"), response));
@@ -1401,6 +1478,8 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, legacyPersistenceMigrationP
     if (!initializeFromFilesystemPersistencePayload(payload)) {
         GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
     }
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
 
     BTRMGR_PairedDevicesList_t pairedDevices;
     memset(&pairedDevices, 0, sizeof(pairedDevices));
@@ -1429,6 +1508,8 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, legacyPersistenceMigrationP
     if (!initializeFromFilesystemPersistencePayload(payload)) {
         GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
     }
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
 
     BTRMGR_PairedDevicesList_t pairedDevices;
     memset(&pairedDevices, 0, sizeof(pairedDevices));
@@ -1510,8 +1591,8 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, parse_AutoConnectStatusStri
 TEST_F(BluetoothLegacyPersistenceMigrationParseTest, parse_AutoConnectStatusMissing_NoPairedDeviceAutoConnectField)
 {
     // When autoConnectStatus is absent from the file, Parse() leaves the cache entry
-    // with AUTO_CONNECT_STATUS_UNSET. getPairedDevices omits the autoconnect field for
-    // UNSET, distinguishing it from an explicitly set DISABLED (false) value.
+    // with AUTO_CONNECT_STATUS_UNSET. getAutoConnect treats UNSET as DISABLED, so
+    // getPairedDevices includes "autoconnect":false in the response.
     const std::string payload =
         "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"deviceType\":\"HEADPHONES\","
         "\"lastVolumeSetting\":0,\"lastConnectionTimeUTC\":0}]}";
@@ -1534,7 +1615,7 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, parse_AutoConnectStatusMiss
 
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getPairedDevices"), _T("{}"), response));
     EXPECT_TRUE(response.find("\"pairedDevices\"") != string::npos);
-    EXPECT_TRUE(response.find("\"autoconnect\"") == string::npos);
+    EXPECT_TRUE(response.find("\"autoconnect\":false") != string::npos);
 }
 
 TEST_F(BluetoothLegacyPersistenceMigrationParseTest, parse_EntryMissingDeviceAddr_ValidEntryStillImported)
@@ -1548,6 +1629,8 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, parse_EntryMissingDeviceAdd
     if (!initializeFromFilesystemPersistencePayload(payload)) {
         GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
     }
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
 
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getAutoConnect"), _T("{\"deviceID\":\"123\"}"), response));
     EXPECT_TRUE(response.find("\"autoconnect\":true") != string::npos);
@@ -1577,7 +1660,7 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, parse_EntryEmptyDeviceAddr_
 
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getPairedDevices"), _T("{}"), response));
     EXPECT_TRUE(response.find("\"pairedDevices\"") != string::npos);
-    EXPECT_TRUE(response.find("\"autoconnect\"") == string::npos);
+    EXPECT_TRUE(response.find("\"autoconnect\":false") != string::npos);
 }
 
 TEST_F(BluetoothLegacyPersistenceMigrationParseTest, parse_LastConnectionTimeUTCMissing_NoLastConnectTimeInResponse)
@@ -1678,9 +1761,18 @@ TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, write_InitialDeviceAut
     }
 
     EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(GetParam()));
+        .WillOnce(::testing::Return(GetParam()))
+        .WillRepeatedly(::testing::Return(Core::ERROR_NOT_EXIST));
 
     EXPECT_TRUE(plugin->Initialize(&service).empty());
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
+
+    // performMigration does not write to the filesystem; trigger the first sync via a mutation
+    // so that Write() is exercised with the UNSET autoConnectStatus (no setAutoConnect call,
+    // which would change the status from UNSET to DISABLED).
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setDeviceVolumeMuteInfo"),
+        _T("{\"deviceID\":\"123\",\"deviceType\":\"HEADPHONES\",\"volume\":0,\"mute\":0}"), response));
 
     std::string filesystemPayload;
     ASSERT_TRUE(readFilesystemPersistencePayload(filesystemPayload));
@@ -1701,9 +1793,17 @@ TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, write_LastConnectTimeU
     }
 
     EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(GetParam()));
+        .WillOnce(::testing::Return(GetParam()))
+        .WillRepeatedly(::testing::Return(Core::ERROR_NOT_EXIST));
 
     EXPECT_TRUE(plugin->Initialize(&service).empty());
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
+
+    // performMigration does not write to the filesystem; trigger the first sync via a mutation
+    // so that Write() is exercised with the empty lastConnectTimeUtc.
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
+        _T("{\"deviceID\":\"123\",\"enable\":false}"), response));
 
     std::string filesystemPayload;
     ASSERT_TRUE(readFilesystemPersistencePayload(filesystemPayload));
@@ -1743,6 +1843,13 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, write_DeviceTypeMissingInFi
     if (!initializeFromFilesystemPersistencePayload(payload)) {
         GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
     }
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
+
+    // performMigration does not write to the filesystem; trigger the first sync via a mutation
+    // so that the backfilled deviceType is written to the file.
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
+        _T("{\"deviceID\":\"123\",\"enable\":true}"), response));
 
     std::string filesystemPayload;
     ASSERT_TRUE(readFilesystemPersistencePayload(filesystemPayload));
@@ -1797,6 +1904,172 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, write_AutoConnectStatusUnse
     ASSERT_TRUE(readFilesystemPersistencePayload(filesystemPayload));
     EXPECT_TRUE(filesystemPayload.find("\"deviceAddr\":\"123\"") != string::npos);
     EXPECT_TRUE(filesystemPayload.find("\"autoConnectStatus\":true") != string::npos);
+}
+
+// ============================================================================
+// performMigration / clearMigration wrapper API tests
+// ============================================================================
+
+// Fixture with _isMigrated=true at startup (simulates a previously-migrated
+// device that has a stored migrationVersion in PersistentStore).
+class BluetoothClearMigrationTest : public BluetoothLegacyPersistenceMigrationParseTest {
+protected:
+    BluetoothClearMigrationTest()
+    {
+        // Return a stored migrationVersion for PERSISTENT_STORE_KEY_MIGRATION_VERSION so that
+        // BluetoothDeviceManager::init() sets _isMigrated=true.
+        ON_CALL(*p_storeMock, GetValue(::testing::_, PERSISTENT_STORE_KEY_MIGRATION_VERSION, ::testing::_))
+            .WillByDefault(::testing::DoAll(
+                ::testing::SetArgReferee<2>(std::string("1")),
+                ::testing::Return(Core::ERROR_NONE)));
+
+        EXPECT_TRUE(plugin->Initialize(&service).empty());
+    }
+};
+
+/* -------------------------------------------------------------------------
+ * performMigration — success: filesystem source present
+ * When the filesystem file exists and no migrationVersion is stored yet (first-time
+ * migration), performMigration must import devices and return success=true.
+ * ---------------------------------------------------------------------- */
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, performMigrationWrapper_Success_FilePresent)
+{
+    const std::string payload =
+        "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"deviceType\":\"HEADPHONES\","
+        "\"autoConnectStatus\":true,\"lastConnectionTimeUTC\":0}]}";
+
+    if (!initializeFromFilesystemPersistencePayload(payload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":true") != string::npos);
+}
+
+/* -------------------------------------------------------------------------
+ * performMigration — missing source treated as empty (skipped import)
+ * When the filesystem persistence file does not exist, performMigration
+ * treats it as an empty device list, clears the cache, and still returns
+ * success=true (no failure, graceful skip of device import).
+ * ---------------------------------------------------------------------- */
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, performMigrationWrapper_MissingSource_TreatsAsEmptySuccess)
+{
+    // Ensure the filesystem file does not exist for this test.
+    if (std::remove(kFilesystemPersistenceFile) != 0 && errno != ENOENT) {
+        GTEST_SKIP() << "Unable to remove filesystem persistence file for test setup";
+    }
+
+    EXPECT_TRUE(plugin->Initialize(&service).empty());
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":true") != string::npos);
+}
+
+/* -------------------------------------------------------------------------
+ * performMigration — sets _isMigrated flag, enables subsequent setAutoConnect
+ * Before a successful performMigration, setAutoConnect must be rejected
+ * (guard active). After performMigration succeeds, the guard is lifted and
+ * setAutoConnect must succeed.
+ * ---------------------------------------------------------------------- */
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, performMigrationWrapper_SetsIsMigratedFlag_EnablesSubsequentSetAutoConnect)
+{
+    const std::string payload =
+        "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"deviceType\":\"HEADPHONES\","
+        "\"autoConnectStatus\":true,\"lastConnectionTimeUTC\":0}]}";
+
+    if (!initializeFromFilesystemPersistencePayload(payload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    // Before migration: _isMigrated=false → setAutoConnect must be rejected.
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
+        _T("{\"deviceID\":\"123\",\"enable\":true}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
+
+    // Perform migration.
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":true") != string::npos);
+
+    // After migration: _isMigrated=true → setAutoConnect must succeed.
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
+        _T("{\"deviceID\":\"123\",\"enable\":true}"), response));
+    EXPECT_TRUE(response.find("\"success\":true") != string::npos);
+}
+
+/* -------------------------------------------------------------------------
+ * performMigration — idempotency: migrationVersion present skips all store writes
+ * When the migrationVersion key is already present in PersistentStore,
+ * performMigration must return success=true immediately without writing
+ * deviceInfo or migrationVersion to PersistentStore.
+ * ---------------------------------------------------------------------- */
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, performMigrationWrapper_Idempotency_MigrationVersionPresentIsNoOp)
+{
+    const std::string payload =
+        "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"deviceType\":\"HEADPHONES\","
+        "\"autoConnectStatus\":true,\"lastConnectionTimeUTC\":0}]}";
+
+    if (!writeFilesystemPersistencePayload(payload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    // Initialize with no stored migrationVersion so _isMigrated=false.
+    EXPECT_TRUE(plugin->Initialize(&service).empty());
+
+    // Arrange: PersistentStore holds migrationVersion="1" indicating migration already done.
+    EXPECT_CALL(*p_storeMock, GetValue(::testing::_, PERSISTENT_STORE_KEY_MIGRATION_VERSION, ::testing::_))
+        .WillOnce(::testing::DoAll(
+            ::testing::SetArgReferee<2>(std::string("1")),
+            ::testing::Return(Core::ERROR_NONE)));
+
+    // Neither device data nor the migrationVersion must be written on the no-op path.
+    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, PERSISTENT_STORE_KEY_DEVICE_INFO, ::testing::_))
+        .Times(0);
+    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, PERSISTENT_STORE_KEY_MIGRATION_VERSION, ::testing::_))
+        .Times(0);
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":true") != string::npos);
+}
+
+/* -------------------------------------------------------------------------
+ * clearMigration — success: both PersistentStore keys are deleted
+ * clearMigration must call DeleteKey for "deviceInfo" and
+ * "migrationVersion" and return success=true.
+ * ---------------------------------------------------------------------- */
+TEST_F(BluetoothClearMigrationTest, clearMigrationWrapper_Success_DeletesBothStoredKeys)
+{
+    EXPECT_CALL(*p_storeMock, DeleteKey(::testing::_, PERSISTENT_STORE_KEY_DEVICE_INFO))
+        .WillOnce(::testing::Return(Core::ERROR_NONE));
+    EXPECT_CALL(*p_storeMock, DeleteKey(::testing::_, PERSISTENT_STORE_KEY_MIGRATION_VERSION))
+        .WillOnce(::testing::Return(Core::ERROR_NONE));
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("clearMigration"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":true") != string::npos);
+}
+
+/* -------------------------------------------------------------------------
+ * clearMigration — re-enables pre-migration guard
+ * After clearMigration resets _isMigrated to false, setAutoConnect must be
+ * rejected again (the pre-migration guard is back in effect).
+ * ---------------------------------------------------------------------- */
+TEST_F(BluetoothClearMigrationTest, clearMigrationWrapper_ReEnablesGuard_SetAutoConnectRejected)
+{
+    // Add device 123 to the cache so that setAutoConnect can find it while _isMigrated=true.
+    setupDevice();
+
+    // Verify initial state: _isMigrated=true → setAutoConnect must succeed.
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
+        _T("{\"deviceID\":\"123\",\"enable\":true}"), response));
+    EXPECT_TRUE(response.find("\"success\":true") != string::npos);
+
+    // Clear migration state.
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("clearMigration"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":true") != string::npos);
+
+    // After clearMigration: _isMigrated=false → setAutoConnect must be rejected.
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
+        _T("{\"deviceID\":\"123\",\"enable\":true}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, featureGateCompileCoverage_FlagOn)
