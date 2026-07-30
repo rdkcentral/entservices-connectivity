@@ -31,6 +31,11 @@ find_package(${NAMESPACE}Helpers REQUIRED)
 set(BLUETOOTH_PLUGIN_SOURCES
         Bluetooth.cpp
         BluetoothDeviceManager.cpp
+        BtSdkAdapter.cpp
+        DeviceRegistry.cpp
+        DeviceTypeClassifier.cpp
+        EventBridge.cpp
+        AuthBridge.cpp
         Module.cpp
 )
 
@@ -60,12 +65,20 @@ if (RDK_SERVICE_L2_TEST)
     endif (TESTMOCKLIB_LIBRARIES)
 endif (RDK_SERVICE_L2_TEST)
 
-find_package(BTMGR)
-if(BTMGR_FOUND)
-    message("Found BTMGR")
-    target_include_directories(${MODULE_NAME} PRIVATE ${BTMGR_INCLUDE_DIRS})
-    target_link_libraries(${MODULE_NAME} PRIVATE ${NAMESPACE}Plugins::${NAMESPACE}Plugins ${BTMGR_LIBRARIES})
-endif(BTMGR_FOUND)
+find_package(BluetoothSDK QUIET)
+if(BluetoothSDK_FOUND)
+    message("Found bluetooth-sdk")
+    target_include_directories(${MODULE_NAME} PRIVATE ${BLUETOOTHSDK_INCLUDE_DIRS})
+    target_link_libraries(${MODULE_NAME} PRIVATE ${BLUETOOTHSDK_LIBRARIES})
+else()
+    # Fallback: try pkg-config or direct target name used by bluetooth-sdk CMake install.
+    find_package(bluetooth-sdk QUIET)
+    if(bluetooth-sdk_FOUND)
+        target_link_libraries(${MODULE_NAME} PRIVATE bluetooth-sdk::bluetooth-sdk)
+    else()
+        message(WARNING "bluetooth-sdk not found via find_package; link target must be set manually")
+    endif()
+endif()
 
 find_package(IARMBus)
 target_include_directories(${MODULE_NAME} PRIVATE ${IARMBUS_INCLUDE_DIRS})
@@ -73,6 +86,10 @@ target_link_libraries(${MODULE_NAME} PRIVATE
         ${NAMESPACE}Plugins::${NAMESPACE}Plugins
         ${IARMBUS_LIBRARIES}
         ${NAMESPACE}::${NAMESPACE}Helpers)
+
+if(BLUETOOTH_AUDIO_SUPPORT)
+    target_compile_definitions(${MODULE_NAME} PRIVATE BLUETOOTH_AUDIO_SUPPORT=1)
+endif()
 
 if (NOT RDK_SERVICES_L1_TEST)
     target_compile_options(${MODULE_NAME} PRIVATE -Wno-error=deprecated)

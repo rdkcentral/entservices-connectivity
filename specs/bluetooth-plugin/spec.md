@@ -189,6 +189,160 @@ Adapter index 0 is a normative platform requirement for this plugin profile.
 Spec artifacts are the source of truth for method and event contracts.
 Documentation MUST be kept aligned with the spec and SHOULD be generated or updated from spec content.
 
+### Requirement: BTMgr Binding Lifecycle
+
+The plugin MUST bind to BTMgr via IARM using `BTRMGR_RegisterForCallbacks` with the plugin's IARM process name during Initialize. Registration failure is fatal: Initialize MUST return a non-empty error string and MUST NOT proceed further.
+
+The plugin MUST register its event callback with `BTRMGR_RegisterEventCallback` only after `BTRMGR_RegisterForCallbacks` succeeds.
+
+The event callback MUST verify the plugin singleton is non-null before dispatching. If the singleton is null the callback MUST return `BTRMGR_RESULT_INIT_FAILED` without dispatching.
+
+On Deinitialize, the plugin MUST set the singleton instance to null before calling `BTRMGR_UnRegisterFromCallbacks`. Failure of `BTRMGR_UnRegisterFromCallbacks` during deinitialization is non-fatal.
+
+#### Scenario: IARM registration fails at initialization
+- WHEN `BTRMGR_RegisterForCallbacks` returns a non-success result
+- THEN Initialize returns a non-empty error string
+- AND event callback registration is not attempted
+
+#### Scenario: Late event during shutdown
+- GIVEN Deinitialize has set the singleton to null
+- WHEN BTMgr fires an event before `BTRMGR_UnRegisterFromCallbacks` returns
+- THEN the event callback returns `BTRMGR_RESULT_INIT_FAILED`
+- AND no notification is dispatched
+
+### Requirement: Discovery Operation Type Selection
+
+When starting discovery, the plugin MUST select the `BTRMGR_DeviceOperationType_t` based on the profile string parameter according to the following rules, evaluated in priority order:
+
+| Profile string contains | Selected operation type |
+| --- | --- |
+| Any audio keyword AND any HID keyword | `AUDIO_AND_HID` |
+| LOUDSPEAKER, HEADPHONES, WEARABLE HEADSET, or HIFI AUDIO DEVICE (without HID keywords) | `AUDIO_OUTPUT` |
+| SMARTPHONE or TABLET | `AUDIO_INPUT` |
+| KEYBOARD, MOUSE, or JOYSTICK (without audio keywords) | `HID` |
+| LE TILE or LE | `LE` |
+| DEFAULT | `UNKNOWN` |
+| No match | `UNKNOWN` |
+
+Audio keywords: LOUDSPEAKER, HEADPHONES, WEARABLE HEADSET, HIFI AUDIO DEVICE.
+HID keywords: KEYBOARD, MOUSE, JOYSTICK.
+
+When `startScan` is called without a profile parameter, the plugin MUST default to the profile `"LOUDSPEAKER, HEADPHONES, WEARABLE HEADSET, HIFI AUDIO DEVICE, KEYBOARD, MOUSE, JOYSTICK"`, which selects `AUDIO_AND_HID`.
+
+Discovery stop MUST call `BTRMGR_StopDeviceDiscovery` with `AUDIO_OUTPUT` as the operation type regardless of the operation type used to start discovery.
+
+Note: Whether the stop operation type should track the start operation type is an open question. See open-questions.md.
+
+#### Scenario: Audio-only scan
+- WHEN `startScan` is called with profile `"HEADPHONES"`
+- THEN `BTRMGR_StartDeviceDiscovery` is called with `AUDIO_OUTPUT`
+
+#### Scenario: Combined audio and HID scan
+- WHEN `startScan` is called with a profile containing both `"LOUDSPEAKER"` and `"KEYBOARD"`
+- THEN `BTRMGR_StartDeviceDiscovery` is called with `AUDIO_AND_HID`
+
+#### Scenario: Default scan when no profile given
+- WHEN `startScan` is called with only a timeout parameter
+- THEN `BTRMGR_StartDeviceDiscovery` is called with `AUDIO_AND_HID`
+
+### Requirement: Connection Dispatch By Device Class
+
+The plugin MUST select the BTMgr connection API based on the `deviceType` string provided by the client according to the following dispatch table:
+
+| `deviceType` value | Connect call | Disconnect call |
+| --- | --- | --- |
+| `"LE TILE"` (exact) | `BTRMGR_ConnectToDevice` with `LE` op type | `BTRMGR_DisconnectFromDevice` |
+| `"HUMAN INTERFACE DEVICE"` (exact), or contains `"KEYBOARD"`, `"MOUSE"`, or `"JOYSTICK"` | `BTRMGR_ConnectToDevice` with `HID` op type | `BTRMGR_DisconnectFromDevice` |
+| `"SMARTPHONE"` or `"TABLET"` (exact) | `BTRMGR_StartAudioStreamingIn` with `AUDIO_INPUT` op type | `BTRMGR_StopAudioStreamingIn` |
+| All other values (default, including all audio output device types) | `BTRMGR_StartAudioStreamingOut` with `AUDIO_OUTPUT` op type | `BTRMGR_StopAudioStreamingOut` |
+
+The plugin uses the `deviceType` string supplied by the client at call time and does not re-query BTMgr for the device type before dispatch.
+
+#### Scenario: LE device connect
+- WHEN `connect` is called with `deviceType` `"LE TILE"`
+- THEN `BTRMGR_ConnectToDevice` is called with `LE` operation type
+
+#### Scenario: Audio output device connect
+- WHEN `connect` is called with a `deviceType` that does not match LE, HID, or audio-input classes
+- THEN `BTRMGR_StartAudioStreamingOut` is called with `AUDIO_OUTPUT` operation type
+
+### Requirement: Audio Playback Command Mapping
+
+When `sendAudioPlaybackCommand` is called, the plugin MUST translate the command string to a BTMgr call according to the following table:
+
+| Command string | BTMgr call |
+| --- | --- |
+| `PLAY` | `BTRMGR_StartAudioStreamingIn` with `AUDIO_INPUT` op type |
+| `PAUSE` | `BTRMGR_MediaControl` with `CTRL_PAUSE` |
+| `RESUME` | `BTRMGR_MediaControl` with `CTRL_PLAY` |
+| `STOP` | `BTRMGR_MediaControl` with `CTRL_STOP` |
+| `SKIP_NEXT` | `BTRMGR_MediaControl` with `CTRL_NEXT` |
+| `SKIP_PREV` | `BTRMGR_MediaControl` with `CTRL_PREVIOUS` |
+| `RESTART` | Returns failure (not implemented) |
+| `AUDIO_MUTE` | `BTRMGR_MediaControl` with `CTRL_MUTE` |
+| `AUDIO_UNMUTE` | `BTRMGR_MediaControl` with `CTRL_UNMUTE` |
+| `VOLUME_UP` | `BTRMGR_MediaControl` with `CTRL_VOLUMEUP` |
+| `VOLUME_DOWN` | `BTRMGR_MediaControl` with `CTRL_VOLUMEDOWN` |
+
+`PLAY` opens an audio streaming session via `StartAudioStreamingIn` rather than issuing a media control command.
+`RESUME` maps to `CTRL_PLAY` because no `CTRL_RESUME` exists in the BTMgr media control API.
+`RESTART` is not implemented and MUST return failure to the caller.
+
+Note: Whether `RESTART` should be formally deprecated or implemented is an open question. See open-questions.md.
+
+#### Scenario: Resume command mapping
+- WHEN `sendAudioPlaybackCommand` is called with `RESUME`
+- THEN `BTRMGR_MediaControl` is called with `CTRL_PLAY`
+
+#### Scenario: Restart command
+- WHEN `sendAudioPlaybackCommand` is called with `RESTART`
+- THEN the method returns failure
+
+### Requirement: BTMgr Event Coverage
+
+The plugin handles a defined subset of BTMgr events and translates them to JSON-RPC notifications. Events outside this set MUST be silently dropped without emitting a notification.
+
+Handled events and their corresponding notifications:
+
+| BTMgr event | JSON-RPC notification | `newStatus` value (where applicable) |
+| --- | --- | --- |
+| `DEVICE_DISCOVERY_STARTED` | `onStatusChanged` | `DISCOVERY_STARTED` |
+| `DEVICE_DISCOVERY_COMPLETE` | `onStatusChanged` | `DISCOVERY_COMPLETED` |
+| `DEVICE_DISCOVERY_UPDATE` | `onDiscoveredDevice` | — |
+| `DEVICE_FOUND` | `onDeviceFound` | — |
+| `DEVICE_OUT_OF_RANGE` | `onDeviceLost` | — |
+| `DEVICE_PAIRING_COMPLETE` | `onStatusChanged` | `PAIRING_CHANGE` |
+| `DEVICE_UNPAIRING_COMPLETE` | `onStatusChanged` | `PAIRING_CHANGE` |
+| `DEVICE_CONNECTION_COMPLETE` | `onStatusChanged` | `CONNECTION_CHANGE` |
+| `DEVICE_DISCONNECT_COMPLETE` | `onStatusChanged` | `CONNECTION_CHANGE` |
+| `DEVICE_PAIRING_FAILED` | `onRequestFailed` | `PAIRING_FAILED` |
+| `DEVICE_UNPAIRING_FAILED` | `onRequestFailed` | `PAIRING_FAILED` |
+| `DEVICE_CONNECTION_FAILED` | `onRequestFailed` | `CONNECTION_FAILED` |
+| `RECEIVED_EXTERNAL_PAIR_REQUEST` | `onPairingRequest` | — |
+| `RECEIVED_EXTERNAL_CONNECT_REQUEST` | `onConnectionRequest` | — |
+| `RECEIVED_EXTERNAL_PLAYBACK_REQUEST` | `onPlaybackRequest` | — |
+| `MEDIA_TRACK_STARTED` | `onPlaybackChange` (action: `started`) | — |
+| `MEDIA_TRACK_PAUSED` | `onPlaybackChange` (action: `paused`) | — |
+| `MEDIA_TRACK_STOPPED` | `onPlaybackChange` (action: `stopped`) | — |
+| `MEDIA_PLAYBACK_ENDED` | `onPlaybackChange` (action: `ended`) | — |
+| `MEDIA_TRACK_PLAYING` | `onPlaybackProgress` | — |
+| `MEDIA_TRACK_POSITION` | `onPlaybackProgress` | — |
+| `MEDIA_TRACK_CHANGED` | `onPlaybackNewTrack` | — |
+| `DEVICE_MEDIA_STATUS` | `onDeviceMediaStatus` | — |
+
+Events silently dropped (no notification emitted): `DEVICE_DISCONNECT_FAILED`, `DEVICE_OP_READY`, `DEVICE_OP_INFORMATION`, `MEDIA_PLAYER_NAME`, `MEDIA_PLAYER_VOLUME`, `MEDIA_PLAYER_DELAY`, `MEDIA_PLAYER_EQUALIZER_OFF/ON`, `MEDIA_PLAYER_SHUFFLE_*`, `MEDIA_PLAYER_REPEAT_*`, `MEDIA_ALBUM_INFO`, `MEDIA_ARTIST_INFO`, `MEDIA_GENRE_INFO`, `MEDIA_COMPILATION_INFO`, `MEDIA_PLAYLIST_INFO`, `MEDIA_TRACKLIST_INFO`, `BATTERY_INFO`.
+
+Note: Whether `DEVICE_DISCONNECT_FAILED` should emit a notification is an open question. See open-questions.md.
+
+#### Scenario: Disconnect completion
+- WHEN BTMgr emits `DEVICE_DISCONNECT_COMPLETE` for a device
+- THEN plugin emits `onStatusChanged` with `newStatus` `CONNECTION_CHANGE` and `connected` `false`
+
+#### Scenario: Disconnect failure
+- WHEN BTMgr emits `DEVICE_DISCONNECT_FAILED`
+- THEN no notification is emitted to clients
+- AND the event is silently discarded
+
 ## Constraints And Assumptions
 - BTRMGR library availability is required for runtime Bluetooth operation.
 - Adapter index 0 is required for this plugin profile.

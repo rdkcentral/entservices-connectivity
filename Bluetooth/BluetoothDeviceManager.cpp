@@ -24,7 +24,9 @@
 #include <unordered_set>
 
 #include "BluetoothDeviceManager.h"
-#include "btmgr.h"
+#include "BtSdkAdapter.h"
+#include "DeviceRegistry.h"
+#include "DeviceTypeClassifier.h"
 
 #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
 #include "BluetoothPersistenceAdapter.h"
@@ -59,20 +61,20 @@ namespace WPEFramework {
                 return result;
             }
 
-            // Build a mapping from device address to device handle using BTRMGR.
-            BTRMGR_PairedDevicesList_t pairedDevices{};
-            if (BTRMGR_GetPairedDevices(0, &pairedDevices) != BTRMGR_RESULT_SUCCESS) {
-                LOGERR("Failed to get paired devices from BTRMGR during filesystem persistence import");
+            // Build a mapping from device address to device handle using the SDK.
+            if (!_btSdkAdapter) {
+                LOGERR("BtSdkAdapter not set during filesystem persistence import");
                 return Core::ERROR_GENERAL;
             }
+            auto sdkPairedDevices = _btSdkAdapter->getPairedDevices();
 
             std::unordered_map<std::string, std::string> addrToDeviceId;
-            addrToDeviceId.reserve(static_cast<size_t>(pairedDevices.m_numOfDevices));
-            for (int i = 0; i < pairedDevices.m_numOfDevices; ++i) {
-                if (pairedDevices.m_deviceProperty[i].m_deviceAddress[0] != '\0') {
-                    const std::string deviceAddr(pairedDevices.m_deviceProperty[i].m_deviceAddress);
-                    const std::string deviceId = std::to_string(pairedDevices.m_deviceProperty[i].m_deviceHandle);
-                    addrToDeviceId[deviceAddr] = std::move(deviceId);
+            addrToDeviceId.reserve(sdkPairedDevices.size());
+            for (const auto& device : sdkPairedDevices) {
+                std::string mac;
+                device->address(mac);
+                if (!mac.empty()) {
+                    addrToDeviceId[mac] = DeviceRegistry::deriveHandle(mac);
                 }
             }
 
@@ -351,48 +353,49 @@ namespace WPEFramework {
 
         Core::hresult BluetoothDeviceManager::updateCacheFromDevice(bool backfillOnly)
         {
-            BTRMGR_PairedDevicesList_t pairedDevices{};
-
-            BTRMGR_Result_t result = BTRMGR_GetPairedDevices(0, &pairedDevices);
-            if (BTRMGR_RESULT_SUCCESS != result)
-            {
-                LOGERR("Failed to get the paired devices");
+            if (!_btSdkAdapter) {
+                LOGERR("BtSdkAdapter not set in updateCacheFromDevice");
                 return Core::ERROR_GENERAL;
             }
 
+            auto sdkPairedDevices = _btSdkAdapter->getPairedDevices();
+
             _adminLock.Lock();
 
-            for (int i=0; i<pairedDevices.m_numOfDevices; i++)
-            {
-                string deviceId = std::to_string(pairedDevices.m_deviceProperty[i].m_deviceHandle);
-                const char* deviceTypeStr = BTRMGR_GetDeviceTypeAsString(pairedDevices.m_deviceProperty[i].m_deviceType);
-                string deviceType = string(deviceTypeStr ? deviceTypeStr : "UNKNOWN");
-                const std::string deviceAddr = (pairedDevices.m_deviceProperty[i].m_deviceAddress[0] != '\0')
-                    ? std::string(pairedDevices.m_deviceProperty[i].m_deviceAddress)
-                    : std::string();
+            for (const auto& device : sdkPairedDevices) {
+                std::string mac;
+                device->address(mac);
+                if (mac.empty()) continue;
+
+                string deviceId = DeviceRegistry::deriveHandle(mac);
+
+                bluetooth::DeviceProperties props;
+                device->getAllProperties(props);
+                string deviceType = DeviceTypeClassifier::classify(props);
+                string name;
+                device->name(name);
+                if (name.empty()) name = deviceId;
 
                 if (_pairedDeviceCache.find(deviceId) != _pairedDeviceCache.end()) {
-                    // Device already exists in cache; backfill any fields that are missing.
                     BluetoothDeviceInfo& existing = _pairedDeviceCache[deviceId];
                     if (existing.friendlyName.empty()) {
-                        existing.friendlyName = (pairedDevices.m_deviceProperty[i].m_name[0] != '\0') ? std::string(pairedDevices.m_deviceProperty[i].m_name) : deviceId;
+                        existing.friendlyName = name;
                         LOGINFO("Backfilled friendlyName for deviceID=%s\n", deviceId.c_str());
                     }
                     if (existing.deviceAddr.empty()) {
-                        existing.deviceAddr = deviceAddr;
-                        LOGINFO("Backfilled deviceAddr for deviceID=%s from BTRMGR: %s\n", deviceId.c_str(), deviceAddr.c_str());
+                        existing.deviceAddr = mac;
+                        LOGINFO("Backfilled deviceAddr for deviceID=%s: %s\n", deviceId.c_str(), mac.c_str());
                     }
                     if (existing.deviceType.empty() || existing.deviceType == "UNKNOWN") {
                         existing.deviceType = deviceType;
-                        LOGINFO("Backfilled deviceType for deviceID=%s from BTRMGR: %s\n", deviceId.c_str(), deviceType.c_str());
+                        LOGINFO("Backfilled deviceType for deviceID=%s: %s\n", deviceId.c_str(), deviceType.c_str());
                     }
                 } else if (!backfillOnly) {
-                    // Device found that's not yet cached; add only when not in backfill-only mode.
                     LOGINFO("Adding device to cache: deviceID=%s, deviceType=%s\n", deviceId.c_str(), deviceType.c_str());
                     BluetoothDeviceInfo deviceInfo;
-                    deviceInfo.deviceAddr = std::move(deviceAddr);
-                    deviceInfo.deviceType = std::move(deviceType);
-                    deviceInfo.friendlyName = (pairedDevices.m_deviceProperty[i].m_name[0] != '\0') ? std::string(pairedDevices.m_deviceProperty[i].m_name) : deviceId;
+                    deviceInfo.deviceAddr   = mac;
+                    deviceInfo.deviceType   = std::move(deviceType);
+                    deviceInfo.friendlyName = std::move(name);
                     _pairedDeviceCache[deviceId] = std::move(deviceInfo);
                 } else {
                     LOGINFO("Skipping device not in imported cache (backfill-only mode): deviceID=%s\n", deviceId.c_str());
@@ -400,23 +403,21 @@ namespace WPEFramework {
             }
 
             if (!backfillOnly) {
-                // Scrub cache of any devices that are no longer paired with the platform.
-
                 std::unordered_set<std::string> pairedDeviceIds;
-                pairedDeviceIds.reserve(static_cast<size_t>(pairedDevices.m_numOfDevices));
-                for (int i = 0; i < pairedDevices.m_numOfDevices; ++i) {
-                    pairedDeviceIds.emplace(std::to_string(pairedDevices.m_deviceProperty[i].m_deviceHandle));
+                pairedDeviceIds.reserve(sdkPairedDevices.size());
+                for (const auto& device : sdkPairedDevices) {
+                    std::string mac;
+                    device->address(mac);
+                    if (!mac.empty()) pairedDeviceIds.emplace(DeviceRegistry::deriveHandle(mac));
                 }
 
                 std::vector<std::string> deviceIdsToRemove;
                 for (const auto& entry : _pairedDeviceCache) {
-                    const std::string& cachedDeviceId = entry.first;
-                    if (pairedDeviceIds.find(cachedDeviceId) == pairedDeviceIds.end()) {
-                        LOGINFO("Marking device for removal from cache: deviceID=%s\n", cachedDeviceId.c_str());
-                        deviceIdsToRemove.push_back(cachedDeviceId);
+                    if (pairedDeviceIds.find(entry.first) == pairedDeviceIds.end()) {
+                        LOGINFO("Marking device for removal from cache: deviceID=%s\n", entry.first.c_str());
+                        deviceIdsToRemove.push_back(entry.first);
                     }
                 }
-
                 for (const auto& deviceId : deviceIdsToRemove) {
                     _pairedDeviceCache.erase(deviceId);
                 }
@@ -740,33 +741,34 @@ namespace WPEFramework {
 
         Core::hresult BluetoothDeviceManager::addDevice(const std::string& deviceID)
         {
-            BTRMgrDeviceHandle deviceHandle;
-
             LOGINFO("deviceID=%s\n", deviceID.c_str());
-            
-            try {
-                deviceHandle = (BTRMgrDeviceHandle) stoll(deviceID);
-            } catch (const std::exception& e) {
-                LOGERR("Failed to parse deviceId: %s\n", e.what());
-                return Core::ERROR_INVALID_PARAMETER;
+
+            if (!_btSdkAdapter) {
+                LOGERR("BtSdkAdapter not set in addDevice");
+                return Core::ERROR_GENERAL;
             }
 
-            BTRMGR_DevicesProperty_t deviceProperty{};
-
-            BTRMGR_Result_t result = BTRMGR_GetDeviceProperties(0, deviceHandle, &deviceProperty);
-            if (BTRMGR_RESULT_SUCCESS != result)
-            {
-                LOGERR("Failed to get device properties for deviceID: %s", deviceID.c_str());
+            auto device = _btSdkAdapter->getDeviceByHandle(deviceID);
+            if (!device) {
+                LOGERR("Device not found for deviceID: %s", deviceID.c_str());
                 return Core::ERROR_NOT_EXIST;
             }
+
+            bluetooth::DeviceProperties props;
+            device->getAllProperties(props);
+
+            std::string mac;
+            device->address(mac);
+            std::string name;
+            device->name(name);
+            if (name.empty()) name = deviceID;
 
             _adminLock.Lock();
 
             BluetoothDeviceInfo deviceInfo;
-            deviceInfo.deviceAddr = (deviceProperty.m_deviceAddress[0] != '\0') ? std::string(deviceProperty.m_deviceAddress) : std::string();
-            const char* deviceTypeStr = BTRMGR_GetDeviceTypeAsString(deviceProperty.m_deviceType);
-            deviceInfo.deviceType = (deviceTypeStr != nullptr) ? deviceTypeStr : "UNKNOWN";
-            deviceInfo.friendlyName = (deviceProperty.m_name[0] != '\0') ? std::string(deviceProperty.m_name) : deviceID;
+            deviceInfo.deviceAddr   = mac;
+            deviceInfo.deviceType   = DeviceTypeClassifier::classify(props);
+            deviceInfo.friendlyName = std::move(name);
             _pairedDeviceCache[deviceID] = std::move(deviceInfo);
 
             _adminLock.Unlock();
