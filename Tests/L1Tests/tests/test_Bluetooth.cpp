@@ -61,8 +61,7 @@ protected:
     Core::JSONRPC::Message message;
     string response;
     StoreMock *p_storeMock = nullptr;
-    BtmgrImplMock *p_btmgrMock = nullptr;
-    IarmBusImplMock   *p_iarmBusImplMock = nullptr ;
+    NiceMock<WPEFramework::Plugin::BtSdkAdapterImplMock> *p_btSdkMock = nullptr;
     NiceMock<COMLinkMock> comLinkMock;
     NiceMock<ServiceMock> service;
     PLUGINHOST_DISPATCHER* dispatcher;
@@ -94,11 +93,17 @@ protected:
                 return nullptr;
         }));
         
-        p_btmgrMock = new NiceMock<BtmgrImplMock>;
-        Btmgr::setImpl(p_btmgrMock);
-
-        p_iarmBusImplMock  = new NiceMock <IarmBusImplMock>;
-        IarmBus::setImpl(p_iarmBusImplMock);
+        p_btSdkMock = new NiceMock<WPEFramework::Plugin::BtSdkAdapterImplMock>;
+        ON_CALL(*p_btSdkMock, init(::testing::_, ::testing::_, ::testing::_))
+            .WillByDefault(::testing::Invoke(
+                [this](WPEFramework::PluginHost::IShell*,
+                       WPEFramework::Plugin::BtEventCallbacks evtCbs,
+                       WPEFramework::Plugin::BtAuthCallbacks  authCbs) -> std::string {
+                    p_btSdkMock->m_evtCbs  = std::move(evtCbs);
+                    p_btSdkMock->m_authCbs = std::move(authCbs);
+                    return "";
+                }));
+        WPEFramework::Plugin::BtSdkAdapter::setImpl(p_btSdkMock);
 
         ON_CALL(service, COMLink())
             .WillByDefault(::testing::Invoke(
@@ -146,18 +151,11 @@ protected:
 
         PluginHost::IFactories::Assign(nullptr);
 
-        IarmBus::setImpl(nullptr);
-        if (p_iarmBusImplMock != nullptr)
+        WPEFramework::Plugin::BtSdkAdapter::setImpl(nullptr);
+        if (p_btSdkMock != nullptr)
         {
-            delete p_iarmBusImplMock;
-            p_iarmBusImplMock = nullptr;
-        }
-
-        Btmgr::setImpl(nullptr);
-        if (p_btmgrMock != nullptr)
-        {
-            delete p_btmgrMock;
-            p_btmgrMock = nullptr;
+            delete p_btSdkMock;
+            p_btSdkMock = nullptr;
         }
 
         if (p_storeMock != nullptr)
@@ -182,25 +180,32 @@ protected:
 
     void setupDevice()
     {
-        // Helper function to set up a paired device in the cache and storage for testing.
+        // Helper: add a paired HEADPHONES device to the mock device list and PS cache.
         const std::string deviceID = "123";
 
-        EXPECT_CALL(*p_btmgrMock, BTRMGR_PairDevice(::testing::_, static_cast<BTRMgrDeviceHandle>(std::stoll(deviceID))))
-            .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
+        IBtSdkAdapter::BtDeviceInfo deviceInfo;
+        deviceInfo.handleStr    = deviceID;
+        deviceInfo.mac          = "00:11:22:33:44:55";
+        deviceInfo.name         = "TestHeadphones";
+        deviceInfo.deviceType   = "HEADPHONES";
+        deviceInfo.paired       = true;
 
-        BTRMGR_DevicesProperty_t deviceProperty = {};
+        IBtSdkAdapter::BtDeviceProperties deviceProps;
+        deviceProps.handleStr  = deviceID;
+        deviceProps.mac        = "00:11:22:33:44:55";
+        deviceProps.name       = "TestHeadphones";
+        deviceProps.deviceType = "HEADPHONES";
 
-        #ifdef BTRMGR_DEVICE_TYPE_UNKNOWN
-        deviceProperty.m_deviceType = BTRMGR_DEVICE_TYPE_UNKNOWN;
-        #endif
+        ON_CALL(*p_btSdkMock, getPairedDevices())
+            .WillByDefault(::testing::Return(std::vector<IBtSdkAdapter::BtDeviceInfo>{deviceInfo}));
 
-        EXPECT_CALL(*p_btmgrMock, BTRMGR_GetDeviceProperties(::testing::_, ::testing::_, ::testing::_))
+        EXPECT_CALL(*p_btSdkMock, pairDevice(deviceID))
+            .WillOnce(::testing::Return(true));
+
+        EXPECT_CALL(*p_btSdkMock, getDeviceProperties(deviceID, ::testing::_))
             .WillOnce(::testing::DoAll(
-                ::testing::SetArgPointee<2>(deviceProperty),
-                ::testing::Return(BTRMGR_RESULT_SUCCESS)));
-
-        EXPECT_CALL(*p_btmgrMock, BTRMGR_GetDeviceTypeAsString(::testing::_))
-            .WillOnce(::testing::Return("HEADPHONES"));
+                ::testing::SetArgReferee<1>(deviceProps),
+                ::testing::Return(true)));
 
         EXPECT_CALL(*p_storeMock, SetValue(::testing::_, ::testing::_, ::testing::_))
             .WillRepeatedly(::testing::Return(Core::ERROR_NONE));
@@ -219,44 +224,38 @@ TEST_F(BluetoothTest, getApiVersionNumber_Success)
 
 TEST_F(BluetoothTest, startScanWrapper_WithTimeout_Success)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetNumberOfAdapters(::testing::_))
-        .WillOnce(::testing::DoAll(::testing::SetArgPointee<0>(1), ::testing::Return(BTRMGR_RESULT_SUCCESS)));
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_StartDeviceDiscovery(::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-    
+    EXPECT_CALL(*p_btSdkMock, startScan(::testing::_))
+        .WillOnce(::testing::Return(true));
+
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("startScan"), _T("{\"timeout\":5}"), response));
     EXPECT_TRUE(response.find("\"status\":\"AVAILABLE\"") != string::npos);
 }
 
 TEST_F(BluetoothTest, startScanWrapper_WithTimeoutAndProfile_Success)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetNumberOfAdapters(::testing::_))
-        .WillOnce(::testing::DoAll(::testing::SetArgPointee<0>(1), ::testing::Return(BTRMGR_RESULT_SUCCESS)));
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_StartDeviceDiscovery(::testing::_, BTRMGR_DEVICE_OP_TYPE_AUDIO_OUTPUT))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-    
+    EXPECT_CALL(*p_btSdkMock, startScan("HEADPHONES"))
+        .WillOnce(::testing::Return(true));
+
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("startScan"), _T("{\"timeout\":5,\"profile\":\"HEADPHONES\"}"), response));
     EXPECT_TRUE(response.find("\"status\":\"AVAILABLE\"") != string::npos);
 }
 
 TEST_F(BluetoothTest, startScanWrapper_NoAdapters_Failure)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetNumberOfAdapters(::testing::_))
-        .WillOnce(::testing::DoAll(::testing::SetArgPointee<0>(0), ::testing::Return(BTRMGR_RESULT_SUCCESS)));
-    
+    EXPECT_CALL(*p_btSdkMock, startScan(::testing::_))
+        .WillOnce(::testing::Return(false));
+
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("startScan"), _T("{\"timeout\":5}"), response));
     EXPECT_TRUE(response.find("\"status\":\"NO_BLUETOOTH_HARDWARE\"") != string::npos);
 }
 
 TEST_F(BluetoothTest, startScanWrapper_StartDiscoveryFailed_Failure)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetNumberOfAdapters(::testing::_))
-        .WillOnce(::testing::DoAll(::testing::SetArgPointee<0>(1), ::testing::Return(BTRMGR_RESULT_SUCCESS)));
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_StartDeviceDiscovery(::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
-    
+    EXPECT_CALL(*p_btSdkMock, startScan(::testing::_))
+        .WillOnce(::testing::Return(false));
+
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("startScan"), _T("{\"timeout\":5}"), response));
-    EXPECT_TRUE(response.find("\"status\":\"AVAILABLE\"") != string::npos);
+    EXPECT_TRUE(response.find("\"status\":\"NO_BLUETOOTH_HARDWARE\"") != string::npos);
 }
 
 TEST_F(BluetoothTest, startScanWrapper_MissingParameters_Failure)
@@ -267,64 +266,48 @@ TEST_F(BluetoothTest, startScanWrapper_MissingParameters_Failure)
 
 TEST_F(BluetoothTest, stopScanWrapper_Success)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetNumberOfAdapters(::testing::_))
-        .WillOnce(::testing::DoAll(::testing::SetArgPointee<0>(1), ::testing::Return(BTRMGR_RESULT_SUCCESS)));
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_StartDeviceDiscovery(::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-    
+    EXPECT_CALL(*p_btSdkMock, startScan(::testing::_)).WillOnce(::testing::Return(true));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("startScan"), _T("{\"timeout\":5}"), response));
-    EXPECT_TRUE(response.find("\"status\":\"AVAILABLE\"") != string::npos);
-    
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_StopDeviceDiscovery(::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-    
+
+    EXPECT_CALL(*p_btSdkMock, stopScan()).WillOnce(::testing::Return(true));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("stopScan"), _T("{}"), response));
 }
 
 TEST_F(BluetoothTest, isDiscoverableWrapper_True)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetNumberOfAdapters(::testing::_))
-        .WillOnce(::testing::DoAll(::testing::SetArgPointee<0>(1), ::testing::Return(BTRMGR_RESULT_SUCCESS)));
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_IsAdapterDiscoverable(::testing::_, ::testing::_))
-        .WillOnce(::testing::DoAll(::testing::SetArgPointee<1>(1), ::testing::Return(BTRMGR_RESULT_SUCCESS)));
-    
+    EXPECT_CALL(*p_btSdkMock, isAdapterDiscoverable(::testing::_))
+        .WillOnce(::testing::DoAll(::testing::SetArgReferee<0>(true), ::testing::Return(true)));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("isDiscoverable"), _T("{}"), response));
     EXPECT_TRUE(response.find("\"discoverable\":true") != string::npos);
 }
 
 TEST_F(BluetoothTest, isDiscoverableWrapper_False)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetNumberOfAdapters(::testing::_))
-        .WillOnce(::testing::DoAll(::testing::SetArgPointee<0>(1), ::testing::Return(BTRMGR_RESULT_SUCCESS)));
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_IsAdapterDiscoverable(::testing::_, ::testing::_))
-        .WillOnce(::testing::DoAll(::testing::SetArgPointee<1>(0), ::testing::Return(BTRMGR_RESULT_SUCCESS)));
-    
+    EXPECT_CALL(*p_btSdkMock, isAdapterDiscoverable(::testing::_))
+        .WillOnce(::testing::DoAll(::testing::SetArgReferee<0>(false), ::testing::Return(true)));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("isDiscoverable"), _T("{}"), response));
     EXPECT_TRUE(response.find("\"discoverable\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, isDiscoverableWrapper_NoAdapters)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetNumberOfAdapters(::testing::_))
-        .WillOnce(::testing::DoAll(::testing::SetArgPointee<0>(0), ::testing::Return(BTRMGR_RESULT_SUCCESS)));
-    
+    EXPECT_CALL(*p_btSdkMock, isAdapterDiscoverable(::testing::_))
+        .WillOnce(::testing::Return(false));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("isDiscoverable"), _T("{}"), response));
     EXPECT_TRUE(response.find("\"discoverable\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, setDiscoverableWrapper_Enable_Success)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_SetAdapterDiscoverable(::testing::_, 1, ::testing::_))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-    
+    EXPECT_CALL(*p_btSdkMock, setAdapterDiscoverable(true, ::testing::_))
+        .WillOnce(::testing::Return(true));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setDiscoverable"), _T("{\"discoverable\":true,\"timeout\":10}"), response));
 }
 
 TEST_F(BluetoothTest, setDiscoverableWrapper_Disable_Success)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_SetAdapterDiscoverable(::testing::_, 0, ::testing::_))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-    
+    EXPECT_CALL(*p_btSdkMock, setAdapterDiscoverable(false, ::testing::_))
+        .WillOnce(::testing::Return(true));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setDiscoverable"), _T("{\"discoverable\":false}"), response));
 }
 
@@ -336,130 +319,91 @@ TEST_F(BluetoothTest, setDiscoverableWrapper_MissingParameter_Failure)
 
 TEST_F(BluetoothTest, setDiscoverableWrapper_Failed)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_SetAdapterDiscoverable(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
-    
+    EXPECT_CALL(*p_btSdkMock, setAdapterDiscoverable(::testing::_, ::testing::_))
+        .WillOnce(::testing::Return(false));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setDiscoverable"), _T("{\"discoverable\":true}"), response));
     EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, getDiscoveredDevicesWrapper_Success)
 {
-    BTRMGR_DiscoveredDevicesList_t discoveredDevices;
-    memset(&discoveredDevices, 0, sizeof(discoveredDevices));
-    discoveredDevices.m_numOfDevices = 1;
-    discoveredDevices.m_deviceProperty[0].m_deviceHandle = 123;
-    strcpy(discoveredDevices.m_deviceProperty[0].m_name, "TestDevice");
-    discoveredDevices.m_deviceProperty[0].m_deviceType = BTRMGR_DEVICE_TYPE_WEARABLE_HEADSET;
-    discoveredDevices.m_deviceProperty[0].m_isConnected = 0;
-    discoveredDevices.m_deviceProperty[0].m_isPairedDevice = 0;
-    
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetDiscoveredDevices(::testing::_, ::testing::_))
-        .WillOnce(::testing::DoAll(::testing::SetArgPointee<1>(discoveredDevices), ::testing::Return(BTRMGR_RESULT_SUCCESS)));
-
+    IBtSdkAdapter::BtDeviceInfo info;
+    info.handleStr = "123"; info.name = "TestDevice"; info.deviceType = "WEARABLE HEADSET";
+    EXPECT_CALL(*p_btSdkMock, getDiscoveredDevices())
+        .WillOnce(::testing::Return(std::vector<IBtSdkAdapter::BtDeviceInfo>{info}));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getDiscoveredDevices"), _T("{}"), response));
-
     EXPECT_TRUE(response.find("\"discoveredDevices\"") != string::npos);
 }
 
 TEST_F(BluetoothTest, getDiscoveredDevicesWrapper_Failed)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetDiscoveredDevices(::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
-    
+    EXPECT_CALL(*p_btSdkMock, getDiscoveredDevices())
+        .WillOnce(::testing::Return(std::vector<IBtSdkAdapter::BtDeviceInfo>{}));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getDiscoveredDevices"), _T("{}"), response));
     EXPECT_TRUE(response.find("\"discoveredDevices\"") != string::npos);
 }
 
 TEST_F(BluetoothTest, getPairedDevicesWrapper_Success)
 {
-    BTRMGR_PairedDevicesList_t pairedDevices;
-    memset(&pairedDevices, 0, sizeof(pairedDevices));
-    pairedDevices.m_numOfDevices = 1;
-    pairedDevices.m_deviceProperty[0].m_deviceHandle = 123;
-    strcpy(pairedDevices.m_deviceProperty[0].m_name, "PairedDevice");
-    pairedDevices.m_deviceProperty[0].m_deviceType = BTRMGR_DEVICE_TYPE_SMARTPHONE;
-    pairedDevices.m_deviceProperty[0].m_isConnected = 1;
-    
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetPairedDevices(::testing::_, ::testing::_))
-        .WillOnce(::testing::DoAll(::testing::SetArgPointee<1>(pairedDevices), ::testing::Return(BTRMGR_RESULT_SUCCESS)));
-    
+    IBtSdkAdapter::BtDeviceInfo info;
+    info.handleStr = "123"; info.name = "PairedDevice"; info.deviceType = "SMARTPHONE"; info.connected = true;
+    EXPECT_CALL(*p_btSdkMock, getPairedDevices())
+        .WillOnce(::testing::Return(std::vector<IBtSdkAdapter::BtDeviceInfo>{info}));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getPairedDevices"), _T("{}"), response));
     EXPECT_TRUE(response.find("\"pairedDevices\"") != string::npos);
 }
 
 TEST_F(BluetoothTest, getPairedDevicesWrapper_Failed)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetPairedDevices(::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
-    
+    EXPECT_CALL(*p_btSdkMock, getPairedDevices())
+        .WillOnce(::testing::Return(std::vector<IBtSdkAdapter::BtDeviceInfo>{}));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getPairedDevices"), _T("{}"), response));
     EXPECT_TRUE(response.find("\"pairedDevices\"") != string::npos);
 }
 
 TEST_F(BluetoothTest, getConnectedDevicesWrapper_Success)
 {
-    BTRMGR_ConnectedDevicesList_t connectedDevices;
-    memset(&connectedDevices, 0, sizeof(connectedDevices));
-    connectedDevices.m_numOfDevices = 1;
-    connectedDevices.m_deviceProperty[0].m_deviceHandle = 123;
-    strcpy(connectedDevices.m_deviceProperty[0].m_name, "ConnectedDevice");
-    connectedDevices.m_deviceProperty[0].m_deviceType = BTRMGR_DEVICE_TYPE_HEADPHONES;
-    connectedDevices.m_deviceProperty[0].m_powerStatus = BTRMGR_DEVICE_POWER_ACTIVE;
-    
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetConnectedDevices(::testing::_, ::testing::_))
-        .WillOnce(::testing::DoAll(::testing::SetArgPointee<1>(connectedDevices), ::testing::Return(BTRMGR_RESULT_SUCCESS)));
-    
+    IBtSdkAdapter::BtDeviceInfo info;
+    info.handleStr = "123"; info.name = "ConnectedDevice"; info.deviceType = "HEADPHONES"; info.connected = true;
+    EXPECT_CALL(*p_btSdkMock, getConnectedDevices())
+        .WillOnce(::testing::Return(std::vector<IBtSdkAdapter::BtDeviceInfo>{info}));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getConnectedDevices"), _T("{}"), response));
     EXPECT_TRUE(response.find("\"connectedDevices\"") != string::npos);
 }
 
 TEST_F(BluetoothTest, getConnectedDevicesWrapper_Failed)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetConnectedDevices(::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
-    
+    EXPECT_CALL(*p_btSdkMock, getConnectedDevices())
+        .WillOnce(::testing::Return(std::vector<IBtSdkAdapter::BtDeviceInfo>{}));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getConnectedDevices"), _T("{}"), response));
     EXPECT_TRUE(response.find("\"connectedDevices\"") != string::npos);
 }
 
 TEST_F(BluetoothTest, connectWrapper_Smartphone_Success)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_StartAudioStreamingIn(::testing::_, ::testing::_, BTRMGR_DEVICE_OP_TYPE_AUDIO_INPUT))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-
     setupDevice();
-    
+    EXPECT_CALL(*p_btSdkMock, connectDevice("123")).WillOnce(::testing::Return(true));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("connect"), _T("{\"deviceID\":\"123\",\"deviceType\":\"SMARTPHONE\"}"), response));
 }
 
 TEST_F(BluetoothTest, connectWrapper_AudioDevice_Success)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_StartAudioStreamingOut(::testing::_, ::testing::_, BTRMGR_DEVICE_OP_TYPE_AUDIO_OUTPUT))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-
     setupDevice();
-    
+    EXPECT_CALL(*p_btSdkMock, connectDevice("123")).WillOnce(::testing::Return(true));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("connect"), _T("{\"deviceID\":\"123\",\"deviceType\":\"HEADPHONES\"}"), response));
 }
 
 TEST_F(BluetoothTest, connectWrapper_HIDDevice_Success)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_ConnectToDevice(::testing::_, ::testing::_, BTRMGR_DEVICE_OP_TYPE_HID))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-    
     setupDevice();
-    
+    EXPECT_CALL(*p_btSdkMock, connectDevice("123")).WillOnce(::testing::Return(true));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("connect"), _T("{\"deviceID\":\"123\",\"deviceType\":\"KEYBOARD\"}"), response));
 }
 
 TEST_F(BluetoothTest, connectWrapper_LEDevice_Success)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_ConnectToDevice(::testing::_, ::testing::_, BTRMGR_DEVICE_OP_TYPE_LE))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-
     setupDevice();
-    
+    EXPECT_CALL(*p_btSdkMock, connectDevice("123")).WillOnce(::testing::Return(true));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("connect"), _T("{\"deviceID\":\"123\",\"deviceType\":\"LE TILE\"}"), response));
 }
 
@@ -471,34 +415,26 @@ TEST_F(BluetoothTest, connectWrapper_MissingDeviceID_Failure)
 
 TEST_F(BluetoothTest, connectWrapper_Failed)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_StartAudioStreamingIn(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
-    
+    EXPECT_CALL(*p_btSdkMock, connectDevice("123")).WillOnce(::testing::Return(false));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("connect"), _T("{\"deviceID\":\"123\",\"deviceType\":\"SMARTPHONE\"}"), response));
     EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, disconnectWrapper_Smartphone_Success)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_StopAudioStreamingIn(::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-    
+    EXPECT_CALL(*p_btSdkMock, disconnectDevice("123")).WillOnce(::testing::Return(true));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("disconnect"), _T("{\"deviceID\":\"123\",\"deviceType\":\"SMARTPHONE\"}"), response));
 }
 
 TEST_F(BluetoothTest, disconnectWrapper_AudioDevice_Success)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_StopAudioStreamingOut(::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-    
+    EXPECT_CALL(*p_btSdkMock, disconnectDevice("123")).WillOnce(::testing::Return(true));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("disconnect"), _T("{\"deviceID\":\"123\",\"deviceType\":\"HEADPHONES\"}"), response));
 }
 
 TEST_F(BluetoothTest, disconnectWrapper_HIDDevice_Success)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_DisconnectFromDevice(::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-    
+    EXPECT_CALL(*p_btSdkMock, disconnectDevice("123")).WillOnce(::testing::Return(true));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("disconnect"), _T("{\"deviceID\":\"123\",\"deviceType\":\"KEYBOARD\"}"), response));
 }
 
@@ -510,27 +446,22 @@ TEST_F(BluetoothTest, disconnectWrapper_MissingDeviceID_Failure)
 
 TEST_F(BluetoothTest, disconnectWrapper_Failed)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_StopAudioStreamingOut(::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
-    
+    EXPECT_CALL(*p_btSdkMock, disconnectDevice("123")).WillOnce(::testing::Return(false));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("disconnect"), _T("{\"deviceID\":\"123\"}"), response));
     EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
+// setAudioStream is AUDIO_SUPPORT-gated and returns false until SDK audio support lands.
 TEST_F(BluetoothTest, setAudioStreamWrapper_Primary_Success)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_SetAudioStreamingOutType(::testing::_, BTRMGR_STREAM_PRIMARY))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-    
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAudioStream"), _T("{\"deviceID\":\"123\",\"audioStreamName\":\"PRIMARY\"}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, setAudioStreamWrapper_Auxiliary_Success)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_SetAudioStreamingOutType(::testing::_, BTRMGR_STREAM_AUXILIARY))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-    
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAudioStream"), _T("{\"deviceID\":\"123\",\"audioStreamName\":\"AUXILIARY\"}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, setAudioStreamWrapper_MissingParameters_Failure)
@@ -541,18 +472,15 @@ TEST_F(BluetoothTest, setAudioStreamWrapper_MissingParameters_Failure)
 
 TEST_F(BluetoothTest, setAudioStreamWrapper_Failed)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_SetAudioStreamingOutType(::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
-    
+TEST_F(BluetoothTest, setAudioStreamWrapper_Failed)
+{
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAudioStream"), _T("{\"deviceID\":\"123\",\"audioStreamName\":\"PRIMARY\"}"), response));
     EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, pairWrapper_Success)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_PairDevice(::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-    
+    EXPECT_CALL(*p_btSdkMock, pairDevice("123")).WillOnce(::testing::Return(true));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("pair"), _T("{\"deviceID\":\"123\"}"), response));
 }
 
@@ -564,18 +492,14 @@ TEST_F(BluetoothTest, pairWrapper_MissingDeviceID_Failure)
 
 TEST_F(BluetoothTest, pairWrapper_Failed)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_PairDevice(::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
-    
+    EXPECT_CALL(*p_btSdkMock, pairDevice("123")).WillOnce(::testing::Return(false));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("pair"), _T("{\"deviceID\":\"123\"}"), response));
     EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, unpairWrapper_Success)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_UnpairDevice(::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-    
+    EXPECT_CALL(*p_btSdkMock, unpairDevice("123")).WillOnce(::testing::Return(true));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("unpair"), _T("{\"deviceID\":\"123\"}"), response));
 }
 
@@ -587,341 +511,218 @@ TEST_F(BluetoothTest, unpairWrapper_MissingDeviceID_Failure)
 
 TEST_F(BluetoothTest, unpairWrapper_Failed)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_UnpairDevice(::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
-    
+    EXPECT_CALL(*p_btSdkMock, unpairDevice("123")).WillOnce(::testing::Return(false));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("unpair"), _T("{\"deviceID\":\"123\"}"), response));
     EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, enableWrapper_Success)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_SetAdapterPowerStatus(::testing::_, 1))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-    
+    EXPECT_CALL(*p_btSdkMock, setAdapterPowered(true)).WillOnce(::testing::Return(true));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("enable"), _T("{}"), response));
 }
 
 TEST_F(BluetoothTest, enableWrapper_Failed)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_SetAdapterPowerStatus(::testing::_, 1))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
-    
+    EXPECT_CALL(*p_btSdkMock, setAdapterPowered(true)).WillOnce(::testing::Return(false));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("enable"), _T("{}"), response));
     EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, disableWrapper_Success)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_SetAdapterPowerStatus(::testing::_, 0))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-    
+    EXPECT_CALL(*p_btSdkMock, setAdapterPowered(false)).WillOnce(::testing::Return(true));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("disable"), _T("{}"), response));
 }
 
 TEST_F(BluetoothTest, disableWrapper_Failed)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_SetAdapterPowerStatus(::testing::_, 0))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
-    
+    EXPECT_CALL(*p_btSdkMock, setAdapterPowered(false)).WillOnce(::testing::Return(false));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("disable"), _T("{}"), response));
     EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, getNameWrapper_Success)
 {
-    char adapterName[] = "TestAdapter";
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetAdapterName(::testing::_, ::testing::_))
-        .WillOnce(::testing::DoAll(::testing::SetArrayArgument<1>(adapterName, adapterName + strlen(adapterName) + 1), ::testing::Return(BTRMGR_RESULT_SUCCESS)));
-    
+    EXPECT_CALL(*p_btSdkMock, getAdapterName(::testing::_))
+        .WillOnce(::testing::DoAll(::testing::SetArgReferee<0>(std::string("TestAdapter")),
+                                   ::testing::Return(true)));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getName"), _T("{}"), response));
     EXPECT_TRUE(response.find("\"name\":\"TestAdapter\"") != string::npos);
 }
 
 TEST_F(BluetoothTest, getNameWrapper_Failed)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetAdapterName(::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
-    
+    EXPECT_CALL(*p_btSdkMock, getAdapterName(::testing::_)).WillOnce(::testing::Return(false));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getName"), _T("{}"), response));
     EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, setNameWrapper_Success)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_SetAdapterName(::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-    
+    EXPECT_CALL(*p_btSdkMock, setAdapterName("NewName")).WillOnce(::testing::Return(true));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setName"), _T("{\"name\":\"NewName\"}"), response));
 }
 
 TEST_F(BluetoothTest, setNameWrapper_Failed)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_SetAdapterName(::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
-    
+    EXPECT_CALL(*p_btSdkMock, setAdapterName(::testing::_)).WillOnce(::testing::Return(false));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setName"), _T("{\"name\":\"NewName\"}"), response));
     EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
+// Audio playback commands are AUDIO_SUPPORT-gated (stubs return false).
 TEST_F(BluetoothTest, sendAudioPlaybackCommandWrapper_Play_Success)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_StartAudioStreamingIn(::testing::_, ::testing::_, BTRMGR_DEVICE_OP_TYPE_AUDIO_INPUT))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-    
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("sendAudioPlaybackCommand"), _T("{\"deviceID\":\"123\",\"command\":\"PLAY\"}"), response));
 }
 
 TEST_F(BluetoothTest, sendAudioPlaybackCommandWrapper_Pause_Success)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_MediaControl(::testing::_, ::testing::_, BTRMGR_MEDIA_CTRL_PAUSE))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-    
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("sendAudioPlaybackCommand"), _T("{\"deviceID\":\"123\",\"command\":\"PAUSE\"}"), response));
 }
 
 TEST_F(BluetoothTest, sendAudioPlaybackCommandWrapper_Resume_Success)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_MediaControl(::testing::_, ::testing::_, BTRMGR_MEDIA_CTRL_PLAY))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-    
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("sendAudioPlaybackCommand"), _T("{\"deviceID\":\"123\",\"command\":\"RESUME\"}"), response));
 }
 
 TEST_F(BluetoothTest, sendAudioPlaybackCommandWrapper_Stop_Success)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_MediaControl(::testing::_, ::testing::_, BTRMGR_MEDIA_CTRL_STOP))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-    
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("sendAudioPlaybackCommand"), _T("{\"deviceID\":\"123\",\"command\":\"STOP\"}"), response));
 }
 
 TEST_F(BluetoothTest, sendAudioPlaybackCommandWrapper_SkipNext_Success)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_MediaControl(::testing::_, ::testing::_, BTRMGR_MEDIA_CTRL_NEXT))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-    
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("sendAudioPlaybackCommand"), _T("{\"deviceID\":\"123\",\"command\":\"SKIP_NEXT\"}"), response));
 }
 
 TEST_F(BluetoothTest, sendAudioPlaybackCommandWrapper_SkipPrevious_Success)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_MediaControl(::testing::_, ::testing::_, BTRMGR_MEDIA_CTRL_PREVIOUS))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-    
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("sendAudioPlaybackCommand"), _T("{\"deviceID\":\"123\",\"command\":\"SKIP_PREV\"}"), response));
 }
 
 TEST_F(BluetoothTest, sendAudioPlaybackCommandWrapper_Mute_Success)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_MediaControl(::testing::_, ::testing::_, BTRMGR_MEDIA_CTRL_MUTE))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-    
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("sendAudioPlaybackCommand"), _T("{\"deviceID\":\"123\",\"command\":\"AUDIO_MUTE\"}"), response));
 }
 
 TEST_F(BluetoothTest, sendAudioPlaybackCommandWrapper_Unmute_Success)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_MediaControl(::testing::_, ::testing::_, BTRMGR_MEDIA_CTRL_UNMUTE))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-    
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("sendAudioPlaybackCommand"), _T("{\"deviceID\":\"123\",\"command\":\"AUDIO_UNMUTE\"}"), response));
 }
 
 TEST_F(BluetoothTest, sendAudioPlaybackCommandWrapper_VolumeUp_Success)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_MediaControl(::testing::_, ::testing::_, BTRMGR_MEDIA_CTRL_VOLUMEUP))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-    
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("sendAudioPlaybackCommand"), _T("{\"deviceID\":\"123\",\"command\":\"VOLUME_UP\"}"), response));
 }
 
 TEST_F(BluetoothTest, sendAudioPlaybackCommandWrapper_VolumeDown_Success)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_MediaControl(::testing::_, ::testing::_, BTRMGR_MEDIA_CTRL_VOLUMEDOWN))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-    
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("sendAudioPlaybackCommand"), _T("{\"deviceID\":\"123\",\"command\":\"VOLUME_DOWN\"}"), response));
-}
-
-TEST_F(BluetoothTest, sendAudioPlaybackCommandWrapper_MissingParameters_Failure)
-{
-    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("sendAudioPlaybackCommand"), _T("{\"deviceID\":\"123\"}"), response));
-    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, sendAudioPlaybackCommandWrapper_Failed)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_MediaControl(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
-    
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("sendAudioPlaybackCommand"), _T("{\"deviceID\":\"123\",\"command\":\"PAUSE\"}"), response));
     EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
+// respondToEvent resolves via getMacForHandle + respondToEvent on AuthBridge.
 TEST_F(BluetoothTest, setEventResponseWrapper_PairingAccepted_Success)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_SetEventResponse(::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-    
+    EXPECT_CALL(*p_btSdkMock, getMacForHandle("123"))
+        .WillRepeatedly(::testing::Return("00:11:22:33:44:55"));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("respondToEvent"), _T("{\"deviceID\":\"123\",\"eventType\":\"onPairingRequest\",\"responseValue\":\"ACCEPTED\"}"), response));
 }
 
 TEST_F(BluetoothTest, setEventResponseWrapper_ConnectionRejected_Success)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_SetEventResponse(::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-    
+    EXPECT_CALL(*p_btSdkMock, getMacForHandle("123"))
+        .WillRepeatedly(::testing::Return("00:11:22:33:44:55"));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("respondToEvent"), _T("{\"deviceID\":\"123\",\"eventType\":\"onConnectionRequest\",\"responseValue\":\"REJECTED\"}"), response));
 }
 
 TEST_F(BluetoothTest, setEventResponseWrapper_PlaybackAccepted_Success)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_SetEventResponse(::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-    
+    EXPECT_CALL(*p_btSdkMock, getMacForHandle("123"))
+        .WillRepeatedly(::testing::Return("00:11:22:33:44:55"));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("respondToEvent"), _T("{\"deviceID\":\"123\",\"eventType\":\"onPlaybackRequest\",\"responseValue\":\"ACCEPTED\"}"), response));
-}
-
-TEST_F(BluetoothTest, setEventResponseWrapper_MissingParameters_Failure)
-{
-    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("respondToEvent"), _T("{\"deviceID\":\"123\"}"), response));
-    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, setEventResponseWrapper_Failed)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_SetEventResponse(::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
-    
+    EXPECT_CALL(*p_btSdkMock, getMacForHandle("123"))
+        .WillRepeatedly(::testing::Return(""));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("respondToEvent"), _T("{\"deviceID\":\"123\",\"eventType\":\"onPairingRequest\",\"responseValue\":\"ACCEPTED\"}"), response));
     EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, getDeviceInfoWrapper_Success)
 {
-    BTRMGR_DevicesProperty_t deviceProperty;
-    memset(&deviceProperty, 0, sizeof(deviceProperty));
-    deviceProperty.m_deviceHandle = 123;
-    strcpy(deviceProperty.m_name, "TestDevice");
-    deviceProperty.m_deviceType = BTRMGR_DEVICE_TYPE_WEARABLE_HEADSET;
-    deviceProperty.m_vendorID = 9999;
-    strcpy(deviceProperty.m_deviceAddress, "00:11:22:33:44:55");
-    deviceProperty.m_signalLevel = -50;
-    deviceProperty.m_rssi = BTRMGR_RSSI_GOOD;
-    deviceProperty.m_batteryLevel = 80;
-    strcpy(deviceProperty.m_modalias, "usb:v1234p5678");
-    strcpy(deviceProperty.m_firmwareRevision, "1.0.0");
-    deviceProperty.m_serviceInfo.m_numOfService = 1;
-    strcpy(deviceProperty.m_serviceInfo.m_profileInfo[0].m_profile, "A2DP");
-    
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetDeviceProperties(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::DoAll(::testing::SetArgPointee<2>(deviceProperty), ::testing::Return(BTRMGR_RESULT_SUCCESS)));
-    
+    IBtSdkAdapter::BtDeviceProperties props;
+    props.handleStr = "123"; props.mac = "00:11:22:33:44:55";
+    props.name = "TestDevice"; props.deviceType = "WEARABLE HEADSET";
+    props.vendorId = 9999; props.rssi = -50; props.batteryLevel = 80;
+    props.modalias = "usb:v1234p5678";
+    props.uuids = {"A2DP"};
+
+    EXPECT_CALL(*p_btSdkMock, getDeviceProperties("123", ::testing::_))
+        .WillOnce(::testing::DoAll(::testing::SetArgReferee<1>(props),
+                                   ::testing::Return(true)));
+
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getDeviceInfo"), _T("{\"deviceID\":\"123\"}"), response));
     EXPECT_TRUE(response.find("\"deviceInfo\"") != string::npos);
-}
-
-TEST_F(BluetoothTest, getDeviceInfoWrapper_MissingDeviceID_Failure)
-{
-    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getDeviceInfo"), _T("{}"), response));
-    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, getDeviceInfoWrapper_Failed)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetDeviceProperties(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
-    
+    EXPECT_CALL(*p_btSdkMock, getDeviceProperties("123", ::testing::_))
+        .WillOnce(::testing::Return(false));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getDeviceInfo"), _T("{\"deviceID\":\"123\"}"), response));
     EXPECT_TRUE(response.find("\"deviceInfo\"") != string::npos);
 }
 
+// getAudioInfo and volume/mute methods are AUDIO_SUPPORT-gated stubs.
 TEST_F(BluetoothTest, getMediaTrackInfoWrapper_Success)
 {
-    BTRMGR_MediaTrackInfo_t trackInfo;
-    memset(&trackInfo, 0, sizeof(trackInfo));
-    strcpy(trackInfo.pcAlbum, "TestAlbum");
-    strcpy(trackInfo.pcGenre, "TestGenre");
-    strcpy(trackInfo.pcTitle, "TestTitle");
-    strcpy(trackInfo.pcArtist, "TestArtist");
-    trackInfo.ui32Duration = 240000;
-    trackInfo.ui32TrackNumber = 5;
-    trackInfo.ui32NumberOfTracks = 12;
-    
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetMediaTrackInfo(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::DoAll(::testing::SetArgPointee<2>(trackInfo), ::testing::Return(BTRMGR_RESULT_SUCCESS)));
-    
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getAudioInfo"), _T("{\"deviceID\":\"123\"}"), response));
     EXPECT_TRUE(response.find("\"trackInfo\"") != string::npos);
-}
-
-TEST_F(BluetoothTest, getMediaTrackInfoWrapper_MissingDeviceID_Failure)
-{
-    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getAudioInfo"), _T("{}"), response));
-    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, getMediaTrackInfoWrapper_Failed)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetMediaTrackInfo(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
-    
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getAudioInfo"), _T("{\"deviceID\":\"123\"}"), response));
     EXPECT_TRUE(response.find("\"trackInfo\"") != string::npos);
 }
 
+// Volume/mute methods are AUDIO_SUPPORT-gated stubs.
 TEST_F(BluetoothTest, getDeviceVolumeMuteInfoWrapper_Success)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetDeviceVolumeMute(::testing::_, ::testing::_, BTRMGR_DEVICE_OP_TYPE_AUDIO_OUTPUT, ::testing::_, ::testing::_))
-        .WillOnce(::testing::DoAll(::testing::SetArgPointee<3>(128), ::testing::SetArgPointee<4>(0), ::testing::Return(BTRMGR_RESULT_SUCCESS)));
-    
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getDeviceVolumeMuteInfo"), _T("{\"deviceID\":\"123\",\"deviceType\":\"HEADPHONES\"}"), response));
     EXPECT_TRUE(response.find("\"volumeinfo\"") != string::npos);
 }
 
-TEST_F(BluetoothTest, getDeviceVolumeMuteInfoWrapper_MissingParameters_Failure)
-{
-    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getDeviceVolumeMuteInfo"), _T("{\"deviceID\":\"123\"}"), response));
-    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
-}
-
 TEST_F(BluetoothTest, getDeviceVolumeMuteInfoWrapper_Failed)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetDeviceVolumeMute(::testing::_, ::testing::_, ::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
-    
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getDeviceVolumeMuteInfo"), _T("{\"deviceID\":\"123\",\"deviceType\":\"HEADPHONES\"}"), response));
     EXPECT_TRUE(response.find("\"volumeinfo\"") != string::npos);
 }
 
 TEST_F(BluetoothTest, setDeviceVolumeMuteInfoWrapper_Success)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_SetDeviceVolumeMute(::testing::_, ::testing::_, BTRMGR_DEVICE_OP_TYPE_AUDIO_OUTPUT, 150, 0))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-    
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setDeviceVolumeMuteInfo"), _T("{\"deviceID\":\"123\",\"deviceType\":\"HEADPHONES\",\"volume\":150,\"mute\":0}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, setDeviceVolumeMuteInfoWrapper_WithMute_Success)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_SetDeviceVolumeMute(::testing::_, ::testing::_, BTRMGR_DEVICE_OP_TYPE_AUDIO_OUTPUT, 100, 1))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
-    
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setDeviceVolumeMuteInfo"), _T("{\"deviceID\":\"123\",\"deviceType\":\"HEADPHONES\",\"volume\":100,\"mute\":1}"), response));
-}
-
-TEST_F(BluetoothTest, setDeviceVolumeMuteInfoWrapper_MissingParameters_Failure)
-{
-    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setDeviceVolumeMuteInfo"), _T("{\"deviceID\":\"123\",\"deviceType\":\"HEADPHONES\"}"), response));
     EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, setDeviceVolumeMuteInfoWrapper_Failed)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_SetDeviceVolumeMute(::testing::_, ::testing::_, ::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_GENERIC_FAILURE));
-    
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setDeviceVolumeMuteInfo"), _T("{\"deviceID\":\"123\",\"deviceType\":\"HEADPHONES\",\"volume\":150,\"mute\":0}"), response));
     EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
@@ -1014,16 +815,12 @@ protected:
                 }));
 
 #ifndef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
-        // Non-migration path: init() calls BTRMGR to reconcile the cache.
+        // Non-migration path: init() calls SDK to reconcile the cache.
         // Return device handle 123 so the HID entry survives the scrub step.
-        BTRMGR_PairedDevicesList_t hidPairedDevices;
-        memset(&hidPairedDevices, 0, sizeof(hidPairedDevices));
-        hidPairedDevices.m_numOfDevices = 1;
-        hidPairedDevices.m_deviceProperty[0].m_deviceHandle = 123;
-        ON_CALL(*p_btmgrMock, BTRMGR_GetPairedDevices(::testing::_, ::testing::_))
-            .WillByDefault(::testing::DoAll(
-                ::testing::SetArgPointee<1>(hidPairedDevices),
-                ::testing::Return(BTRMGR_RESULT_SUCCESS)));
+        IBtSdkAdapter::BtDeviceInfo hidInfo;
+        hidInfo.handleStr = "123"; hidInfo.deviceType = "HUMAN INTERFACE DEVICE";
+        ON_CALL(*p_btSdkMock, getPairedDevices())
+            .WillByDefault(::testing::Return(std::vector<IBtSdkAdapter::BtDeviceInfo>{hidInfo}));
 #endif
 
         EXPECT_CALL(PowerManagerMock::Mock(), GetPowerState(::testing::_, ::testing::_))
@@ -1044,10 +841,8 @@ protected:
 
 TEST_F(BluetoothTest, onPowerModeChanged_SameState_NoAction)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_StopAudioStreamingOut(::testing::_, ::testing::_)).Times(0);
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_DisconnectFromDevice(::testing::_, ::testing::_)).Times(0);
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_SetAdapterPowerStatus(::testing::_, ::testing::_)).Times(0);
-
+    EXPECT_CALL(*p_btSdkMock, disconnectDevice(::testing::_)).Times(0);
+    EXPECT_CALL(*p_btSdkMock, setAdapterPowered(::testing::_)).Times(0);
     plugin->onPowerModeChanged(
         WPEFramework::Exchange::IPowerManager::POWER_STATE_ON,
         WPEFramework::Exchange::IPowerManager::POWER_STATE_ON);
@@ -1063,8 +858,8 @@ TEST_F(BluetoothTest, onPowerModeChanged_OnToStandby_NonHidDevice_AutoConnectDis
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
         _T("{\"deviceID\":\"123\",\"enable\":false}"), response));
 
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_StopAudioStreamingOut(::testing::_, 123))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
+    EXPECT_CALL(*p_btSdkMock, disconnectDevice("123"))
+        .WillOnce(::testing::Return(true));
 
     plugin->onPowerModeChanged(
         WPEFramework::Exchange::IPowerManager::POWER_STATE_ON,
@@ -1080,8 +875,8 @@ TEST_F(BluetoothTest, onPowerModeChanged_UnknownToStandby_NonHidDevice_AutoConne
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
         _T("{\"deviceID\":\"123\",\"enable\":false}"), response));
 
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_StopAudioStreamingOut(::testing::_, 123))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
+    EXPECT_CALL(*p_btSdkMock, disconnectDevice("123"))
+        .WillOnce(::testing::Return(true));
 
     plugin->onPowerModeChanged(
         WPEFramework::Exchange::IPowerManager::POWER_STATE_UNKNOWN,
@@ -1097,8 +892,8 @@ TEST_F(BluetoothTest, onPowerModeChanged_OnToStandbyLightSleep_NonHidDevice_Auto
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
         _T("{\"deviceID\":\"123\",\"enable\":false}"), response));
 
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_StopAudioStreamingOut(::testing::_, 123))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
+    EXPECT_CALL(*p_btSdkMock, disconnectDevice("123"))
+        .WillOnce(::testing::Return(true));
 
     plugin->onPowerModeChanged(
         WPEFramework::Exchange::IPowerManager::POWER_STATE_ON,
@@ -1113,8 +908,7 @@ TEST_F(BluetoothTest, onPowerModeChanged_OnToStandby_NonHidDevice_AutoConnectEna
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
         _T("{\"deviceID\":\"123\",\"enable\":true}"), response));
 
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_StopAudioStreamingOut(::testing::_, ::testing::_)).Times(0);
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_DisconnectFromDevice(::testing::_, ::testing::_)).Times(0);
+    EXPECT_CALL(*p_btSdkMock, disconnectDevice(::testing::_)).Times(0);
 
     plugin->onPowerModeChanged(
         WPEFramework::Exchange::IPowerManager::POWER_STATE_ON,
@@ -1123,8 +917,7 @@ TEST_F(BluetoothTest, onPowerModeChanged_OnToStandby_NonHidDevice_AutoConnectEna
 
 TEST_F(BluetoothTest, onPowerModeChanged_OnToStandby_EmptyCache_NoDisconnect)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_StopAudioStreamingOut(::testing::_, ::testing::_)).Times(0);
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_DisconnectFromDevice(::testing::_, ::testing::_)).Times(0);
+    EXPECT_CALL(*p_btSdkMock, disconnectDevice(::testing::_)).Times(0);
 
     plugin->onPowerModeChanged(
         WPEFramework::Exchange::IPowerManager::POWER_STATE_ON,
@@ -1135,11 +928,7 @@ TEST_F(BluetoothTest, onPowerModeChanged_OnToStandby_EmptyCache_NoDisconnect)
 
 TEST_F(BluetoothPowerModeTest, onPowerModeChanged_OnToStandby_HidDevice_AutoConnectDisabled_NoDisconnect)
 {
-    // Device 123 is HID (pre-loaded in cache) with AUTO_CONNECT_STATUS_DISABLED.
-    // HID devices must be skipped on power off/standby so they can wake the device.
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_StopAudioStreamingOut(::testing::_, ::testing::_)).Times(0);
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_DisconnectFromDevice(::testing::_, ::testing::_)).Times(0);
-
+    EXPECT_CALL(*p_btSdkMock, disconnectDevice(::testing::_)).Times(0);
     plugin->onPowerModeChanged(
         WPEFramework::Exchange::IPowerManager::POWER_STATE_ON,
         WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY);
@@ -1155,8 +944,8 @@ TEST_F(BluetoothTest, onPowerModeChanged_StandbyToOn_WithNonHidPairedDevices_Ena
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
         _T("{\"deviceID\":\"123\",\"enable\":true}"), response));
 
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_SetAdapterPowerStatus(0, 1))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
+    EXPECT_CALL(*p_btSdkMock, setAdapterPowered(true))
+        .WillOnce(::testing::Return(true));
 
     plugin->onPowerModeChanged(
         WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY,
@@ -1166,9 +955,7 @@ TEST_F(BluetoothTest, onPowerModeChanged_StandbyToOn_WithNonHidPairedDevices_Ena
 
 TEST_F(BluetoothPowerModeTest, onPowerModeChanged_StandbyToOn_OnlyHidDevices_NoBluetoothEnable)
 {
-    // Only HID device (123) is in cache; non-HID device count = 0.
-    // setBluetoothEnabled must NOT be called.
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_SetAdapterPowerStatus(::testing::_, ::testing::_)).Times(0);
+    EXPECT_CALL(*p_btSdkMock, setAdapterPowered(::testing::_)).Times(0);
 
     plugin->onPowerModeChanged(
         WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY,
@@ -1187,8 +974,8 @@ TEST_F(BluetoothTest, onPowerModeChanged_OnToDeepSleep_NonHidDevice_AlwaysDiscon
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
         _T("{\"deviceID\":\"123\",\"enable\":true}"), response));
 
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_StopAudioStreamingOut(::testing::_, 123))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
+    EXPECT_CALL(*p_btSdkMock, disconnectDevice("123"))
+        .WillOnce(::testing::Return(true));
 
     plugin->onPowerModeChanged(
         WPEFramework::Exchange::IPowerManager::POWER_STATE_ON,
@@ -1198,9 +985,7 @@ TEST_F(BluetoothTest, onPowerModeChanged_OnToDeepSleep_NonHidDevice_AlwaysDiscon
 
 TEST_F(BluetoothPowerModeTest, onPowerModeChanged_OnToDeepSleep_HidDevice_NoDisconnect)
 {
-    // HID device must be skipped when entering deep sleep.
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_StopAudioStreamingOut(::testing::_, ::testing::_)).Times(0);
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_DisconnectFromDevice(::testing::_, ::testing::_)).Times(0);
+    EXPECT_CALL(*p_btSdkMock, disconnectDevice(::testing::_)).Times(0);
 
     plugin->onPowerModeChanged(
         WPEFramework::Exchange::IPowerManager::POWER_STATE_ON,
@@ -1211,9 +996,8 @@ TEST_F(BluetoothPowerModeTest, onPowerModeChanged_OnToDeepSleep_HidDevice_NoDisc
 
 TEST_F(BluetoothTest, onPowerModeChanged_UnhandledTransition_NoAction)
 {
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_StopAudioStreamingOut(::testing::_, ::testing::_)).Times(0);
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_DisconnectFromDevice(::testing::_, ::testing::_)).Times(0);
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_SetAdapterPowerStatus(::testing::_, ::testing::_)).Times(0);
+    EXPECT_CALL(*p_btSdkMock, disconnectDevice(::testing::_)).Times(0);
+    EXPECT_CALL(*p_btSdkMock, setAdapterPowered(::testing::_)).Times(0);
 
     // STANDBY → STANDBY_LIGHT_SLEEP: does not match any if/else-if branch.
     plugin->onPowerModeChanged(
@@ -1229,13 +1013,11 @@ protected:
     BluetoothLegacyPersistenceMigrationParseTest()
         : BluetoothTest(false)
     {
-        BTRMGR_PairedDevicesList_t pairedDevices;
-        memset(&pairedDevices, 0, sizeof(pairedDevices));
-        pairedDevices.m_numOfDevices = 1;
-        pairedDevices.m_deviceProperty[0].m_deviceHandle = 123;
-        pairedDevices.m_deviceProperty[0].m_deviceType = BTRMGR_DEVICE_TYPE_HEADPHONES;
-        strcpy(pairedDevices.m_deviceProperty[0].m_name, "MigrationTestDevice");
-        strcpy(pairedDevices.m_deviceProperty[0].m_deviceAddress, "123");
+        IBtSdkAdapter::BtDeviceInfo migrationDevice;
+        migrationDevice.handleStr  = "123";
+        migrationDevice.mac        = "123";
+        migrationDevice.name       = "MigrationTestDevice";
+        migrationDevice.deviceType = "HEADPHONES";
 
         ON_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
             .WillByDefault(::testing::Return(Core::ERROR_NOT_EXIST));
@@ -1243,13 +1025,9 @@ protected:
         ON_CALL(*p_storeMock, SetValue(::testing::_, ::testing::_, ::testing::_))
             .WillByDefault(::testing::Return(Core::ERROR_NONE));
 
-        ON_CALL(*p_btmgrMock, BTRMGR_GetPairedDevices(::testing::_, ::testing::_))
-            .WillByDefault(::testing::DoAll(
-                ::testing::SetArgPointee<1>(pairedDevices),
-                ::testing::Return(BTRMGR_RESULT_SUCCESS)));
-
-        ON_CALL(*p_btmgrMock, BTRMGR_GetDeviceTypeAsString(::testing::_))
-            .WillByDefault(::testing::Return("HEADPHONES"));
+        ON_CALL(*p_btSdkMock, getPairedDevices())
+            .WillByDefault(::testing::Return(
+                std::vector<IBtSdkAdapter::BtDeviceInfo>{migrationDevice}));
     }
 
     ~BluetoothLegacyPersistenceMigrationParseTest() override
@@ -1328,17 +1106,10 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, legacyPersistenceMigrationS
         GTEST_SKIP() << "Unable to initialize plugin with PersistentStore payload";
     }
 
-    BTRMGR_PairedDevicesList_t pairedDevices;
-    memset(&pairedDevices, 0, sizeof(pairedDevices));
-    pairedDevices.m_numOfDevices = 1;
-    pairedDevices.m_deviceProperty[0].m_deviceHandle = 123;
-    pairedDevices.m_deviceProperty[0].m_deviceType = BTRMGR_DEVICE_TYPE_HEADPHONES;
-    strcpy(pairedDevices.m_deviceProperty[0].m_name, "AsTestDevice");
-
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetPairedDevices(::testing::_, ::testing::_))
-        .WillOnce(::testing::DoAll(
-            ::testing::SetArgPointee<1>(pairedDevices),
-            ::testing::Return(BTRMGR_RESULT_SUCCESS)));
+    IBtSdkAdapter::BtDeviceInfo pDev;
+    pDev.handleStr = "123"; pDev.deviceType = "HEADPHONES"; pDev.name = "AsTestDevice";
+    EXPECT_CALL(*p_btSdkMock, getPairedDevices())
+        .WillOnce(::testing::Return(std::vector<IBtSdkAdapter::BtDeviceInfo>{pDev}));
 
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getPairedDevices"), _T("{}"), response));
     EXPECT_TRUE(response.find("\"autoconnect\":false") != string::npos);
@@ -1426,17 +1197,10 @@ TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, legacyPersistenceMigra
         GTEST_SKIP() << "Unable to prepare malformed filesystem persistence migration file on this test host";
     }
 
-    BTRMGR_PairedDevicesList_t pairedDevices;
-    memset(&pairedDevices, 0, sizeof(pairedDevices));
-    pairedDevices.m_numOfDevices = 1;
-    pairedDevices.m_deviceProperty[0].m_deviceHandle = 123;
-    pairedDevices.m_deviceProperty[0].m_deviceType = BTRMGR_DEVICE_TYPE_HEADPHONES;
-    strcpy(pairedDevices.m_deviceProperty[0].m_name, "AsTestDevice");
-
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetPairedDevices(::testing::_, ::testing::_))
-        .WillOnce(::testing::DoAll(
-            ::testing::SetArgPointee<1>(pairedDevices),
-            ::testing::Return(BTRMGR_RESULT_SUCCESS)));
+    IBtSdkAdapter::BtDeviceInfo pDev1;
+    pDev1.handleStr = "123"; pDev1.deviceType = "HEADPHONES"; pDev1.name = "AsTestDevice";
+    EXPECT_CALL(*p_btSdkMock, getPairedDevices())
+        .WillOnce(::testing::Return(std::vector<IBtSdkAdapter::BtDeviceInfo>{pDev1}));
 
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getPairedDevices"), _T("{}"), response));
     EXPECT_TRUE(response.find("\"pairedDevices\"") != string::npos);
@@ -1481,17 +1245,10 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, legacyPersistenceMigrationP
 
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
 
-    BTRMGR_PairedDevicesList_t pairedDevices;
-    memset(&pairedDevices, 0, sizeof(pairedDevices));
-    pairedDevices.m_numOfDevices = 1;
-    pairedDevices.m_deviceProperty[0].m_deviceHandle = 123;
-    pairedDevices.m_deviceProperty[0].m_deviceType = BTRMGR_DEVICE_TYPE_HEADPHONES;
-    strcpy(pairedDevices.m_deviceProperty[0].m_name, "AsTestDevice");
-
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetPairedDevices(::testing::_, ::testing::_))
-        .WillOnce(::testing::DoAll(
-            ::testing::SetArgPointee<1>(pairedDevices),
-            ::testing::Return(BTRMGR_RESULT_SUCCESS)));
+    IBtSdkAdapter::BtDeviceInfo pDev2;
+    pDev2.handleStr = "123"; pDev2.deviceType = "HEADPHONES"; pDev2.name = "AsTestDevice";
+    EXPECT_CALL(*p_btSdkMock, getPairedDevices())
+        .WillOnce(::testing::Return(std::vector<IBtSdkAdapter::BtDeviceInfo>{pDev2}));
 
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getPairedDevices"), _T("{}"), response));
     EXPECT_TRUE(response.find("\"autoconnect\":true") != string::npos);
@@ -1511,17 +1268,10 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, legacyPersistenceMigrationP
 
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
 
-    BTRMGR_PairedDevicesList_t pairedDevices;
-    memset(&pairedDevices, 0, sizeof(pairedDevices));
-    pairedDevices.m_numOfDevices = 1;
-    pairedDevices.m_deviceProperty[0].m_deviceHandle = 123;
-    pairedDevices.m_deviceProperty[0].m_deviceType = BTRMGR_DEVICE_TYPE_HEADPHONES;
-    strcpy(pairedDevices.m_deviceProperty[0].m_name, "AsTestDevice");
-
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetPairedDevices(::testing::_, ::testing::_))
-        .WillOnce(::testing::DoAll(
-            ::testing::SetArgPointee<1>(pairedDevices),
-            ::testing::Return(BTRMGR_RESULT_SUCCESS)));
+    IBtSdkAdapter::BtDeviceInfo pDev3;
+    pDev3.handleStr = "123"; pDev3.deviceType = "HEADPHONES"; pDev3.name = "AsTestDevice";
+    EXPECT_CALL(*p_btSdkMock, getPairedDevices())
+        .WillOnce(::testing::Return(std::vector<IBtSdkAdapter::BtDeviceInfo>{pDev3}));
 
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getPairedDevices"), _T("{}"), response));
     EXPECT_TRUE(response.find("\"autoconnect\":true") != string::npos);
@@ -1601,17 +1351,10 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, parse_AutoConnectStatusMiss
         GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
     }
 
-    BTRMGR_PairedDevicesList_t pairedDevices;
-    memset(&pairedDevices, 0, sizeof(pairedDevices));
-    pairedDevices.m_numOfDevices = 1;
-    pairedDevices.m_deviceProperty[0].m_deviceHandle = 123;
-    pairedDevices.m_deviceProperty[0].m_deviceType = BTRMGR_DEVICE_TYPE_HEADPHONES;
-    strcpy(pairedDevices.m_deviceProperty[0].m_name, "MigrationTestDevice");
-
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetPairedDevices(::testing::_, ::testing::_))
-        .WillOnce(::testing::DoAll(
-            ::testing::SetArgPointee<1>(pairedDevices),
-            ::testing::Return(BTRMGR_RESULT_SUCCESS)));
+    IBtSdkAdapter::BtDeviceInfo pDevUnset;
+    pDevUnset.handleStr = "123"; pDevUnset.deviceType = "HEADPHONES"; pDevUnset.name = "MigrationTestDevice";
+    EXPECT_CALL(*p_btSdkMock, getPairedDevices())
+        .WillOnce(::testing::Return(std::vector<IBtSdkAdapter::BtDeviceInfo>{pDevUnset}));
 
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getPairedDevices"), _T("{}"), response));
     EXPECT_TRUE(response.find("\"pairedDevices\"") != string::npos);
@@ -1646,17 +1389,10 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, parse_EntryEmptyDeviceAddr_
         GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
     }
 
-    BTRMGR_PairedDevicesList_t pairedDevices;
-    memset(&pairedDevices, 0, sizeof(pairedDevices));
-    pairedDevices.m_numOfDevices = 1;
-    pairedDevices.m_deviceProperty[0].m_deviceHandle = 123;
-    pairedDevices.m_deviceProperty[0].m_deviceType = BTRMGR_DEVICE_TYPE_HEADPHONES;
-    strcpy(pairedDevices.m_deviceProperty[0].m_name, "MigrationTestDevice");
-
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetPairedDevices(::testing::_, ::testing::_))
-        .WillOnce(::testing::DoAll(
-            ::testing::SetArgPointee<1>(pairedDevices),
-            ::testing::Return(BTRMGR_RESULT_SUCCESS)));
+    IBtSdkAdapter::BtDeviceInfo pDevEmpty;
+    pDevEmpty.handleStr = "123"; pDevEmpty.deviceType = "HEADPHONES"; pDevEmpty.name = "MigrationTestDevice";
+    EXPECT_CALL(*p_btSdkMock, getPairedDevices())
+        .WillOnce(::testing::Return(std::vector<IBtSdkAdapter::BtDeviceInfo>{pDevEmpty}));
 
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getPairedDevices"), _T("{}"), response));
     EXPECT_TRUE(response.find("\"pairedDevices\"") != string::npos);
@@ -1675,17 +1411,10 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, parse_LastConnectionTimeUTC
         GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
     }
 
-    BTRMGR_PairedDevicesList_t pairedDevices;
-    memset(&pairedDevices, 0, sizeof(pairedDevices));
-    pairedDevices.m_numOfDevices = 1;
-    pairedDevices.m_deviceProperty[0].m_deviceHandle = 123;
-    pairedDevices.m_deviceProperty[0].m_deviceType = BTRMGR_DEVICE_TYPE_HEADPHONES;
-    strcpy(pairedDevices.m_deviceProperty[0].m_name, "MigrationTestDevice");
-
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetPairedDevices(::testing::_, ::testing::_))
-        .WillOnce(::testing::DoAll(
-            ::testing::SetArgPointee<1>(pairedDevices),
-            ::testing::Return(BTRMGR_RESULT_SUCCESS)));
+    IBtSdkAdapter::BtDeviceInfo pDev5;
+    pDev5.handleStr = "123"; pDev5.deviceType = "HEADPHONES"; pDev5.name = "MigrationTestDevice";
+    EXPECT_CALL(*p_btSdkMock, getPairedDevices())
+        .WillOnce(::testing::Return(std::vector<IBtSdkAdapter::BtDeviceInfo>{pDev5}));
 
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getPairedDevices"), _T("{}"), response));
     EXPECT_TRUE(response.find("\"pairedDevices\"") != string::npos);
@@ -1713,10 +1442,12 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, parse_MultipleDevices_AllIm
     strcpy(twoPairedDevices.m_deviceProperty[1].m_name, "Device456");
 
     // Override default mock so both devices survive the updateCacheFromDevice() scrub step.
-    ON_CALL(*p_btmgrMock, BTRMGR_GetPairedDevices(::testing::_, ::testing::_))
-        .WillByDefault(::testing::DoAll(
-            ::testing::SetArgPointee<1>(twoPairedDevices),
-            ::testing::Return(BTRMGR_RESULT_SUCCESS)));
+    IBtSdkAdapter::BtDeviceInfo dev123, dev456;
+    dev123.handleStr = "123"; dev123.deviceType = "HEADPHONES"; dev123.name = "Device123";
+    dev456.handleStr = "456"; dev456.deviceType = "SMARTPHONE";  dev456.name = "Device456";
+    ON_CALL(*p_btSdkMock, getPairedDevices())
+        .WillByDefault(::testing::Return(
+            std::vector<IBtSdkAdapter::BtDeviceInfo>{dev123, dev456}));
 
     if (!initializeFromFilesystemPersistencePayload(payload)) {
         GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";

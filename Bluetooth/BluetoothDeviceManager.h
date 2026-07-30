@@ -40,7 +40,7 @@ namespace WPEFramework {
     namespace Plugin {
 
         // Forward declaration to avoid circular includes.
-        class BtSdkAdapter;
+        class IBtSdkAdapter;
 
         typedef enum _AutoConnectStatus {
             AUTO_CONNECT_STATUS_DISABLED    = 0,
@@ -69,7 +69,7 @@ namespace WPEFramework {
 
                 // Inject the SDK adapter before init() is called.
                 // Required for addDevice(), updateCacheFromDevice(), and the migration path.
-                void setBtSdkAdapter(BtSdkAdapter* adapter) { _btSdkAdapter = adapter; }
+                void setBtSdkAdapter(IBtSdkAdapter* adapter) { _btSdkAdapter = adapter; }
 
                 Core::hresult setAutoConnect(const std::string& deviceID, bool enable);
                 Core::hresult getAutoConnect(const std::string& deviceID, AutoConnectStatus& status);
@@ -103,7 +103,7 @@ namespace WPEFramework {
                 std::atomic<bool> _isMigrated{false};
                 mutable Core::CriticalSection _migrationLock;
         #endif
-                BtSdkAdapter* _btSdkAdapter = nullptr;
+                IBtSdkAdapter* _btSdkAdapter = nullptr;
         };
 
     } // Plugin

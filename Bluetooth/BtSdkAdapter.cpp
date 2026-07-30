@@ -18,11 +18,85 @@
 **/
 
 #include "BtSdkAdapter.h"
+#include "DeviceRegistry.h"
 
-#include <bluetooth/Uuid.h>
-#include <UtilsLogging.h>
+// In production builds, auto-construct the real impl.  Guard prevents inclusion
+// of bluetooth-sdk headers in test builds where the SDK is not installed.
+#ifndef RDK_SERVICES_L1_TEST
+#include "BtSdkAdapterRealImpl.h"
+#endif
 
-#include <LogRedirect.h>
+#include <cassert>
+
+namespace WPEFramework {
+namespace Plugin {
+
+IBtSdkAdapter* BtSdkAdapter::impl = nullptr;
+
+void BtSdkAdapter::setImpl(IBtSdkAdapter* newImpl) {
+    // Matches the pattern used by Btmgr::setImpl in entservices-testframework.
+    assert((impl == nullptr) || (newImpl == nullptr));
+    impl = newImpl;
+}
+
+#ifndef RDK_SERVICES_L1_TEST
+static BtSdkAdapterRealImpl g_realImpl;
+#endif
+
+static IBtSdkAdapter& getImpl() {
+#ifndef RDK_SERVICES_L1_TEST
+    if (!BtSdkAdapter::impl) BtSdkAdapter::impl = &g_realImpl;
+#endif
+    assert(BtSdkAdapter::impl != nullptr);
+    return *BtSdkAdapter::impl;
+}
+
+std::string BtSdkAdapter::init(PluginHost::IShell* service,
+                                BtEventCallbacks evtCbs,
+                                BtAuthCallbacks  authCbs) {
+    return getImpl().init(service, std::move(evtCbs), std::move(authCbs));
+}
+void BtSdkAdapter::deinit() { getImpl().deinit(); }
+
+bool BtSdkAdapter::getAdapterPowered(bool& p) const  { return getImpl().getAdapterPowered(p); }
+bool BtSdkAdapter::setAdapterPowered(bool p)          { return getImpl().setAdapterPowered(p); }
+bool BtSdkAdapter::getAdapterName(std::string& n) const { return getImpl().getAdapterName(n); }
+bool BtSdkAdapter::setAdapterName(const std::string& n) { return getImpl().setAdapterName(n); }
+bool BtSdkAdapter::isAdapterDiscoverable(bool& d) const { return getImpl().isAdapterDiscoverable(d); }
+bool BtSdkAdapter::setAdapterDiscoverable(bool d, int t) { return getImpl().setAdapterDiscoverable(d, t); }
+
+bool BtSdkAdapter::startScan(const std::string& profile) { return getImpl().startScan(profile); }
+bool BtSdkAdapter::stopScan()                             { return getImpl().stopScan(); }
+
+std::vector<IBtSdkAdapter::BtDeviceInfo> BtSdkAdapter::getDiscoveredDevices() const { return getImpl().getDiscoveredDevices(); }
+std::vector<IBtSdkAdapter::BtDeviceInfo> BtSdkAdapter::getPairedDevices()     const { return getImpl().getPairedDevices(); }
+std::vector<IBtSdkAdapter::BtDeviceInfo> BtSdkAdapter::getConnectedDevices()  const { return getImpl().getConnectedDevices(); }
+
+bool BtSdkAdapter::pairDevice(const std::string& h)     { return getImpl().pairDevice(h); }
+bool BtSdkAdapter::unpairDevice(const std::string& h)   { return getImpl().unpairDevice(h); }
+bool BtSdkAdapter::connectDevice(const std::string& h)  { return getImpl().connectDevice(h); }
+bool BtSdkAdapter::disconnectDevice(const std::string& h) { return getImpl().disconnectDevice(h); }
+
+bool BtSdkAdapter::getDeviceProperties(const std::string& h,
+                                         IBtSdkAdapter::BtDeviceProperties& p) const {
+    return getImpl().getDeviceProperties(h, p);
+}
+
+std::string BtSdkAdapter::getMacForHandle(const std::string& h) const {
+    return getImpl().getMacForHandle(h);
+}
+
+void BtSdkAdapter::respondToEvent(const std::string& mac, bool accepted) {
+    getImpl().respondToEvent(mac, accepted);
+}
+
+// static — pure computation, no impl needed
+std::string BtSdkAdapter::handleForMac(const std::string& mac) {
+    return DeviceRegistry::deriveHandle(mac);
+}
+
+} // namespace Plugin
+} // namespace WPEFramework
 
 namespace WPEFramework {
 namespace Plugin {

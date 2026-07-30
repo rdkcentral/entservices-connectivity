@@ -20,12 +20,9 @@
 #pragma once
 
 #include <cstdint>
-#include <memory>
 #include <mutex>
 #include <string>
 #include <unordered_map>
-
-#include <bluetooth/Device.h>
 
 namespace WPEFramework {
 namespace Plugin {
@@ -47,17 +44,11 @@ public:
     // Derives the stable numeric handle string from a MAC address.
     static std::string deriveHandle(const std::string& mac);
 
-    // Register a device and derive its handle from mac.
-    void registerDevice(const std::string& mac, std::shared_ptr<bluetooth::Device> device);
+    // Register a device MAC address (derives and caches its handle).
+    void registerDevice(const std::string& mac);
 
     // Unregister a device by MAC address.
     void unregisterDevice(const std::string& mac);
-
-    // Look up a device by its numeric handle string. Returns nullptr if not found.
-    std::shared_ptr<bluetooth::Device> getDeviceByHandle(const std::string& handleStr) const;
-
-    // Look up a device by MAC address. Returns nullptr if not found.
-    std::shared_ptr<bluetooth::Device> getDeviceByMac(const std::string& mac) const;
 
     // Get the handle string for a MAC address. Returns "" if not registered.
     std::string getHandleForMac(const std::string& mac) const;
@@ -76,7 +67,6 @@ public:
 
 private:
     mutable std::mutex m_mutex;
-    std::unordered_map<std::string, std::shared_ptr<bluetooth::Device>> m_handleToDevice;
     std::unordered_map<std::string, std::string> m_macToHandle;
     std::unordered_map<std::string, std::string> m_handleToType;
 };

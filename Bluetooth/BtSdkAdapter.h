@@ -19,19 +19,71 @@
 
 #pragma once
 
-#include <memory>
-#include <string>
-#include <vector>
+// Thin static-impl dispatch wrapper over IBtSdkAdapter.
+//
+// Follows the same pattern as entservices-testframework's Btmgr class:
+//   - setImpl(mock) in test fixture setup → all methods dispatch to mock
+//   - Production builds auto-construct BtSdkAdapterRealImpl on first init() if impl is null
+//
+// This header has NO bluetooth-sdk dependencies so it is safe to include in
+// test builds where bluetooth-sdk is not available.
 
-#include <bluetooth/Adapter.h>
-#include <bluetooth/Device.h>
-#include <bluetooth/Manager.h>
-#include <Status.h>
+#include "IBtSdkAdapter.h"
 
-#include "AuthBridge.h"
-#include "DeviceRegistry.h"
-#include "DeviceTypeClassifier.h"
-#include "EventBridge.h"
+namespace WPEFramework {
+namespace PluginHost { class IShell; }
+namespace Plugin {
+
+class BtSdkAdapter : public IBtSdkAdapter {
+public:
+    BtSdkAdapter()  = default;
+    ~BtSdkAdapter() override = default;
+    BtSdkAdapter(const BtSdkAdapter&)            = delete;
+    BtSdkAdapter& operator=(const BtSdkAdapter&) = delete;
+
+    // Inject a mock implementation (test builds).  Pass nullptr to reset.
+    static void setImpl(IBtSdkAdapter* newImpl);
+
+    std::string init(PluginHost::IShell* service,
+                     BtEventCallbacks eventCallbacks,
+                     BtAuthCallbacks  authCallbacks);
+    void deinit();
+
+    bool getAdapterPowered(bool& powered) const;
+    bool setAdapterPowered(bool powered);
+    bool getAdapterName(std::string& name) const;
+    bool setAdapterName(const std::string& name);
+    bool isAdapterDiscoverable(bool& discoverable) const;
+    bool setAdapterDiscoverable(bool discoverable, int timeoutSeconds);
+
+    bool startScan(const std::string& profile);
+    bool stopScan();
+
+    std::vector<IBtSdkAdapter::BtDeviceInfo> getDiscoveredDevices() const;
+    std::vector<IBtSdkAdapter::BtDeviceInfo> getPairedDevices() const;
+    std::vector<IBtSdkAdapter::BtDeviceInfo> getConnectedDevices() const;
+
+    bool pairDevice(const std::string& handleStr);
+    bool unpairDevice(const std::string& handleStr);
+    bool connectDevice(const std::string& handleStr);
+    bool disconnectDevice(const std::string& handleStr);
+
+    bool getDeviceProperties(const std::string& handleStr,
+                             IBtSdkAdapter::BtDeviceProperties& props) const;
+
+    std::string getMacForHandle(const std::string& handleStr) const;
+
+    void respondToEvent(const std::string& mac, bool accepted);
+
+    // Derive the stable numeric handle string from a MAC address.
+    static std::string handleForMac(const std::string& mac);
+
+private:
+    static IBtSdkAdapter* impl;
+};
+
+} // namespace Plugin
+} // namespace WPEFramework
 
 namespace WPEFramework {
 namespace PluginHost {

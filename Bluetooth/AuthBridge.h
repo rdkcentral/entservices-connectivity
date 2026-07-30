@@ -30,6 +30,7 @@
 #include <bluetooth/Manager.h>
 #include <bluetooth/Device.h>
 
+#include "BtSdkAdapterCallbacks.h"
 #include "DeviceRegistry.h"
 #include "DeviceTypeClassifier.h"
 
@@ -55,23 +56,7 @@ class AuthBridge {
 public:
     static constexpr int AUTH_TIMEOUT_SECONDS = 30;
 
-    struct Callbacks {
-        // Emit onPairingRequest notification to clients.
-        std::function<void(const std::string& deviceId, const std::string& name,
-                           const std::string& deviceType, uint32_t vendorId,
-                           const std::string& mac, const std::string& supportedProfile,
-                           bool pinRequired, uint32_t pinValue)> onPairingRequest;
-
-        // Emit onConnectionRequest notification to clients.
-        std::function<void(const std::string& deviceId, const std::string& name,
-                           const std::string& deviceType, uint32_t vendorId,
-                           const std::string& mac, const std::string& supportedProfile)> onConnectionRequest;
-
-        // Retrieve paired state for a device handle from BluetoothDeviceManager.
-        std::function<bool(const std::string& handleStr)> isPaired;
-    };
-
-    explicit AuthBridge(DeviceRegistry& registry, Callbacks callbacks)
+    explicit AuthBridge(DeviceRegistry& registry, BtAuthCallbacks callbacks)
         : m_registry(registry)
         , m_callbacks(std::move(callbacks))
     {}
@@ -95,7 +80,7 @@ private:
     };
 
     DeviceRegistry& m_registry;
-    Callbacks m_callbacks;
+    BtAuthCallbacks m_callbacks;
 
     mutable std::mutex m_pendingMutex;
     std::unordered_map<std::string, std::shared_ptr<PendingAuth>> m_pendingAuths;

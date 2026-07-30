@@ -224,7 +224,7 @@ namespace WPEFramework
 #endif
 
             // Build EventBridge callbacks — translate SDK events to plugin notifications.
-            EventBridge::Callbacks evtCbs;
+            BtEventCallbacks evtCbs;
             evtCbs.onStatusChanged = [this](const std::string& eventId, const std::string& newStatus,
                                             const std::string& deviceId, const std::string& name,
                                             const std::string& deviceType, uint32_t rawType,
@@ -309,7 +309,7 @@ namespace WPEFramework
             };
 
             // Build AuthBridge callbacks — emit auth request notifications to clients.
-            AuthBridge::Callbacks authCbs;
+            BtAuthCallbacks authCbs;
             authCbs.onPairingRequest = [this](const std::string& deviceId, const std::string& name,
                                               const std::string& deviceType, uint32_t vendorId,
                                               const std::string& mac, const std::string& profile,
@@ -475,27 +475,15 @@ namespace WPEFramework
         JsonArray Bluetooth::getDiscoveredDevices()
         {
             JsonArray deviceArray;
-            for (const auto& device : m_btSdkAdapter.getDiscoveredDevices()) {
-                std::string mac;
-                device->address(mac);
-                std::string deviceId = BtSdkAdapter::handleForMac(mac);
-                std::string name;
-                device->name(name);
-                std::string deviceType = m_btSdkAdapter.getDeviceByHandle(deviceId)
-                    ? [&]{ bluetooth::DeviceProperties p; device->getAllProperties(p); return DeviceTypeClassifier::classify(p); }()
-                    : "UNKNOWN DEVICE";
-                bluetooth::DeviceProperties props;
-                device->getAllProperties(props);
-
+            for (const auto& info : m_btSdkAdapter.getDiscoveredDevices()) {
                 JsonObject deviceDetails;
-                deviceDetails["deviceID"]         = deviceId;
-                deviceDetails["name"]             = name;
-                deviceDetails["deviceType"]       = deviceType;
-                deviceDetails["connected"]        = (device->state() == bluetooth::DeviceState::Connected);
-                deviceDetails["paired"]           = (device->state() == bluetooth::DeviceState::Paired
-                                                  || device->state() == bluetooth::DeviceState::Connected);
-                deviceDetails["rawDeviceType"]    = std::to_string(props.classOfDevice.value_or(0));
-                deviceDetails["rawBleDeviceType"] = std::to_string(props.appearance.value_or(0));
+                deviceDetails["deviceID"]         = info.handleStr;
+                deviceDetails["name"]             = info.name;
+                deviceDetails["deviceType"]       = info.deviceType;
+                deviceDetails["connected"]        = info.connected;
+                deviceDetails["paired"]           = info.paired;
+                deviceDetails["rawDeviceType"]    = std::to_string(info.classOfDevice);
+                deviceDetails["rawBleDeviceType"] = std::to_string(info.appearance);
                 deviceArray.Add(deviceDetails);
             }
             return deviceArray;
@@ -504,37 +492,25 @@ namespace WPEFramework
         JsonArray Bluetooth::getPairedDevices()
         {
             JsonArray deviceArray;
-            for (const auto& device : m_btSdkAdapter.getPairedDevices()) {
-                std::string mac;
-                device->address(mac);
-                const std::string deviceId = BtSdkAdapter::handleForMac(mac);
-
-                bluetooth::DeviceProperties props;
-                device->getAllProperties(props);
-                std::string deviceType = DeviceTypeClassifier::classify(props);
-                std::string name;
-                device->name(name);
-
+            for (const auto& info : m_btSdkAdapter.getPairedDevices()) {
                 JsonObject deviceDetails;
-                deviceDetails["deviceID"]         = deviceId;
-                deviceDetails["name"]             = name;
-                deviceDetails["deviceType"]       = deviceType;
-                deviceDetails["connected"]        = (device->state() == bluetooth::DeviceState::Connected);
-                deviceDetails["rawDeviceType"]    = std::to_string(props.classOfDevice.value_or(0));
-                deviceDetails["rawBleDeviceType"] = std::to_string(props.appearance.value_or(0));
+                deviceDetails["deviceID"]         = info.handleStr;
+                deviceDetails["name"]             = info.name;
+                deviceDetails["deviceType"]       = info.deviceType;
+                deviceDetails["connected"]        = info.connected;
+                deviceDetails["rawDeviceType"]    = std::to_string(info.classOfDevice);
+                deviceDetails["rawBleDeviceType"] = std::to_string(info.appearance);
 
                 std::string lastConnectTimeUtc;
-                if (Core::ERROR_NONE == m_bluetoothDeviceManager.getLastConnectTimeUtc(deviceId, lastConnectTimeUtc)
+                if (Core::ERROR_NONE == m_bluetoothDeviceManager.getLastConnectTimeUtc(info.handleStr, lastConnectTimeUtc)
                     && !lastConnectTimeUtc.empty()) {
                     deviceDetails["lastConnectTimeUtc"] = lastConnectTimeUtc;
                 }
-
                 AutoConnectStatus autoConnectStatus;
-                if (Core::ERROR_NONE == m_bluetoothDeviceManager.getAutoConnect(deviceId, autoConnectStatus)
+                if (Core::ERROR_NONE == m_bluetoothDeviceManager.getAutoConnect(info.handleStr, autoConnectStatus)
                     && AUTO_CONNECT_STATUS_UNSET != autoConnectStatus) {
                     deviceDetails["autoconnect"] = (AUTO_CONNECT_STATUS_ENABLED == autoConnectStatus);
                 }
-
                 deviceArray.Add(deviceDetails);
             }
             return deviceArray;
@@ -543,37 +519,25 @@ namespace WPEFramework
         JsonArray Bluetooth::getConnectedDevices()
         {
             JsonArray deviceArray;
-            for (const auto& device : m_btSdkAdapter.getConnectedDevices()) {
-                std::string mac;
-                device->address(mac);
-                const std::string deviceId = BtSdkAdapter::handleForMac(mac);
-
-                bluetooth::DeviceProperties props;
-                device->getAllProperties(props);
-                std::string deviceType = DeviceTypeClassifier::classify(props);
-                std::string name;
-                device->name(name);
-
+            for (const auto& info : m_btSdkAdapter.getConnectedDevices()) {
                 JsonObject deviceDetails;
-                deviceDetails["deviceID"]         = deviceId;
-                deviceDetails["name"]             = name;
-                deviceDetails["deviceType"]       = deviceType;
-                deviceDetails["activeState"]      = "1"; // POWER_ACTIVE
-                deviceDetails["rawDeviceType"]    = std::to_string(props.classOfDevice.value_or(0));
-                deviceDetails["rawBleDeviceType"] = std::to_string(props.appearance.value_or(0));
+                deviceDetails["deviceID"]         = info.handleStr;
+                deviceDetails["name"]             = info.name;
+                deviceDetails["deviceType"]       = info.deviceType;
+                deviceDetails["activeState"]      = "1";
+                deviceDetails["rawDeviceType"]    = std::to_string(info.classOfDevice);
+                deviceDetails["rawBleDeviceType"] = std::to_string(info.appearance);
 
                 std::string lastConnectTimeUtc;
-                if (Core::ERROR_NONE == m_bluetoothDeviceManager.getLastConnectTimeUtc(deviceId, lastConnectTimeUtc)
+                if (Core::ERROR_NONE == m_bluetoothDeviceManager.getLastConnectTimeUtc(info.handleStr, lastConnectTimeUtc)
                     && !lastConnectTimeUtc.empty()) {
                     deviceDetails["lastConnectTimeUtc"] = lastConnectTimeUtc;
                 }
-
                 AutoConnectStatus autoConnectStatus;
-                if (Core::ERROR_NONE == m_bluetoothDeviceManager.getAutoConnect(deviceId, autoConnectStatus)
+                if (Core::ERROR_NONE == m_bluetoothDeviceManager.getAutoConnect(info.handleStr, autoConnectStatus)
                     && AUTO_CONNECT_STATUS_UNSET != autoConnectStatus) {
                     deviceDetails["autoconnect"] = (AUTO_CONNECT_STATUS_ENABLED == autoConnectStatus);
                 }
-
                 deviceArray.Add(deviceDetails);
             }
             return deviceArray;
@@ -694,14 +658,8 @@ namespace WPEFramework
 
         bool Bluetooth::setEventResponse(long long int deviceID, const string &eventType, const string &respValue)
         {
-            // Resolve the pending auth request in AuthBridge using the device MAC address.
-            // DeviceRegistry reverse-lookup: handle string → MAC.
             const string deviceIdStr = std::to_string(deviceID);
-            auto device = m_btSdkAdapter.getDeviceByHandle(deviceIdStr);
-            std::string mac;
-            if (device) {
-                device->address(mac);
-            }
+            const std::string mac = m_btSdkAdapter.getMacForHandle(deviceIdStr);
 
             bool accepted = Utils::String::equal(respValue, "ACCEPTED");
 
@@ -724,44 +682,29 @@ namespace WPEFramework
             JsonObject deviceDetails;
             const string deviceIdStr = std::to_string(deviceID);
 
-            bluetooth::DeviceProperties props;
+            IBtSdkAdapter::BtDeviceProperties props;
             if (!m_btSdkAdapter.getDeviceProperties(deviceIdStr, props)) {
                 LOGERR("Failed to get device details for deviceID=%lld", deviceID);
                 return deviceDetails;
             }
 
-            std::string mac, name;
-            if (props.address.has_value()) mac  = props.address.value();
-            if (props.name.has_value())    name = props.name.value();
-
-            auto device = m_btSdkAdapter.getDeviceByHandle(deviceIdStr);
-
             deviceDetails["deviceID"]         = deviceIdStr;
-            deviceDetails["name"]             = name;
-            deviceDetails["deviceType"]       = DeviceTypeClassifier::classify(props);
-            deviceDetails["manufacturer"]     = std::to_string(
-                props.manufacturerData.has_value() && !props.manufacturerData.value().empty()
-                    ? props.manufacturerData.value().begin()->first : 0);
-            deviceDetails["MAC"]              = mac;
-            deviceDetails["signalStrength"]   = "0";
-            if (props.rssi.has_value()) {
-                deviceDetails["signalStrength"] = std::to_string(props.rssi.value());
-                deviceDetails["rssi"]           = std::to_string(props.rssi.value());
-            }
-            deviceDetails["batteryLevel"]     = std::to_string(
-                props.batteryLevel.has_value() ? props.batteryLevel.value() : 0);
-            deviceDetails["modalias"]         = props.modalias.value_or("");
+            deviceDetails["name"]             = props.name;
+            deviceDetails["deviceType"]       = props.deviceType;
+            deviceDetails["manufacturer"]     = std::to_string(props.vendorId);
+            deviceDetails["MAC"]              = props.mac;
+            deviceDetails["signalStrength"]   = std::to_string(props.signalLevel);
+            deviceDetails["rssi"]             = std::to_string(props.rssi);
+            deviceDetails["batteryLevel"]     = std::to_string(props.batteryLevel);
+            deviceDetails["modalias"]         = props.modalias;
             deviceDetails["firmwareRevision"] = "";
-            deviceDetails["supportedProfile"] = "";
 
-            if (props.uuids.has_value()) {
-                std::string profileInfo;
-                for (const auto& uuid : props.uuids.value()) {
-                    if (!profileInfo.empty()) profileInfo += ";";
-                    profileInfo += uuid;
-                }
-                deviceDetails["supportedProfile"] = profileInfo;
+            std::string profileInfo;
+            for (const auto& uuid : props.uuids) {
+                if (!profileInfo.empty()) profileInfo += ";";
+                profileInfo += uuid;
             }
+            deviceDetails["supportedProfile"] = profileInfo;
 
             return deviceDetails;
         }

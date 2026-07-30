@@ -33,11 +33,20 @@ set(BLUETOOTH_PLUGIN_SOURCES
         BluetoothDeviceManager.cpp
         BtSdkAdapter.cpp
         DeviceRegistry.cpp
+        Module.cpp
+)
+
+# SDK-dependent files are excluded from L1 test builds (no bluetooth-sdk available).
+# BtSdkAdapter.cpp (dispatch) compiles in all builds; BtSdkAdapterRealImpl and the
+# bridge classes require the SDK and are production-only.
+if (NOT RDK_SERVICES_L1_TEST)
+    list(APPEND BLUETOOTH_PLUGIN_SOURCES
+        BtSdkAdapterRealImpl.cpp
         DeviceTypeClassifier.cpp
         EventBridge.cpp
         AuthBridge.cpp
-        Module.cpp
-)
+    )
+endif()
 
 if (BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION)
     list(APPEND BLUETOOTH_PLUGIN_SOURCES BluetoothPersistenceAdapter.cpp)
@@ -93,6 +102,8 @@ endif()
 
 if (NOT RDK_SERVICES_L1_TEST)
     target_compile_options(${MODULE_NAME} PRIVATE -Wno-error=deprecated)
+else()
+    target_compile_definitions(${MODULE_NAME} PRIVATE RDK_SERVICES_L1_TEST=1)
 endif ()
 
 install(TARGETS ${MODULE_NAME}

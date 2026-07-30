@@ -27,6 +27,7 @@
 #include <bluetooth/Adapter.h>
 #include <bluetooth/Device.h>
 
+#include "BtSdkAdapterCallbacks.h"
 #include "DeviceRegistry.h"
 #include "DeviceTypeClassifier.h"
 
@@ -41,41 +42,7 @@ namespace Plugin {
  */
 class EventBridge {
 public:
-    struct Callbacks {
-        // Emits onStatusChanged
-        std::function<void(const std::string& eventId, const std::string& newStatus,
-                           const std::string& deviceId, const std::string& name,
-                           const std::string& deviceType, uint32_t rawDeviceType,
-                           uint16_t rawBleDeviceType, bool paired, bool connected,
-                           bool lastConnectedState, bool hasAutoConnect, bool autoConnect)> onStatusChanged;
-
-        // Emits onDiscoveredDevice
-        std::function<void(const std::string& deviceId, const std::string& name,
-                           const std::string& deviceType, uint32_t rawDeviceType,
-                           uint16_t rawBleDeviceType, bool paired,
-                           bool lastConnectedState, const std::string& discoveryType)> onDiscoveredDevice;
-
-        // Emits onDeviceFound
-        std::function<void(const std::string& deviceId, const std::string& name,
-                           const std::string& deviceType, uint32_t rawDeviceType,
-                           uint16_t rawBleDeviceType, bool lastConnectedState)> onDeviceFound;
-
-        // Emits onDeviceLost
-        std::function<void(const std::string& deviceId, const std::string& name,
-                           const std::string& deviceType, uint32_t rawDeviceType,
-                           uint16_t rawBleDeviceType, bool lastConnectedState)> onDeviceLost;
-
-        // Emits onRequestFailed (for pair/connect sync failures)
-        std::function<void(const std::string& newStatus, const std::string& deviceId,
-                           const std::string& name, const std::string& deviceType,
-                           uint32_t rawDeviceType, uint16_t rawBleDeviceType,
-                           bool paired, bool connected)> onRequestFailed;
-
-        // Retrieve autoconnect status from BluetoothDeviceManager (optional lookup)
-        std::function<bool(const std::string& handleStr, bool& autoConnect)> getAutoConnect;
-    };
-
-    explicit EventBridge(DeviceRegistry& registry, Callbacks callbacks)
+    explicit EventBridge(DeviceRegistry& registry, BtEventCallbacks callbacks)
         : m_registry(registry)
         , m_callbacks(std::move(callbacks))
     {}
@@ -92,7 +59,7 @@ private:
                                  bool paired, bool connected);
 
     DeviceRegistry& m_registry;
-    Callbacks m_callbacks;
+    BtEventCallbacks m_callbacks;
 };
 
 } // namespace Plugin

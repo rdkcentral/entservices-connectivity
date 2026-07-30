@@ -333,13 +333,60 @@ The bluetooth-sdk uses sdbus-c++ which requires a D-Bus event dispatch loop.
 
 ## Impact on L1 Tests
 
-- Remove dependency on `entservices-testframework/Tests/mocks/btmgr.h`.
-- Add a `BtSdkMock` that implements the bluetooth-sdk public interfaces using GoogleMock.
-- All existing L1 test scenarios remain; event injection changes from `BTRMGR_EventMessage_t` structs to SDK event emission via mock.
-- AuthBridge scenarios: auto-accept for paired audio/HID devices; escalate-to-client for smartphones/LE; timeout auto-reject; playback-accept triggers audio start.
-- AuthBridge threading: verify D-Bus event loop is not blocked during client-escalation wait.
-- DeviceTypeClassifier: unit tests covering all CoD/Appearance/UUID paths.
-- DeviceRegistry: unit tests for handle derivation stability and bidirectional lookup.
+### Mock Infrastructure Pattern
+
+The testframework uses a **static-impl dispatch pattern** for all external library mocks. The BTMgr mock demonstrates the pattern:
+
+```
+btmgr.h (testframework)   BtmgrImpl (pure virtual) + Btmgr (dispatch wrapper with setImpl())
+btmgr.cpp (testframework)  dispatch implementations; setImpl() validates single-assignment
+btmgrMock.h               BtmgrImplMock : BtmgrImpl with MOCK_METHOD for each function
+```
+
+In test builds, the include path ensures testframework's `btmgr.h` is resolved before the real BTMgr header. Tests call `Btmgr::setImpl(p_btmgrMock)` in fixture setup and `Btmgr::setImpl(nullptr)` in teardown. `BTRMGR_RegisterEventCallback` is also a `MOCK_METHOD` — tests can capture the registered callback and invoke it directly to inject events.
+
+**The equivalent for `BtSdkAdapter` uses the same pattern.** Three testframework files are needed:
+
+```
+BtSdkAdapter.h (testframework)  IBtSdkAdapter (pure virtual) + BtSdkAdapter (dispatch wrapper)
+BtSdkAdapter.cpp (testframework) dispatch implementations; no bluetooth-sdk dependency
+BtSdkAdapterMock.h              BtSdkAdapterImplMock : IBtSdkAdapter with MOCK_METHODs
+                                 + event injection helpers (fireAdapterEvent, fireDeviceEvent)
+```
+
+In test builds, testframework's `BtSdkAdapter.h` shadows the plugin's `BtSdkAdapter.h` via include path ordering. `Bluetooth.h` still holds `BtSdkAdapter m_btSdkAdapter` as a value member — no change.
+
+**Production build:** `BtSdkAdapter.h/.cpp` in plugin provide the thin dispatch wrapper; `BtSdkAdapterRealImpl.cpp` provides the implementation that wraps `bluetooth::Manager/Adapter/Device` and links `bluetooth-sdk`.
+
+**Test build:** `BtSdkAdapter.h/.cpp` from testframework replace the plugin's header/dispatcher; `BtSdkAdapterRealImpl.cpp` is NOT compiled; `TestMocklib` provides the dispatch stub.
+
+### Event Injection (New Capability vs BTMgr)
+
+With BTMgr, tests injected events by capturing `BTRMGR_RegisterEventCallback` and invoking the callback directly with a crafted `BTRMGR_EventMessage_t`. The SDK refactor improves on this:
+
+`BtSdkAdapterImplMock` captures the EventBridge callbacks during its `init()` implementation and exposes `fireAdapterEvent()`/`fireDeviceEvent()` helpers. Tests call these to simulate SDK events flowing into the plugin:
+
+```cpp
+// Test fires a Connected event for a paired device
+AdapterEventData data;
+data.device = nullptr;  // adapter-level event
+p_btSdkMock->fireAdapterEvent(AdapterEvent::DiscoveryStarted, data);
+// → verify onStatusChanged(DISCOVERY_STARTED) notification was emitted
+```
+
+### File Locations
+
+| File | Repo | Purpose |
+|---|---|---|
+| `IBtSdkAdapter` interface definition | `entservices-testframework/Tests/mocks/BtSdkAdapter.h` | Pure virtual interface; shadows plugin `BtSdkAdapter.h` in test builds |
+| `BtSdkAdapter` dispatch stub | `entservices-testframework/Tests/mocks/BtSdkAdapter.cpp` | Added to `TestMocklib` sources |
+| `BtSdkAdapterImplMock` | `entservices-testframework/Tests/mocks/BtSdkAdapterMock.h` | GoogleMock with event injection |
+| `BtSdkAdapter` real dispatch + auto-construction | `entservices-connectivity/Bluetooth/BtSdkAdapter.h/.cpp` | Production dispatch (auto-constructs `BtSdkAdapterRealImpl` if impl is null) |
+| `BtSdkAdapterRealImpl` | `entservices-connectivity/Bluetooth/BtSdkAdapterRealImpl.cpp` | Wraps `bluetooth::Manager/Adapter/Device`; linked only in production builds |
+
+- `DeviceRegistry`, `DeviceTypeClassifier` unit tests: standalone, no mock needed
+- `EventBridge`, `AuthBridge` tests: use `BtSdkAdapterImplMock` event injection
+- `BluetoothDeviceManager` tests: use mock adapter via `getDeviceByHandle()` mock
 
 ---
 

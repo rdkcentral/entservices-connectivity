@@ -42,19 +42,142 @@ Remaining:
 - Map media SDK events (track started/paused/stopped/changed/position, device media status) in EventBridge
 - Depends on: INV-4, T-4
 
-### T-9: L1 test updates
-- Remove `btmgr.h` mock dependency from test CMakeLists
-- Create `BtSdkMock` implementing bluetooth-sdk public interfaces via GoogleMock
-- Update all existing L1 test scenarios to inject events via `BtSdkMock` instead of `BTRMGR_EventMessage_t`
-- Add L1 test scenarios for:
-  - DeviceRegistry handle derivation stability
-  - DeviceTypeClassifier all classification paths
-  - AuthBridge: emit notification, client responds, verify accept/reject
-  - AuthBridge: timeout path → auto-reject
-  - EventBridge: adapter power on/off notifications
-  - EventBridge: DiscoveryStopped → DISCOVERY_COMPLETED notification
-  - Profile string → ScanFilter mapping for all profile types
-- Depends on: T-1 through T-6
+### ~~T-9a: Refactor BtSdkAdapter to static-impl dispatch pattern~~ ✓ DONE\n### ~~T-9b: Add mock files to entservices-testframework~~ ✓ DONE\n### ~~T-9c: Update test_Bluetooth.cpp~~ ✓ DONE\n\nNew files: `IBtSdkAdapter.h`, `BtSdkAdapterCallbacks.h`, `BtSdkAdapterRealImpl.h/.cpp`,\n`Tests/mocks/BtSdkAdapterMock.h`. `BtSdkAdapter` now implements `IBtSdkAdapter` via static-impl dispatch.
+
+Restructure `BtSdkAdapter` in the plugin to follow the same static-impl dispatch pattern used
+by the existing `Btmgr` mock infrastructure, so testframework can shadow it with a mock.
+
+Changes in `entservices-connectivity/Bluetooth/`:
+- Extract `IBtSdkAdapter` pure virtual interface from `BtSdkAdapter.h` (covers all public methods
+  currently on `BtSdkAdapter`: `init`, `deinit`, `startScan`, `stopScan`, `getAdapterPowered`,
+  `setAdapterPowered`, `getAdapterName`, `setAdapterName`, `isAdapterDiscoverable`,
+  `setAdapterDiscoverable`, `getPairedDevices`, `getConnectedDevices`, `getDiscoveredDevices`,
+  `pairDevice`, `unpairDevice`, `connectDevice`, `disconnectDevice`, `getDeviceProperties`,
+  `getDeviceByHandle`, `respondToEvent`)
+- Rename current `BtSdkAdapter` class to `BtSdkAdapterRealImpl : public IBtSdkAdapter`
+  in a new `BtSdkAdapterRealImpl.cpp` (keeps all `bluetooth::Manager/Adapter/Device` usage)
+- `BtSdkAdapter.h` (kept in plugin) becomes the thin dispatch wrapper:
+  ```
+  class BtSdkAdapter {
+      static IBtSdkAdapter* impl;
+      static void setImpl(IBtSdkAdapter* newImpl);
+      // thin dispatch methods delegating to impl->X()
+      std::string init(...); bool startScan(...); etc.
+      static std::string handleForMac(const std::string& mac); // kept static, no impl needed
+  };
+  ```
+- `BtSdkAdapter.cpp` (kept in plugin) becomes the dispatch implementation + default
+  construction: on first call to `init()` if `impl == nullptr`, constructs and assigns
+  `BtSdkAdapterRealImpl` automatically (so production code path is unchanged)
+- `Bluetooth.h` holds `BtSdkAdapter m_btSdkAdapter` unchanged (value member, no pointer change)
+- In test builds, testframework provides its own `BtSdkAdapter.h` (mock version) via
+  include path ordering, shadowing the plugin's version (same mechanism as `btmgr.h`)
+
+Depends on: (none — standalone production change)
+
+### T-9b: Add mock files to entservices-testframework
+
+Add three files to `entservices-testframework/Tests/mocks/`:
+
+**`BtSdkAdapter.h`** (mock version — shadows plugin's `BtSdkAdapter.h` in test builds):
+- Defines `IBtSdkAdapter` pure virtual interface (same definition as plugin)
+- Defines `BtSdkAdapter` thin dispatch class with `static IBtSdkAdapter* impl` and `setImpl()`
+- Does NOT include any bluetooth-sdk headers
+
+**`BtSdkAdapter.cpp`** (dispatch + setImpl — replaces real impl in test builds):
+- Implements `BtSdkAdapter::setImpl()` and all dispatch methods
+- Does NOT construct `BtSdkAdapterRealImpl` (no SDK in test build)
+
+**`BtSdkAdapterMock.h`** (GoogleMock implementation):
+```cpp
+class BtSdkAdapterImplMock : public IBtSdkAdapter {
+public:
+    MOCK_METHOD(std::string, init, (...), (override));
+    MOCK_METHOD(bool, startScan, (const std::string&), (override));
+    MOCK_METHOD(bool, stopScan, (), (override));
+    MOCK_METHOD(bool, getAdapterPowered, (bool&), (const, override));
+    MOCK_METHOD(bool, setAdapterPowered, (bool), (override));
+    // ... all methods from IBtSdkAdapter
+
+    // Event injection helpers (no equivalent in BTMgr mock — new capability):
+    std::function<void(AdapterEvent, AdapterEventData)> m_adapterEventCb;
+    std::function<void(DeviceEvent, std::shared_ptr<bluetooth::Device>)> m_deviceEventCb;
+
+    // Called by tests to simulate SDK events reaching the plugin:
+    void fireAdapterEvent(AdapterEvent e, AdapterEventData d) {
+        if (m_adapterEventCb) m_adapterEventCb(e, d);
+    }
+    void fireDeviceEvent(DeviceEvent e, std::shared_ptr<bluetooth::Device> dev) {
+        if (m_deviceEventCb) m_deviceEventCb(e, dev);
+    }
+};
+```
+
+Add `BtSdkAdapter.cpp` to `TestMocklib` sources in testframework `CMakeLists.txt`.
+
+Depends on: T-9a
+
+### T-9c: Update test_Bluetooth.cpp
+
+**Fixture changes:**
+- Remove `BtmgrImplMock* p_btmgrMock` and all `Btmgr::setImpl()` / cleanup
+- Remove `IarmBusImplMock* p_iarmBusImplMock` and all `IarmBus::setImpl()` / cleanup
+- Remove `#include "btmgrMock.h"` and `#include "IarmBusMock.h"`
+- Add `BtSdkAdapterImplMock* p_btSdkMock = new NiceMock<BtSdkAdapterImplMock>`
+- Add `BtSdkAdapter::setImpl(p_btSdkMock)` in ctor; `BtSdkAdapter::setImpl(nullptr)` + `delete` in dtor
+- Default `ON_CALL` on `init()` returns `""` (success)
+
+**Port existing tests** (1-for-1 coverage of all current test scenarios):
+- `startScan_*` → `EXPECT_CALL(*p_btSdkMock, startScan(profile))` instead of `BTRMGR_StartDeviceDiscovery`
+- `stopScan_*` → `EXPECT_CALL(*p_btSdkMock, stopScan())`
+- `isDiscoverable_*` → `EXPECT_CALL(*p_btSdkMock, isAdapterDiscoverable(::testing::_))`
+- `connect_*` → `EXPECT_CALL(*p_btSdkMock, connectDevice(handleStr))`
+- `pair_*` → `EXPECT_CALL(*p_btSdkMock, pairDevice(handleStr))`
+- `getDiscoveredDevices_*` → `EXPECT_CALL(*p_btSdkMock, getDiscoveredDevices())`
+- `getPairedDevices_*` → `EXPECT_CALL(*p_btSdkMock, getPairedDevices())`
+- `getConnectedDevices_*` → `EXPECT_CALL(*p_btSdkMock, getConnectedDevices())`
+- etc. for all remaining methods
+
+**New test scenarios** (capabilities not in current tests):
+
+*DeviceRegistry unit tests:*
+- Handle derivation: `"AA:BB:CC:DD:EE:FF"` → `"187723572702975"` (decimal of `0xAABBCCDDEEFF`)
+- Round-trip: register → lookup by handle → lookup by MAC → unregister → nullptr
+- Type cache: set/get/overwrite
+
+*DeviceTypeClassifier unit tests:*
+- BLE appearance `0x03c0` → `"HUMAN INTERFACE DEVICE"`
+- BLE appearance `0x0040` → `"SMARTPHONE"`
+- BLE appearance `0x0200` → `"LE TILE"`
+- CoD Audio/Video minor 0x06 → `"HEADPHONES"`
+- CoD Audio/Video minor 0x05 → `"LOUDSPEAKER"`
+- CoD Audio/Video minor 0x07 (PortableAudio) → `"LOUDSPEAKER"` ← collapsed, not "PORTABLE AUDIO"
+- CoD Audio/Video minor 0x0b (HiFi) → `"LOUDSPEAKER"` ← collapsed
+- CoD Peripheral → `"HUMAN INTERFACE DEVICE"`
+- UUID fallback: AudioSink → `"HEADPHONES"`, AudioSource → `"SMARTPHONE"`
+
+*EventBridge tests (via event injection):*
+- `DiscoveryStarted` event → `onStatusChanged(DISCOVERY_STARTED)` notification emitted
+- `DiscoveryStopped` event → `onStatusChanged(DISCOVERY_COMPLETED)` notification emitted
+- `PoweredOn` event → `onStatusChanged(HARDWARE_AVAILABLE)` notification emitted
+- `DeviceEvent::Paired` → `onStatusChanged(PAIRING_CHANGE, paired=true)`
+- `DeviceEvent::Connected` → `onStatusChanged(CONNECTION_CHANGE, connected=true)`
+- `DeviceEvent::Disconnected` → `onStatusChanged(CONNECTION_CHANGE, connected=false)`
+
+*AuthBridge tests:*
+- `onConnectionRequest` for paired HEADPHONES device → no notification, auto-accepted
+- `onConnectionRequest` for paired HID device → no notification, auto-accepted
+- `onConnectionRequest` for SMARTPHONE → `onConnectionRequest` notification emitted
+- Client calls `respondToEvent(ACCEPTED)` → auth resolves true
+- Client calls `respondToEvent(REJECTED)` → auth resolves false
+- No client response within timeout → auto-rejects
+
+Update `entservices-connectivity/Tests/L1Tests/CMakeLists.txt`:
+- Remove `btmgr`-related includes and links
+- Add `bluetooth-sdk` stub includes if needed for `IBtSdkAdapter` types
+- No link change to `TestMocklib` needed (BTMgr dispatch is just removed)
+
+Depends on: T-9a, T-9b
 
 ---
 

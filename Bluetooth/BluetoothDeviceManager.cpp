@@ -25,6 +25,7 @@
 
 #include "BluetoothDeviceManager.h"
 #include "BtSdkAdapter.h"
+#include "IBtSdkAdapter.h"
 #include "DeviceRegistry.h"
 #include "DeviceTypeClassifier.h"
 
@@ -70,11 +71,9 @@ namespace WPEFramework {
 
             std::unordered_map<std::string, std::string> addrToDeviceId;
             addrToDeviceId.reserve(sdkPairedDevices.size());
-            for (const auto& device : sdkPairedDevices) {
-                std::string mac;
-                device->address(mac);
-                if (!mac.empty()) {
-                    addrToDeviceId[mac] = DeviceRegistry::deriveHandle(mac);
+            for (const auto& info : sdkPairedDevices) {
+                if (!info.mac.empty()) {
+                    addrToDeviceId[info.mac] = info.handleStr;
                 }
             }
 
@@ -362,18 +361,11 @@ namespace WPEFramework {
 
             _adminLock.Lock();
 
-            for (const auto& device : sdkPairedDevices) {
-                std::string mac;
-                device->address(mac);
-                if (mac.empty()) continue;
-
-                string deviceId = DeviceRegistry::deriveHandle(mac);
-
-                bluetooth::DeviceProperties props;
-                device->getAllProperties(props);
-                string deviceType = DeviceTypeClassifier::classify(props);
-                string name;
-                device->name(name);
+            for (const auto& info : sdkPairedDevices) {
+                string deviceId   = info.handleStr;
+                string deviceType = info.deviceType;
+                string deviceAddr = info.mac;
+                string name       = info.name;
                 if (name.empty()) name = deviceId;
 
                 if (_pairedDeviceCache.find(deviceId) != _pairedDeviceCache.end()) {
@@ -383,8 +375,8 @@ namespace WPEFramework {
                         LOGINFO("Backfilled friendlyName for deviceID=%s\n", deviceId.c_str());
                     }
                     if (existing.deviceAddr.empty()) {
-                        existing.deviceAddr = mac;
-                        LOGINFO("Backfilled deviceAddr for deviceID=%s: %s\n", deviceId.c_str(), mac.c_str());
+                        existing.deviceAddr = deviceAddr;
+                        LOGINFO("Backfilled deviceAddr for deviceID=%s: %s\n", deviceId.c_str(), deviceAddr.c_str());
                     }
                     if (existing.deviceType.empty() || existing.deviceType == "UNKNOWN") {
                         existing.deviceType = deviceType;
@@ -393,7 +385,7 @@ namespace WPEFramework {
                 } else if (!backfillOnly) {
                     LOGINFO("Adding device to cache: deviceID=%s, deviceType=%s\n", deviceId.c_str(), deviceType.c_str());
                     BluetoothDeviceInfo deviceInfo;
-                    deviceInfo.deviceAddr   = mac;
+                    deviceInfo.deviceAddr   = deviceAddr;
                     deviceInfo.deviceType   = std::move(deviceType);
                     deviceInfo.friendlyName = std::move(name);
                     _pairedDeviceCache[deviceId] = std::move(deviceInfo);
@@ -405,10 +397,8 @@ namespace WPEFramework {
             if (!backfillOnly) {
                 std::unordered_set<std::string> pairedDeviceIds;
                 pairedDeviceIds.reserve(sdkPairedDevices.size());
-                for (const auto& device : sdkPairedDevices) {
-                    std::string mac;
-                    device->address(mac);
-                    if (!mac.empty()) pairedDeviceIds.emplace(DeviceRegistry::deriveHandle(mac));
+                for (const auto& info : sdkPairedDevices) {
+                    if (!info.handleStr.empty()) pairedDeviceIds.emplace(info.handleStr);
                 }
 
                 std::vector<std::string> deviceIdsToRemove;
@@ -748,27 +738,18 @@ namespace WPEFramework {
                 return Core::ERROR_GENERAL;
             }
 
-            auto device = _btSdkAdapter->getDeviceByHandle(deviceID);
-            if (!device) {
+            IBtSdkAdapter::BtDeviceProperties props;
+            if (!_btSdkAdapter->getDeviceProperties(deviceID, props)) {
                 LOGERR("Device not found for deviceID: %s", deviceID.c_str());
                 return Core::ERROR_NOT_EXIST;
             }
 
-            bluetooth::DeviceProperties props;
-            device->getAllProperties(props);
-
-            std::string mac;
-            device->address(mac);
-            std::string name;
-            device->name(name);
-            if (name.empty()) name = deviceID;
-
             _adminLock.Lock();
 
             BluetoothDeviceInfo deviceInfo;
-            deviceInfo.deviceAddr   = mac;
-            deviceInfo.deviceType   = DeviceTypeClassifier::classify(props);
-            deviceInfo.friendlyName = std::move(name);
+            deviceInfo.deviceAddr   = props.mac;
+            deviceInfo.deviceType   = props.deviceType;
+            deviceInfo.friendlyName = props.name.empty() ? deviceID : props.name;
             _pairedDeviceCache[deviceID] = std::move(deviceInfo);
 
             _adminLock.Unlock();
