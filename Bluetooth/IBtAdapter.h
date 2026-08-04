@@ -26,15 +26,15 @@
 #include <string>
 #include <vector>
 
-#include "BtSdkAdapterCallbacks.h"
+#include "BtAdapterCallbacks.h"
 
 namespace WPEFramework {
 namespace PluginHost { class IShell; }
 namespace Plugin {
 
-class IBtSdkAdapter {
+class IBtAdapter {
 public:
-    virtual ~IBtSdkAdapter() = default;
+    virtual ~IBtAdapter() = default;
 
     virtual std::string init(PluginHost::IShell* service,
                              BtEventCallbacks eventCallbacks,
@@ -97,6 +97,31 @@ public:
     virtual std::string getMacForHandle(const std::string& handleStr) const = 0;
 
     virtual void respondToEvent(const std::string& mac, bool accepted) = 0;
+
+    // ── Audio operations ──────────────────────────────────────────────────────
+    // deviceID is vestigial in setAudioStream (adapter-level op, not device-level).
+
+    struct BtMediaTrackInfo {
+        std::string album, genre, title, artist;
+        uint32_t    duration{0}, trackNumber{0}, numberOfTracks{0};
+    };
+
+    struct BtDeviceVolumeMute {
+        uint8_t volume{0};
+        bool    mute{false};
+        bool    valid{false};   // false on backend failure
+    };
+
+    virtual bool               setAudioStream(long long int deviceID,
+                                               const std::string& streamName) = 0;
+    virtual bool               setAudioControlCommand(long long int deviceID,
+                                                       const std::string& cmd) = 0;
+    virtual bool               setDeviceVolumeMute(long long int deviceID,
+                                                    const std::string& profile,
+                                                    uint8_t volume, bool mute) = 0;
+    virtual BtDeviceVolumeMute getDeviceVolumeMute(long long int deviceID,
+                                                   const std::string& profile) const = 0;
+    virtual BtMediaTrackInfo   getMediaTrackInfo(long long int deviceID) const = 0;
 };
 
 } // namespace Plugin

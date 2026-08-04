@@ -102,7 +102,7 @@ macro(add_plugin_test plugin_name test_files)
 endmacro()
 
 # PLUGIN_BLUETOOTH
-# Include path lists plugin Bluetooth/ dir first so IBtSdkAdapter.h, BtSdkAdapter.h
+# Include path lists plugin Bluetooth/ dir first so IBtAdapter.h, BtAdapter.h
 # etc. resolve from the plugin source. SDK-dependent files are excluded at build
 # time via RDK_SERVICES_L1_TEST in the plugin CMakeLists.
 set (BLUETOOTH_INC
@@ -123,7 +123,7 @@ if (BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION)
         APPEND PROPERTY COMPILE_DEFINITIONS BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION=1)
 endif ()
 
-# Signal to BtSdkAdapter.cpp (dispatch) that real SDK impl is not available.
+# Signal to BtAdapter.cpp (dispatch) that real SDK impl is not available.
 set_property(SOURCE tests/test_Bluetooth.cpp
     APPEND PROPERTY COMPILE_DEFINITIONS RDK_SERVICES_L1_TEST=1)
 

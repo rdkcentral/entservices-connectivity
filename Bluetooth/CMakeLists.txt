@@ -31,21 +31,38 @@ find_package(${NAMESPACE}Helpers REQUIRED)
 set(BLUETOOTH_PLUGIN_SOURCES
         Bluetooth.cpp
         BluetoothDeviceManager.cpp
-        BtSdkAdapter.cpp
-        DeviceRegistry.cpp
+        BtAdapter.cpp
         Module.cpp
 )
 
-# SDK-dependent files are excluded from L1 test builds (no bluetooth-sdk available).
-# BtSdkAdapter.cpp (dispatch) compiles in all builds; BtSdkAdapterRealImpl and the
-# bridge classes require the SDK and are production-only.
+# Probe for both backends. SDK takes priority; BTMgr is the fallback.
+# L1 test builds skip both backend probes (mock injected via BtAdapter::setImpl).
 if (NOT RDK_SERVICES_L1_TEST)
-    list(APPEND BLUETOOTH_PLUGIN_SOURCES
-        BtSdkAdapterRealImpl.cpp
-        DeviceTypeClassifier.cpp
-        EventBridge.cpp
-        AuthBridge.cpp
-    )
+    find_package(BluetoothSDK QUIET)
+    if (NOT BluetoothSDK_FOUND)
+        find_package(bluetooth-sdk QUIET)
+        if (bluetooth-sdk_FOUND)
+            set(BluetoothSDK_FOUND TRUE)
+        endif()
+    endif()
+
+    find_package(BTMGR QUIET)
+
+    if (BluetoothSDK_FOUND)
+        message(STATUS "Bluetooth plugin: using bluetooth-sdk backend")
+        list(APPEND BLUETOOTH_PLUGIN_SOURCES
+            BtSdkAdapterImpl.cpp
+            DeviceRegistry.cpp
+            DeviceTypeClassifier.cpp
+            EventBridge.cpp
+            AuthBridge.cpp
+        )
+    elseif (BTMGR_FOUND)
+        message(STATUS "Bluetooth plugin: using BTMgr fallback backend")
+        list(APPEND BLUETOOTH_PLUGIN_SOURCES BtMgrAdapterImpl.cpp)
+    else()
+        message(FATAL_ERROR "Bluetooth plugin: neither BluetoothSDK nor BTMGR found")
+    endif()
 endif()
 
 if (BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION)
@@ -74,26 +91,32 @@ if (RDK_SERVICE_L2_TEST)
     endif (TESTMOCKLIB_LIBRARIES)
 endif (RDK_SERVICE_L2_TEST)
 
-find_package(BluetoothSDK QUIET)
-if(BluetoothSDK_FOUND)
-    message("Found bluetooth-sdk")
-    target_include_directories(${MODULE_NAME} PRIVATE ${BLUETOOTHSDK_INCLUDE_DIRS})
-    target_link_libraries(${MODULE_NAME} PRIVATE ${BLUETOOTHSDK_LIBRARIES})
-else()
-    # Fallback: try pkg-config or direct target name used by bluetooth-sdk CMake install.
-    find_package(bluetooth-sdk QUIET)
-    if(bluetooth-sdk_FOUND)
-        target_link_libraries(${MODULE_NAME} PRIVATE bluetooth-sdk::bluetooth-sdk)
-    else()
-        message(WARNING "bluetooth-sdk not found via find_package; link target must be set manually")
+# Per-backend link and include configuration.
+if (NOT RDK_SERVICES_L1_TEST)
+    if (BluetoothSDK_FOUND)
+        target_compile_definitions(${MODULE_NAME} PRIVATE BLUETOOTH_USE_SDK=1)
+        if (BLUETOOTHSDK_INCLUDE_DIRS)
+            target_include_directories(${MODULE_NAME} PRIVATE ${BLUETOOTHSDK_INCLUDE_DIRS})
+        endif()
+        if (BLUETOOTHSDK_LIBRARIES)
+            target_link_libraries(${MODULE_NAME} PRIVATE ${BLUETOOTHSDK_LIBRARIES})
+        elseif (bluetooth-sdk_FOUND)
+            target_link_libraries(${MODULE_NAME} PRIVATE bluetooth-sdk::bluetooth-sdk)
+        endif()
+    elseif (BTMGR_FOUND)
+        target_include_directories(${MODULE_NAME} PRIVATE ${BTMGR_INCLUDE_DIRS})
+        target_link_libraries(${MODULE_NAME} PRIVATE ${BTMGR_LIBRARIES})
     endif()
 endif()
 
-find_package(IARMBus)
-target_include_directories(${MODULE_NAME} PRIVATE ${IARMBUS_INCLUDE_DIRS})
+find_package(IARMBus QUIET)
+if (IARMBUS_FOUND OR IARMBus_FOUND)
+    target_include_directories(${MODULE_NAME} PRIVATE ${IARMBUS_INCLUDE_DIRS})
+    target_link_libraries(${MODULE_NAME} PRIVATE ${IARMBUS_LIBRARIES})
+endif()
+
 target_link_libraries(${MODULE_NAME} PRIVATE
         ${NAMESPACE}Plugins::${NAMESPACE}Plugins
-        ${IARMBUS_LIBRARIES}
         ${NAMESPACE}::${NAMESPACE}Helpers)
 
 if(BLUETOOTH_AUDIO_SUPPORT)

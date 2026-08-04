@@ -10,45 +10,67 @@
 │  │  Bluetooth (JSON-RPC surface — UNCHANGED)                  │      │
 │  │  All method wrappers, event notifications, power policy    │      │
 │  └──────────────────────────────┬─────────────────────────────┘      │
-│                                 │ calls / notifications               │
+│                   m_btAdapter   │ BtAdapter (dispatch wrapper)       │
 │  ┌──────────────────────────────▼─────────────────────────────┐      │
-│  │  BtSdkAdapter  (new — replaces all BTRMGR_ call sites)     │      │
-│  │                                                            │      │
-│  │  ┌──────────────┐  ┌──────────────┐  ┌───────────────┐    │      │
-│  │  │DeviceRegistry│  │ EventBridge  │  │  AuthBridge   │    │      │
-│  │  │ MAC↔handle   │  │ SDK events → │  │ async client  │    │      │
-│  │  │ type cache   │  │ notifications│  │ respondToEvent│    │      │
-│  │  └──────────────┘  └──────────────┘  └───────────────┘    │      │
-│  │                                                            │      │
-│  │  ┌──────────────────────────────────────────────────────┐  │      │
-│  │  │  DeviceTypeClassifier                                │  │      │
-│  │  │  classOfDevice + appearance + UUIDs → type string    │  │      │
-│  │  └──────────────────────────────────────────────────────┘  │      │
-│  └──────────────────────────────┬─────────────────────────────┘      │
-│                                 │ bluetooth-sdk API                   │
-│  ┌──────────────────────────────▼─────────────────────────────┐      │
-│  │  bluetooth-sdk                                             │      │
-│  │  bluetooth::Manager → bluetooth::Adapter → bluetooth::Device│     │
-│  │  (AUDIO_SUPPORT module assumed complete)                   │      │
-│  └──────────────────────────────┬─────────────────────────────┘      │
-│                                 │ sdbus-c++ / D-Bus                   │
-└─────────────────────────────────┼────────────────────────────────────┘
-                                  │
-                               BlueZ
+│  │  BtAdapter : IBtAdapter  (SDK-free dispatch wrapper)        │      │
+│  │  setImpl() for test injection; g_btAdapterImpl for prod     │      │
+│  └────────────┬───────────────────────────────┬───────────────┘      │
+│               │ BLUETOOTH_USE_SDK             │ (no flag)            │
+│  ┌────────────▼────────────┐   ┌──────────────▼──────────────┐      │
+│  │  BtSdkAdapterImpl       │   │  BtMgrAdapterImpl           │      │
+│  │  (SDK path)             │   │  (BTMgr fallback path)      │      │
+│  │  DeviceRegistry         │   │  BTRMGR_* calls             │      │
+│  │  EventBridge            │   │  IARM lifecycle             │      │
+│  │  AuthBridge             │   │  inline handle derivation   │      │
+│  │  DeviceTypeClassifier   │   └──────────────┬──────────────┘      │
+│  └────────────┬────────────┘                  │                      │
+│               │ bluetooth-sdk API             │ BTRMGR C API         │
+│  ┌────────────▼────────────┐   ┌──────────────▼──────────────┐      │
+│  │  bluetooth-sdk          │   │  BTMgr / IARM               │      │
+│  │  Manager→Adapter→Device │   │  (legacy runtime)           │      │
+│  └────────────┬────────────┘   └─────────────────────────────┘      │
+│               │ sdbus-c++ / D-Bus                                    │
+└───────────────┼──────────────────────────────────────────────────────┘
+                │
+             BlueZ
 ```
 
-`BluetoothDeviceManager` owns PersistentStore access for paired device metadata. Its public interface is unchanged, but **three internal BTMgr call sites require SDK replacements** — see the BluetoothDeviceManager section below.
+`BluetoothDeviceManager` owns PersistentStore access for paired device metadata. Its public interface is unchanged, but **three internal BTMgr call sites require SDK replacements in the SDK path** — see the BluetoothDeviceManager section below. In the BTMgr path these call sites remain BTRMGR calls inside `BtMgrAdapterImpl`.
 
 ---
 
-## Component: BtSdkAdapter
+## Component: BtAdapter / IBtAdapter
 
-Owns the `bluetooth::Manager` and the default `bluetooth::Adapter`. Provides the same operational interface that the `Bluetooth` plugin previously obtained from `BTRMGR_*` calls. All plugin methods that previously called BTRMGR functions call `BtSdkAdapter` methods instead.
+`IBtAdapter` (`IBtAdapter.h`) is the backend-neutral pure virtual interface. It is WPEFramework-free and SDK-free so it can be included in test builds and in both production backends without pulling in external library headers.
+
+`BtAdapter` (`BtAdapter.h/.cpp`) is the thin static-impl dispatch wrapper. `Bluetooth.h` holds `BtAdapter m_btAdapter` as a value member. `BtAdapter::setImpl()` enables test mock injection. In production builds `BtAdapter.cpp` constructs a `static BtSdkAdapterImpl g_btAdapterImpl` (SDK path) or `static BtMgrAdapterImpl g_btAdapterImpl` (BTMgr path) as the default, selected by `#ifdef BLUETOOTH_USE_SDK`.
+
+```cpp
+// BtAdapter.cpp (production — only the impl include and static differ)
+#ifdef BLUETOOTH_USE_SDK
+    #include "BtSdkAdapterImpl.h"
+    static BtSdkAdapterImpl g_btAdapterImpl;
+#else
+    #include "BtMgrAdapterImpl.h"
+    static BtMgrAdapterImpl g_btAdapterImpl;
+#endif
+
+static IBtAdapter& getImpl() {
+    if (!BtAdapter::impl) BtAdapter::impl = &g_btAdapterImpl;
+    return *BtAdapter::impl;
+}
+```
+
+---
+
+## Component: BtSdkAdapterImpl (SDK path)
+
+Owns the `bluetooth::Manager` and the default `bluetooth::Adapter`. Provides the `IBtAdapter` implementation for SDK builds. All `Bluetooth.cpp` calls route here when `BLUETOOTH_USE_SDK` is defined.
 
 **Lifecycle:**
 
 ```
-BtSdkAdapter::init(service):
+BtSdkAdapterImpl::init(service):
   1. Construct bluetooth::Manager(
        AuthorisationMode::ExternalAuthorisation,
        [this](AuthorisationType t, shared_ptr<Device> d) { return authBridge.onAuthRequest(t, d); },
@@ -60,15 +82,38 @@ BtSdkAdapter::init(service):
   4. Enumerate existing paired devices, register device events for each
   5. Return success
 
-BtSdkAdapter::deinit():
+BtSdkAdapterImpl::deinit():
   1. adapter->unregisterForEvents()
   2. Unregister device events for all tracked devices
   3. Destroy Manager (destructor handles BlueZ agent unregistration)
 ```
 
-The IARM `init()`/`BTRMGR_RegisterForCallbacks()`/`BTRMGR_UnRegisterFromCallbacks()` lifecycle is fully replaced by steps 1–3 above.
+**Fatal failure condition:** If `getDefaultAdapter` fails, `BtSdkAdapterImpl::init` returns an error string and `Bluetooth::Initialize` returns it as failure.
 
-**Fatal failure condition:** If `getDefaultAdapter` fails (no Bluetooth hardware), `BtSdkAdapter::init` returns error and plugin Initialize returns a non-empty error string. Equivalent to the current BTRMGR_RegisterForCallbacks failure path.
+---
+
+## Component: BtMgrAdapterImpl (BTMgr fallback path)
+
+Provides the `IBtAdapter` implementation for BTMgr builds (when `BluetoothSDK` is not found at CMake configure time). Wraps all `BTRMGR_*` C API calls and the IARM event registration lifecycle. All logic is extracted from the old `Bluetooth.cpp` — no logic changes, only relocation into the adapter pattern.
+
+**Lifecycle:**
+
+```
+BtMgrAdapterImpl::init(service):
+  1. BTRMGR_RegisterForCallbacks(Utils::IARM::NAME)
+  2. BTRMGR_RegisterEventCallback(staticEventCallback)
+     where staticEventCallback maps BTRMGR_EventMessage_t to BtEventCallbacks
+  3. Return success
+
+BtMgrAdapterImpl::deinit():
+  1. BTRMGR_UnRegisterFromCallbacks(Utils::IARM::NAME)
+```
+
+**Handle derivation:** `BtMgrAdapterImpl` derives handle strings inline using the same `strtoll(mac_no_colons, NULL, 16)` formula (matching BTMgr's `btrCore_GenerateUniqueDeviceID`). It does not use `DeviceRegistry` — that class is SDK-path only.
+
+**Audio operations:** All five audio methods (`setAudioStream`, `setAudioControlCommand`, `setDeviceVolumeMute`, `getDeviceVolumeMute`, `getMediaTrackInfo`) have working implementations using BTRMGR calls. These are extracted from the legacy `Bluetooth.cpp` with minimal changes.
+
+**Compile isolation:** `BtMgrAdapterImpl.h/.cpp` are only compiled when `BTMGR_FOUND` (BTMgr path). No BTRMGR headers enter SDK builds. No SDK headers enter BTMgr builds.
 
 ---
 
@@ -76,12 +121,14 @@ The IARM `init()`/`BTRMGR_RegisterForCallbacks()`/`BTRMGR_UnRegisterFromCallback
 
 Provides stable numeric device handle identity for backward compatibility with existing clients and PersistentStore data.
 
-**Handle derivation:** Handle values are derived deterministically from MAC address using FNV-1a 64-bit hash. This ensures the same device always gets the same handle across restarts without requiring stored state. The collision probability over the small device population encountered in practice is negligible.
+**Handle derivation:** ~~INV-1 resolved.~~ Handle values are derived deterministically from MAC address by stripping colons and parsing the resulting 12-hex-digit string as a base-16 integer via `strtoll`. This exactly matches BTMgr's `btrCore_GenerateUniqueDeviceID`. No migration of PersistentStore handle values is required.
 
-```
+```cpp
 uint64_t deriveHandle(const std::string& mac) {
-    // FNV-1a 64-bit over the 6 bytes of the MAC address
-    // (strips colons, hashes raw bytes)
+    // Strip colons from "AA:BB:CC:DD:EE:FF" → "AABBCCDDEEFF", parse as hex.
+    char hexStr[13] = {};
+    // ... copy 12 hex chars at positions 0,1,3,4,6,7,9,10,12,13,15,16
+    return static_cast<uint64_t>(strtoll(hexStr, nullptr, 16));
 }
 ```
 
@@ -89,14 +136,11 @@ uint64_t deriveHandle(const std::string& mac) {
 
 ```
 DeviceRegistry:
-  map<string, shared_ptr<Device>> handleToDevice   // "12345678" → Device ptr
-  map<string, string>             macToHandle       // "AA:BB:CC:DD:EE:FF" → "12345678"
-  map<string, string>             handleToTypeStr   // "12345678" → "HEADPHONES"
+  map<string, string>  macToHandle       // "AA:BB:CC:DD:EE:FF" → "187723572702975"
+  map<string, string>  handleToTypeStr   // "187723572702975" → "HEADPHONES"
 ```
 
-**Existing PersistentStore data:** The `deviceID` values already stored in `Bluetooth/deviceInfo` in PersistentStore were generated by BTMgr from the same underlying MAC addresses. FNV-1a must produce the same values as BTMgr's handle derivation, **or** a one-time migration of stored handles must be performed at plugin init.
-
-> **Open question**: Confirm whether BTMgr derives `BTRMgrDeviceHandle` via FNV-1a over MAC bytes, or uses a different scheme. If the scheme differs, a handle re-derivation migration is required at first boot after the SDK transition.
+Note: `DeviceRegistry` is SDK-path only. `BtMgrAdapterImpl` derives handles inline without a registry object.
 
 ---
 
@@ -250,19 +294,63 @@ The `setAudioStream(PRIMARY/AUXILIARY)` routing is delegated to the SDK's AUDIO_
 
 ---
 
-## Audio (AUDIO_SUPPORT assumed complete)
+## Audio Interface
 
-Audio operations that currently go to `BTRMGR_StartAudioStreamingOut/In`, `BTRMGR_MediaControl`, `BTRMGR_GetMediaTrackInfo`, and `BTRMGR_GetDeviceVolumeMute/SetDeviceVolumeMute` are replaced by calls into the SDK's AUDIO_SUPPORT module. The exact API surface of AUDIO_SUPPORT is to be confirmed when that module is available. The following is the expected mapping:
+The five audio operations are declared as pure virtual methods in `IBtAdapter`. `Bluetooth.cpp` delegates directly to `m_btAdapter` for all five — no `#ifdef` in `Bluetooth.cpp`.
 
-| Plugin operation | Expected AUDIO_SUPPORT API |
+### IBtAdapter audio additions
+
+```cpp
+// Plain structs — no WPEFramework types in IBtAdapter.h
+struct BtMediaTrackInfo {
+    std::string album, genre, title, artist;
+    uint32_t    duration{0}, trackNumber{0}, numberOfTracks{0};
+};
+struct BtDeviceVolumeMute {
+    uint8_t volume{0};
+    bool    mute{false};
+    bool    valid{false};   // false on BTRMGR/SDK failure
+};
+
+// Note: deviceID is currently vestigial in setAudioStream — the operation
+// is adapter-level (BTRMGR_SetAudioStreamingOutType uses adapter 0, not a device handle).
+virtual bool               setAudioStream(long long int deviceID,
+                                           const std::string& streamName) = 0;
+virtual bool               setAudioControlCommand(long long int deviceID,
+                                                   const std::string& cmd) = 0;
+virtual bool               setDeviceVolumeMute(long long int deviceID,
+                                                const std::string& profile,
+                                                uint8_t volume, bool mute) = 0;
+virtual BtDeviceVolumeMute getDeviceVolumeMute(long long int deviceID,
+                                               const std::string& profile) const = 0;
+virtual BtMediaTrackInfo   getMediaTrackInfo(long long int deviceID) const = 0;
+```
+
+`Bluetooth.cpp` builds `JsonObject` return values from the plain structs (same pattern as `BtDeviceProperties` → `getDeviceInfo()`).
+
+### BtSdkAdapterImpl audio
+
+All five methods return empty/false stubs gated by `#ifdef BLUETOOTH_AUDIO_SUPPORT` pending T-7. The `BLUETOOTH_AUDIO_SUPPORT` flag only appears in `BtSdkAdapterImpl.cpp`, not in `Bluetooth.cpp`.
+
+| Plugin operation | Expected AUDIO_SUPPORT API (T-7, pending INV-4) |
 |---|---|
-| `setAudioStream(PRIMARY/AUXILIARY)` | SDK audio routing selector |
-| `sendAudioPlaybackCommand(PLAY/PAUSE/RESUME/STOP/SKIP_NEXT/SKIP_PREV/MUTE/etc.)` | SDK media control command |
-| `getAudioInfo` (track info) | SDK media track info query |
-| `setDeviceVolumeMuteInfo` | SDK volume/mute set |
-| `getDeviceVolumeMuteInfo` | SDK volume/mute get |
+| `setAudioStream` | SDK audio routing selector |
+| `setAudioControlCommand` | SDK media control command |
+| `getMediaTrackInfo` | SDK media track info query |
+| `setDeviceVolumeMute` | SDK volume/mute set |
+| `getDeviceVolumeMute` | SDK volume/mute get |
 
-Until AUDIO_SUPPORT is available, audio methods continue to fail gracefully (same as current `RESTART` behavior). A `BLUETOOTH_AUDIO_SUPPORT` compile-time flag mirrors the SDK's own `AUDIO_SUPPORT` flag and gates these method implementations.
+### BtMgrAdapterImpl audio
+
+All five methods have working implementations extracted from the legacy `Bluetooth.cpp`:
+
+| IBtAdapter method | BTRMGR call |
+|---|---|
+| `setAudioStream` | `BTRMGR_SetAudioStreamingOutType(0, streamType)` |
+| `setAudioControlCommand` | `BTRMGR_MediaControl(0, handle, ctrl)` / `BTRMGR_StartAudioStreamingIn` |
+| `setDeviceVolumeMute` | `BTRMGR_SetDeviceVolumeMute(0, handle, opType, vol, mute)` |
+| `getDeviceVolumeMute` | `BTRMGR_GetDeviceVolumeMute(0, handle, opType, &vol, &mute)` |
+| `getMediaTrackInfo` | `BTRMGR_GetMediaTrackInfo(0, handle, &info)` |
 
 ---
 
@@ -272,30 +360,28 @@ Until AUDIO_SUPPORT is available, audio methods continue to fail gracefully (sam
 
 ```
 1. Register JSON-RPC methods (unchanged)
-2. BtSdkAdapter::init(service)
-   a. Construct bluetooth::Manager(ExternalAuthorisation, authCallback, ...)
-   b. getDefaultAdapter(adapter)  ← FATAL if fails (no adapter)
-   c. adapter->registerForEvents(adapterEventCallback)
-   d. Register DeviceEvent callbacks for existing paired devices
+2. m_btAdapter.init(service)          ← dispatches to BtSdkAdapterImpl or BtMgrAdapterImpl
+   SDK path:                           BTMgr path:
+     a. Construct bluetooth::Manager     a. BTRMGR_RegisterForCallbacks()
+     b. getDefaultAdapter(adapter)       b. BTRMGR_RegisterEventCallback()
+     c. adapter->registerForEvents()
+     d. Register device events
 3. PowerManager init (non-fatal — unchanged)
 4. BluetoothDeviceManager::init(service) ← FATAL if fails (unchanged)
-5. disconnectExternallyConnectedDevices() (unchanged logic, uses BtSdkAdapter)
+5. disconnectExternallyConnectedDevices() (unchanged logic, uses m_btAdapter)
 ```
-
-Replaces: `Utils::IARM::init()`, `BTRMGR_RegisterForCallbacks()`, `BTRMGR_RegisterEventCallback()`.
 
 ### New Deinitialize() sequence
 
 ```
 1. BluetoothDeviceManager::deinit() (unchanged)
 2. PowerManager unregister + reset (unchanged)
-3. BtSdkAdapter::deinit()
-   a. Unregister device event callbacks
-   b. adapter->unregisterForEvents()
-   c. Destroy Manager (BlueZ agent unregistered automatically)
+3. m_btAdapter.deinit()               ← dispatches to BtSdkAdapterImpl or BtMgrAdapterImpl
+   SDK path:                           BTMgr path:
+     a. Unregister device events         a. BTRMGR_UnRegisterFromCallbacks()
+     b. adapter->unregisterForEvents()
+     c. Destroy Manager
 ```
-
-Replaces: `BTRMGR_UnRegisterFromCallbacks()`.
 
 **Ordering note:** The singleton null-before-unregister ordering in the current code (prevents late events from crashing) is handled by the SDK's own lifetime management. When the Manager is destroyed, no further event callbacks fire.
 
@@ -345,20 +431,20 @@ btmgrMock.h               BtmgrImplMock : BtmgrImpl with MOCK_METHOD for each fu
 
 In test builds, the include path ensures testframework's `btmgr.h` is resolved before the real BTMgr header. Tests call `Btmgr::setImpl(p_btmgrMock)` in fixture setup and `Btmgr::setImpl(nullptr)` in teardown. `BTRMGR_RegisterEventCallback` is also a `MOCK_METHOD` — tests can capture the registered callback and invoke it directly to inject events.
 
-**The equivalent for `BtSdkAdapter` uses the same pattern.** Three testframework files are needed:
+**The equivalent for `BtAdapter` uses the same pattern.** Three testframework files are needed:
 
 ```
-BtSdkAdapter.h (testframework)  IBtSdkAdapter (pure virtual) + BtSdkAdapter (dispatch wrapper)
-BtSdkAdapter.cpp (testframework) dispatch implementations; no bluetooth-sdk dependency
-BtSdkAdapterMock.h              BtSdkAdapterImplMock : IBtSdkAdapter with MOCK_METHODs
-                                 + event injection helpers (fireAdapterEvent, fireDeviceEvent)
+BtAdapter.h (testframework)   IBtAdapter (pure virtual) + BtAdapter (dispatch wrapper)
+BtAdapter.cpp (testframework)  dispatch implementations; no bluetooth-sdk dependency
+BtAdapterMock.h               BtAdapterImplMock : IBtAdapter with MOCK_METHODs
+                               + event injection helpers (fireAdapterEvent, fireDeviceEvent)
 ```
 
-In test builds, testframework's `BtSdkAdapter.h` shadows the plugin's `BtSdkAdapter.h` via include path ordering. `Bluetooth.h` still holds `BtSdkAdapter m_btSdkAdapter` as a value member — no change.
+In test builds, testframework's `BtAdapter.h` shadows the plugin's `BtAdapter.h` via include path ordering. `Bluetooth.h` still holds `BtAdapter m_btAdapter` as a value member — no change.
 
-**Production build:** `BtSdkAdapter.h/.cpp` in plugin provide the thin dispatch wrapper; `BtSdkAdapterRealImpl.cpp` provides the implementation that wraps `bluetooth::Manager/Adapter/Device` and links `bluetooth-sdk`.
+**Production build:** `BtAdapter.h/.cpp` in plugin provide the thin dispatch wrapper; `BtSdkAdapterImpl.cpp` (SDK path) or `BtMgrAdapterImpl.cpp` (BTMgr path) provides the backend implementation.
 
-**Test build:** `BtSdkAdapter.h/.cpp` from testframework replace the plugin's header/dispatcher; `BtSdkAdapterRealImpl.cpp` is NOT compiled; `TestMocklib` provides the dispatch stub.
+**Test build:** `BtAdapter.h/.cpp` from testframework replace the plugin's header/dispatcher; neither backend impl is compiled; `TestMocklib` provides the dispatch stub.
 
 ### Event Injection (New Capability vs BTMgr)
 
@@ -378,11 +464,11 @@ p_btSdkMock->fireAdapterEvent(AdapterEvent::DiscoveryStarted, data);
 
 | File | Repo | Purpose |
 |---|---|---|
-| `IBtSdkAdapter` interface definition | `entservices-testframework/Tests/mocks/BtSdkAdapter.h` | Pure virtual interface; shadows plugin `BtSdkAdapter.h` in test builds |
-| `BtSdkAdapter` dispatch stub | `entservices-testframework/Tests/mocks/BtSdkAdapter.cpp` | Added to `TestMocklib` sources |
-| `BtSdkAdapterImplMock` | `entservices-testframework/Tests/mocks/BtSdkAdapterMock.h` | GoogleMock with event injection |
-| `BtSdkAdapter` real dispatch + auto-construction | `entservices-connectivity/Bluetooth/BtSdkAdapter.h/.cpp` | Production dispatch (auto-constructs `BtSdkAdapterRealImpl` if impl is null) |
-| `BtSdkAdapterRealImpl` | `entservices-connectivity/Bluetooth/BtSdkAdapterRealImpl.cpp` | Wraps `bluetooth::Manager/Adapter/Device`; linked only in production builds |
+| `IBtAdapter` + `BtAdapter` dispatch (test stub) | `entservices-testframework/Tests/mocks/BtAdapter.h/.cpp` | Shadows plugin `BtAdapter.h` in test builds; added to `TestMocklib` sources |
+| `BtAdapterImplMock` | `entservices-testframework/Tests/mocks/BtAdapterMock.h` | GoogleMock with event injection; +audio MOCK_METHODs |
+| `BtAdapter` production dispatch | `entservices-connectivity/Bluetooth/BtAdapter.h/.cpp` | Constructs `g_btAdapterImpl` (SDK or BTMgr) on first `init()` |
+| `BtSdkAdapterImpl` | `entservices-connectivity/Bluetooth/BtSdkAdapterImpl.h/.cpp` | Wraps `bluetooth::Manager/Adapter/Device`; SDK builds only |
+| `BtMgrAdapterImpl` | `entservices-connectivity/Bluetooth/BtMgrAdapterImpl.h/.cpp` | Wraps BTRMGR C API; BTMgr builds only |
 
 - `DeviceRegistry`, `DeviceTypeClassifier` unit tests: standalone, no mock needed
 - `EventBridge`, `AuthBridge` tests: use `BtSdkAdapterImplMock` event injection

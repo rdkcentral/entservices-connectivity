@@ -24,8 +24,8 @@
 #include <unordered_set>
 
 #include "BluetoothDeviceManager.h"
-#include "BtSdkAdapter.h"
-#include "IBtSdkAdapter.h"
+#include "BtAdapter.h"
+#include "IBtAdapter.h"
 #include "DeviceRegistry.h"
 #include "DeviceTypeClassifier.h"
 
@@ -63,11 +63,11 @@ namespace WPEFramework {
             }
 
             // Build a mapping from device address to device handle using the SDK.
-            if (!_btSdkAdapter) {
-                LOGERR("BtSdkAdapter not set during filesystem persistence import");
+            if (!_btAdapter) {
+                LOGERR("BtAdapter not set during filesystem persistence import");
                 return Core::ERROR_GENERAL;
             }
-            auto sdkPairedDevices = _btSdkAdapter->getPairedDevices();
+            auto sdkPairedDevices = _btAdapter->getPairedDevices();
 
             std::unordered_map<std::string, std::string> addrToDeviceId;
             addrToDeviceId.reserve(sdkPairedDevices.size());
@@ -352,12 +352,12 @@ namespace WPEFramework {
 
         Core::hresult BluetoothDeviceManager::updateCacheFromDevice(bool backfillOnly)
         {
-            if (!_btSdkAdapter) {
-                LOGERR("BtSdkAdapter not set in updateCacheFromDevice");
+            if (!_btAdapter) {
+                LOGERR("BtAdapter not set in updateCacheFromDevice");
                 return Core::ERROR_GENERAL;
             }
 
-            auto sdkPairedDevices = _btSdkAdapter->getPairedDevices();
+            auto sdkPairedDevices = _btAdapter->getPairedDevices();
 
             _adminLock.Lock();
 
@@ -733,13 +733,13 @@ namespace WPEFramework {
         {
             LOGINFO("deviceID=%s\n", deviceID.c_str());
 
-            if (!_btSdkAdapter) {
-                LOGERR("BtSdkAdapter not set in addDevice");
+            if (!_btAdapter) {
+                LOGERR("BtAdapter not set in addDevice");
                 return Core::ERROR_GENERAL;
             }
 
-            IBtSdkAdapter::BtDeviceProperties props;
-            if (!_btSdkAdapter->getDeviceProperties(deviceID, props)) {
+            IBtAdapter::BtDeviceProperties props;
+            if (!_btAdapter->getDeviceProperties(deviceID, props)) {
                 LOGERR("Device not found for deviceID: %s", deviceID.c_str());
                 return Core::ERROR_NOT_EXIST;
             }

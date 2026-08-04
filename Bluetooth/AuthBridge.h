@@ -30,7 +30,7 @@
 #include <bluetooth/Manager.h>
 #include <bluetooth/Device.h>
 
-#include "BtSdkAdapterCallbacks.h"
+#include "BtAdapterCallbacks.h"
 #include "DeviceRegistry.h"
 #include "DeviceTypeClassifier.h"
 

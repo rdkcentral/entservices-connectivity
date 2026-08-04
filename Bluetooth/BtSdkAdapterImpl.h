@@ -19,9 +19,9 @@
 
 #pragma once
 
-// Real bluetooth-sdk implementation of IBtSdkAdapter.
+// Real bluetooth-sdk implementation of IBtAdapter.
 // This header includes SDK headers and must NOT be compiled in test builds.
-// BtSdkAdapterRealImpl.cpp is excluded from BLUETOOTH_PLUGIN_SOURCES when
+// BtSdkAdapterImpl.cpp is excluded from BLUETOOTH_PLUGIN_SOURCES when
 // RDK_SERVICES_L1_TEST is defined.
 
 #include <memory>
@@ -38,16 +38,16 @@
 #include "DeviceRegistry.h"
 #include "DeviceTypeClassifier.h"
 #include "EventBridge.h"
-#include "IBtSdkAdapter.h"
+#include "IBtAdapter.h"
 
 namespace WPEFramework {
 namespace PluginHost { class IShell; }
 namespace Plugin {
 
-class BtSdkAdapterRealImpl : public IBtSdkAdapter {
+class BtSdkAdapterImpl : public IBtAdapter {
 public:
-    BtSdkAdapterRealImpl()  = default;
-    ~BtSdkAdapterRealImpl() override = default;
+    BtSdkAdapterImpl()  = default;
+    ~BtSdkAdapterImpl() override = default;
 
     std::string init(PluginHost::IShell* service,
                      BtEventCallbacks eventCallbacks,
@@ -79,6 +79,15 @@ public:
     std::string getMacForHandle(const std::string& handleStr) const override;
 
     void respondToEvent(const std::string& mac, bool accepted) override;
+
+    // Audio stubs pending T-7 (BLUETOOTH_AUDIO_SUPPORT / AUDIO_SUPPORT SDK module).
+    bool               setAudioStream(long long int deviceID, const std::string& streamName) override;
+    bool               setAudioControlCommand(long long int deviceID, const std::string& cmd) override;
+    bool               setDeviceVolumeMute(long long int deviceID, const std::string& profile,
+                                            uint8_t volume, bool mute) override;
+    BtDeviceVolumeMute getDeviceVolumeMute(long long int deviceID,
+                                           const std::string& profile) const override;
+    BtMediaTrackInfo   getMediaTrackInfo(long long int deviceID) const override;
 
 private:
     void onAdapterEvent(bluetooth::AdapterEvent event, bluetooth::AdapterEventData data);

@@ -21,18 +21,18 @@
 
 #include <gmock/gmock.h>
 
-// IBtSdkAdapter and BtSdkAdapterCallbacks live in the plugin source tree.
+// IBtAdapter and BtAdapterCallbacks live in the plugin source tree.
 // The L1 test CMakeLists adds entservices-connectivity/Bluetooth to the include path.
-#include "IBtSdkAdapter.h"
-#include "BtSdkAdapter.h"
+#include "IBtAdapter.h"
+#include "BtAdapter.h"
 
 namespace WPEFramework {
 namespace Plugin {
 
-class BtSdkAdapterImplMock : public IBtSdkAdapter {
+class BtAdapterImplMock : public IBtAdapter {
 public:
-    BtSdkAdapterImplMock() = default;
-    virtual ~BtSdkAdapterImplMock() = default;
+    BtAdapterImplMock() = default;
+    virtual ~BtAdapterImplMock() = default;
 
     MOCK_METHOD(std::string, init,
         (WPEFramework::PluginHost::IShell*, BtEventCallbacks, BtAuthCallbacks),
@@ -49,9 +49,9 @@ public:
     MOCK_METHOD(bool, startScan, (const std::string&), (override));
     MOCK_METHOD(bool, stopScan,  (),                   (override));
 
-    MOCK_METHOD(std::vector<IBtSdkAdapter::BtDeviceInfo>, getDiscoveredDevices, (), (const, override));
-    MOCK_METHOD(std::vector<IBtSdkAdapter::BtDeviceInfo>, getPairedDevices,     (), (const, override));
-    MOCK_METHOD(std::vector<IBtSdkAdapter::BtDeviceInfo>, getConnectedDevices,  (), (const, override));
+    MOCK_METHOD(std::vector<IBtAdapter::BtDeviceInfo>, getDiscoveredDevices, (), (const, override));
+    MOCK_METHOD(std::vector<IBtAdapter::BtDeviceInfo>, getPairedDevices,     (), (const, override));
+    MOCK_METHOD(std::vector<IBtAdapter::BtDeviceInfo>, getConnectedDevices,  (), (const, override));
 
     MOCK_METHOD(bool, pairDevice,       (const std::string&), (override));
     MOCK_METHOD(bool, unpairDevice,     (const std::string&), (override));
@@ -59,11 +59,22 @@ public:
     MOCK_METHOD(bool, disconnectDevice, (const std::string&), (override));
 
     MOCK_METHOD(bool, getDeviceProperties,
-        (const std::string&, IBtSdkAdapter::BtDeviceProperties&),
+        (const std::string&, IBtAdapter::BtDeviceProperties&),
         (const, override));
 
     MOCK_METHOD(std::string, getMacForHandle, (const std::string&), (const, override));
     MOCK_METHOD(void, respondToEvent, (const std::string&, bool), (override));
+
+    MOCK_METHOD(bool, setAudioStream,
+        (long long int, const std::string&), (override));
+    MOCK_METHOD(bool, setAudioControlCommand,
+        (long long int, const std::string&), (override));
+    MOCK_METHOD(bool, setDeviceVolumeMute,
+        (long long int, const std::string&, uint8_t, bool), (override));
+    MOCK_METHOD(IBtAdapter::BtDeviceVolumeMute, getDeviceVolumeMute,
+        (long long int, const std::string&), (const, override));
+    MOCK_METHOD(IBtAdapter::BtMediaTrackInfo, getMediaTrackInfo,
+        (long long int), (const, override));
 
     // ── Event injection helpers ──────────────────────────────────────────────
     // Call these from tests to simulate SDK events flowing into the plugin.

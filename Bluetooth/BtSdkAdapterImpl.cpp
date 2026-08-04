@@ -17,7 +17,7 @@
 * limitations under the License.
 **/
 
-#include "BtSdkAdapterRealImpl.h"
+#include "BtSdkAdapterImpl.h"
 
 #include <bluetooth/Uuid.h>
 #include <UtilsLogging.h>
@@ -26,7 +26,7 @@
 namespace WPEFramework {
 namespace Plugin {
 
-std::string BtSdkAdapterRealImpl::init(PluginHost::IShell* /* service */,
+std::string BtSdkAdapterImpl::init(PluginHost::IShell* /* service */,
                                         BtEventCallbacks eventCallbacks,
                                         BtAuthCallbacks  authCallbacks) {
     m_eventBridge = std::make_unique<EventBridge>(m_registry, std::move(eventCallbacks));
@@ -67,7 +67,7 @@ std::string BtSdkAdapterRealImpl::init(PluginHost::IShell* /* service */,
     return "";
 }
 
-void BtSdkAdapterRealImpl::deinit() {
+void BtSdkAdapterImpl::deinit() {
     if (m_adapter) {
         for (auto& device : m_adapter->getDevices()) {
             unregisterDeviceEvents(device);
@@ -85,27 +85,27 @@ void BtSdkAdapterRealImpl::deinit() {
 
 // ── Adapter operations ────────────────────────────────────────────────────────
 
-bool BtSdkAdapterRealImpl::getAdapterPowered(bool& powered) const {
+bool BtSdkAdapterImpl::getAdapterPowered(bool& powered) const {
     if (!m_adapter) return false;
     return static_cast<bool>(m_adapter->getPowered(powered));
 }
-bool BtSdkAdapterRealImpl::setAdapterPowered(bool powered) {
+bool BtSdkAdapterImpl::setAdapterPowered(bool powered) {
     if (!m_adapter) return false;
     return static_cast<bool>(m_adapter->setPowered(powered));
 }
-bool BtSdkAdapterRealImpl::getAdapterName(std::string& name) const {
+bool BtSdkAdapterImpl::getAdapterName(std::string& name) const {
     if (!m_adapter) return false;
     try { name = m_adapter->Alias(); return true; } catch (...) { return false; }
 }
-bool BtSdkAdapterRealImpl::setAdapterName(const std::string& name) {
+bool BtSdkAdapterImpl::setAdapterName(const std::string& name) {
     if (!m_adapter) return false;
     try { m_adapter->Alias(name); return true; } catch (...) { return false; }
 }
-bool BtSdkAdapterRealImpl::isAdapterDiscoverable(bool& discoverable) const {
+bool BtSdkAdapterImpl::isAdapterDiscoverable(bool& discoverable) const {
     if (!m_adapter) return false;
     try { discoverable = m_adapter->Discoverable(); return true; } catch (...) { return false; }
 }
-bool BtSdkAdapterRealImpl::setAdapterDiscoverable(bool discoverable, int timeoutSeconds) {
+bool BtSdkAdapterImpl::setAdapterDiscoverable(bool discoverable, int timeoutSeconds) {
     if (!m_adapter) return false;
     try {
         m_adapter->Discoverable(discoverable);
@@ -116,18 +116,18 @@ bool BtSdkAdapterRealImpl::setAdapterDiscoverable(bool discoverable, int timeout
 
 // ── Discovery ────────────────────────────────────────────────────────────────
 
-bool BtSdkAdapterRealImpl::startScan(const std::string& profile) {
+bool BtSdkAdapterImpl::startScan(const std::string& profile) {
     if (!m_adapter) return false;
     return static_cast<bool>(m_adapter->startScan(buildScanFilter(profile)));
 }
-bool BtSdkAdapterRealImpl::stopScan() {
+bool BtSdkAdapterImpl::stopScan() {
     if (!m_adapter) return false;
     return static_cast<bool>(m_adapter->stopScan());
 }
 
 // ── Device lists ─────────────────────────────────────────────────────────────
 
-IBtSdkAdapter::BtDeviceInfo BtSdkAdapterRealImpl::deviceToInfo(
+IBtAdapter::BtDeviceInfo BtSdkAdapterImpl::deviceToInfo(
     std::shared_ptr<bluetooth::Device> device) const
 {
     BtDeviceInfo info;
@@ -149,21 +149,21 @@ IBtSdkAdapter::BtDeviceInfo BtSdkAdapterRealImpl::deviceToInfo(
     return info;
 }
 
-std::vector<IBtSdkAdapter::BtDeviceInfo> BtSdkAdapterRealImpl::getDiscoveredDevices() const {
+std::vector<IBtAdapter::BtDeviceInfo> BtSdkAdapterImpl::getDiscoveredDevices() const {
     std::vector<BtDeviceInfo> result;
     if (!m_adapter) return result;
     for (auto& d : m_adapter->getDevices(bluetooth::DeviceState::Discovered))
         result.push_back(deviceToInfo(d));
     return result;
 }
-std::vector<IBtSdkAdapter::BtDeviceInfo> BtSdkAdapterRealImpl::getPairedDevices() const {
+std::vector<IBtAdapter::BtDeviceInfo> BtSdkAdapterImpl::getPairedDevices() const {
     std::vector<BtDeviceInfo> result;
     if (!m_adapter) return result;
     for (auto& d : m_adapter->getDevices(bluetooth::DeviceState::Paired))
         result.push_back(deviceToInfo(d));
     return result;
 }
-std::vector<IBtSdkAdapter::BtDeviceInfo> BtSdkAdapterRealImpl::getConnectedDevices() const {
+std::vector<IBtAdapter::BtDeviceInfo> BtSdkAdapterImpl::getConnectedDevices() const {
     std::vector<BtDeviceInfo> result;
     if (!m_adapter) return result;
     for (auto& d : m_adapter->getDevices(bluetooth::DeviceState::Connected))
@@ -173,32 +173,32 @@ std::vector<IBtSdkAdapter::BtDeviceInfo> BtSdkAdapterRealImpl::getConnectedDevic
 
 // ── Device operations ─────────────────────────────────────────────────────────
 
-bool BtSdkAdapterRealImpl::pairDevice(const std::string& handleStr) {
+bool BtSdkAdapterImpl::pairDevice(const std::string& handleStr) {
     std::lock_guard<std::mutex> lock(m_devicesMutex);
     auto it = m_devicesByHandle.find(handleStr);
     if (it == m_devicesByHandle.end()) return false;
     return static_cast<bool>(it->second->pair(true));
 }
-bool BtSdkAdapterRealImpl::unpairDevice(const std::string& handleStr) {
+bool BtSdkAdapterImpl::unpairDevice(const std::string& handleStr) {
     std::lock_guard<std::mutex> lock(m_devicesMutex);
     auto it = m_devicesByHandle.find(handleStr);
     if (it == m_devicesByHandle.end()) return false;
     return static_cast<bool>(it->second->unpair());
 }
-bool BtSdkAdapterRealImpl::connectDevice(const std::string& handleStr) {
+bool BtSdkAdapterImpl::connectDevice(const std::string& handleStr) {
     std::lock_guard<std::mutex> lock(m_devicesMutex);
     auto it = m_devicesByHandle.find(handleStr);
     if (it == m_devicesByHandle.end()) return false;
     return static_cast<bool>(it->second->connect(true));
 }
-bool BtSdkAdapterRealImpl::disconnectDevice(const std::string& handleStr) {
+bool BtSdkAdapterImpl::disconnectDevice(const std::string& handleStr) {
     std::lock_guard<std::mutex> lock(m_devicesMutex);
     auto it = m_devicesByHandle.find(handleStr);
     if (it == m_devicesByHandle.end()) return false;
     return static_cast<bool>(it->second->disconnect(true));
 }
 
-bool BtSdkAdapterRealImpl::getDeviceProperties(const std::string& handleStr,
+bool BtSdkAdapterImpl::getDeviceProperties(const std::string& handleStr,
                                                  BtDeviceProperties& props) const {
     std::lock_guard<std::mutex> lock(m_devicesMutex);
     auto it = m_devicesByHandle.find(handleStr);
@@ -223,17 +223,24 @@ bool BtSdkAdapterRealImpl::getDeviceProperties(const std::string& handleStr,
     return true;
 }
 
-std::string BtSdkAdapterRealImpl::getMacForHandle(const std::string& handleStr) const {
+std::string BtSdkAdapterImpl::getMacForHandle(const std::string& handleStr) const {
     return m_registry.getMacForHandle(handleStr);
 }
 
-void BtSdkAdapterRealImpl::respondToEvent(const std::string& mac, bool accepted) {
+void BtSdkAdapterImpl::respondToEvent(const std::string& mac, bool accepted) {
     if (m_authBridge) m_authBridge->onRespondToEvent(mac, accepted);
 }
 
+// Audio stubs — implemented when BLUETOOTH_AUDIO_SUPPORT / SDK AUDIO_SUPPORT module is available (T-7).
+bool BtSdkAdapterImpl::setAudioStream(long long int, const std::string&)                         { return false; }
+bool BtSdkAdapterImpl::setAudioControlCommand(long long int, const std::string&)                  { return false; }
+bool BtSdkAdapterImpl::setDeviceVolumeMute(long long int, const std::string&, uint8_t, bool)      { return false; }
+IBtAdapter::BtDeviceVolumeMute BtSdkAdapterImpl::getDeviceVolumeMute(long long int, const std::string&) const { return {}; }
+IBtAdapter::BtMediaTrackInfo   BtSdkAdapterImpl::getMediaTrackInfo(long long int) const           { return {}; }
+
 // ── Private helpers ──────────────────────────────────────────────────────────
 
-void BtSdkAdapterRealImpl::onAdapterEvent(bluetooth::AdapterEvent event,
+void BtSdkAdapterImpl::onAdapterEvent(bluetooth::AdapterEvent event,
                                             bluetooth::AdapterEventData data) {
     if (event == bluetooth::AdapterEvent::DeviceDiscovered && data.device) {
         registerDeviceEvents(data.device);
@@ -248,7 +255,7 @@ void BtSdkAdapterRealImpl::onAdapterEvent(bluetooth::AdapterEvent event,
     if (m_eventBridge) m_eventBridge->onAdapterEvent(event, std::move(data));
 }
 
-void BtSdkAdapterRealImpl::registerDeviceEvents(std::shared_ptr<bluetooth::Device> device) {
+void BtSdkAdapterImpl::registerDeviceEvents(std::shared_ptr<bluetooth::Device> device) {
     if (!device) return;
     std::string mac;
     device->address(mac);
@@ -272,12 +279,12 @@ void BtSdkAdapterRealImpl::registerDeviceEvents(std::shared_ptr<bluetooth::Devic
         });
 }
 
-void BtSdkAdapterRealImpl::unregisterDeviceEvents(std::shared_ptr<bluetooth::Device> device) {
+void BtSdkAdapterImpl::unregisterDeviceEvents(std::shared_ptr<bluetooth::Device> device) {
     if (!device) return;
     device->unregisterForEvents();
 }
 
-bluetooth::ScanFilter BtSdkAdapterRealImpl::buildScanFilter(const std::string& profile) const {
+bluetooth::ScanFilter BtSdkAdapterImpl::buildScanFilter(const std::string& profile) const {
     bluetooth::ScanFilter filter;
     const bool hasAudio = profile.find("LOUDSPEAKER") != std::string::npos
                        || profile.find("HEADPHONES")  != std::string::npos

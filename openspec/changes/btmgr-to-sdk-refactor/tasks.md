@@ -181,17 +181,158 @@ Depends on: T-9a, T-9b
 
 ---
 
+---
+
+## Dual-Backend + Rename Tasks
+
+### ~~T-10: Rename files and classes — BTMgr-neutral naming~~ ✓ DONE
+
+Mechanical rename of all `BtSdk`-prefixed adapter artifacts to backend-neutral names. No logic changes.
+
+**File renames (plugin — `entservices-connectivity/Bluetooth/`):**
+- `IBtSdkAdapter.h` → `IBtAdapter.h`
+- `BtSdkAdapterCallbacks.h` → `BtAdapterCallbacks.h`
+- `BtSdkAdapter.h` → `BtAdapter.h`
+- `BtSdkAdapter.cpp` → `BtAdapter.cpp`
+- `BtSdkAdapterRealImpl.h` → `BtSdkAdapterImpl.h`
+- `BtSdkAdapterRealImpl.cpp` → `BtSdkAdapterImpl.cpp`
+
+**File renames (testframework — `entservices-testframework/Tests/mocks/`):**
+- `BtSdkAdapterMock.h` → `BtAdapterMock.h`
+- Testframework's `BtSdkAdapter.h` → `BtAdapter.h`
+- Testframework's `BtSdkAdapter.cpp` → `BtAdapter.cpp`
+
+**Class renames (all occurrences across all files):**
+- `IBtSdkAdapter` → `IBtAdapter`
+- `BtSdkAdapter` → `BtAdapter`
+- `BtSdkAdapterRealImpl` → `BtSdkAdapterImpl`
+- `BtSdkAdapterImplMock` → `BtAdapterImplMock`
+
+**Member and method renames in `Bluetooth.h/.cpp` and `BluetoothDeviceManager.h/.cpp`:**
+- `m_btSdkAdapter` → `m_btAdapter`
+- `setBtSdkAdapter(...)` → `setBtAdapter(...)`
+- `IBtSdkAdapter::BtDeviceProperties` → `IBtAdapter::BtDeviceProperties`
+- `IBtSdkAdapter::BtDeviceInfo` → `IBtAdapter::BtDeviceInfo`
+
+**`CMakeLists.txt` source name updates:**
+- `BtSdkAdapter.cpp` → `BtAdapter.cpp`
+- `BtSdkAdapterRealImpl.cpp` → `BtSdkAdapterImpl.cpp`
+
+**`BtAdapter.cpp` internal rename:**
+- `g_realImpl` → `g_btAdapterImpl`
+
+Depends on: T-9a (T-9a must be complete so the files exist to rename)
+
+### ~~T-11: Add audio methods to IBtAdapter + stubs in BtSdkAdapterImpl~~ ✓ DONE
+
+Extend the interface and SDK-path stub so audio operations route through the adapter like all other operations, eliminating `#ifdef BLUETOOTH_AUDIO_SUPPORT` from `Bluetooth.cpp`.
+
+**`IBtAdapter.h` additions:**
+```cpp
+struct BtMediaTrackInfo {
+    std::string album, genre, title, artist;
+    uint32_t    duration{0}, trackNumber{0}, numberOfTracks{0};
+};
+struct BtDeviceVolumeMute {
+    uint8_t volume{0};
+    bool    mute{false};
+    bool    valid{false};
+};
+virtual bool               setAudioStream(long long int deviceID,
+                                           const std::string& streamName) = 0;
+virtual bool               setAudioControlCommand(long long int deviceID,
+                                                   const std::string& cmd) = 0;
+virtual bool               setDeviceVolumeMute(long long int deviceID,
+                                                const std::string& profile,
+                                                uint8_t volume, bool mute) = 0;
+virtual BtDeviceVolumeMute getDeviceVolumeMute(long long int deviceID,
+                                               const std::string& profile) const = 0;
+virtual BtMediaTrackInfo   getMediaTrackInfo(long long int deviceID) const = 0;
+```
+
+**`BtAdapter.h/.cpp`**: add 5 dispatch methods (same one-liner pattern as existing methods).
+
+**`BtSdkAdapterImpl.h/.cpp`**: add 5 override declarations + stub implementations returning `false` / empty struct, gated by `#ifdef BLUETOOTH_AUDIO_SUPPORT` pending T-7.
+
+**`Bluetooth.cpp`**: replace the 5 audio method bodies (currently `#ifdef BLUETOOTH_AUDIO_SUPPORT` stubs) with single-line delegates to `m_btAdapter`. Remove all `#ifdef BLUETOOTH_AUDIO_SUPPORT` from `Bluetooth.cpp`. `Bluetooth.cpp` no longer needs the `BLUETOOTH_AUDIO_SUPPORT` define at all.
+
+**`BtAdapterMock.h`**: add 5 `MOCK_METHOD` entries for the new audio methods.
+
+Depends on: T-10
+
+### ~~T-12: Create BtMgrAdapterImpl (BTMgr fallback backend)~~ ✓ DONE
+
+New file pair implementing `IBtAdapter` using BTRMGR calls. All logic is extracted from `entservices-connectivity.develop/Bluetooth/Bluetooth.cpp` and adapted to the interface.
+
+**`BtMgrAdapterImpl.h`**: declare `class BtMgrAdapterImpl : public IBtAdapter` with all override declarations.
+
+**`BtMgrAdapterImpl.cpp`**: implement all `IBtAdapter` methods:
+
+*Lifecycle:*
+- `init()`: `BTRMGR_RegisterForCallbacks()` + `BTRMGR_RegisterEventCallback(staticEventCb)`. The static callback maps `BTRMGR_EventMessage_t` to `BtEventCallbacks` (same events as `EventBridge` produces for SDK path).
+- `deinit()`: `BTRMGR_UnRegisterFromCallbacks()`
+
+*Adapter operations:* `getAdapterPowered`, `setAdapterPowered`, `getAdapterName`, `setAdapterName`, `isAdapterDiscoverable`, `setAdapterDiscoverable` — extracted from BTMgr `Bluetooth.cpp`.
+
+*Discovery:* `startScan` → `BTRMGR_StartDeviceDiscovery`; `stopScan` → `BTRMGR_StopDeviceDiscovery`.
+
+*Device lists:* `getDiscoveredDevices`, `getPairedDevices`, `getConnectedDevices` → `BTRMGR_GetDiscoveredDevices`, `BTRMGR_GetPairedDevices`, `BTRMGR_GetConnectedDevices`. Build `BtDeviceInfo` structs from BTRMGR device property structs.
+
+*Device operations:* `pairDevice`, `unpairDevice`, `connectDevice`, `disconnectDevice`, `getDeviceProperties`, `getMacForHandle`, `respondToEvent`.
+
+*Handle derivation (inline):* `strtoll(mac_no_colons, NULL, 16)` — no `DeviceRegistry` dependency.
+
+*Audio operations:* all 5 methods with working BTRMGR implementations (extracted from legacy `Bluetooth.cpp`).
+
+Depends on: T-11
+
+### ~~T-13: CMakeLists dual-backend selection~~ ✓ DONE
+
+Update `entservices-connectivity/Bluetooth/CMakeLists.txt` to:
+1. Probe for both backends: `find_package(BluetoothSDK QUIET)` and `find_package(BTMGR QUIET)`
+2. If `BluetoothSDK_FOUND`: define `BLUETOOTH_USE_SDK=1`, add `BtSdkAdapterImpl.cpp` + bridge files, link `bluetooth-sdk`
+3. Else if `BTMGR_FOUND`: add `BtMgrAdapterImpl.cpp`, add BTRMGR include dirs, link `${BTMGR_LIBRARIES}` + `${IARMBUS_LIBRARIES}`
+4. Else: `message(FATAL_ERROR "Neither BluetoothSDK nor BTMGR found")`
+5. Both paths compile: `Bluetooth.cpp`, `BluetoothDeviceManager.cpp`, `BtAdapter.cpp`, `DeviceRegistry.cpp` (SDK only — move to SDK block), `Module.cpp`
+
+Depends on: T-12
+
+### ~~T-14: Update tests and mocks for new names + audio~~ ✓ DONE
+
+**`entservices-testframework/Tests/mocks/BtAdapter.h` (renamed from `BtSdkAdapter.h`):**
+- Update all class names per T-10 rename.
+
+**`entservices-testframework/Tests/mocks/BtAdapter.cpp` (renamed from `BtSdkAdapter.cpp`):**
+- Update all class names per T-10 rename.
+
+**`entservices-testframework/Tests/mocks/BtAdapterMock.h` (renamed from `BtSdkAdapterMock.h`):**
+- Update class names.
+- Add 5 `MOCK_METHOD` entries for audio methods (from T-11).
+
+**`entservices-connectivity/Tests/mocks/BtAdapterMock.h` (renamed):**
+- Same updates as testframework mock.
+
+**`entservices-connectivity/Tests/L1Tests/tests/test_Bluetooth.cpp`:**
+- `BtAdapterImplMock` (was `BtSdkAdapterImplMock`)
+- `BtAdapter::setImpl(...)` (was `BtSdkAdapter::setImpl(...)`)
+- All `IBtAdapter::BtDeviceInfo` / `IBtAdapter::BtDeviceProperties` references updated.
+
+**`entservices-connectivity/Tests/L1Tests/CMakeLists.txt`:**
+- Update file name references for renamed mock files.
+
+Depends on: T-10, T-11
+
+---
+
 ## Completion Criteria
 
-- All `BTRMGR_*` includes and call sites removed from `Bluetooth/` ✓
-- Plugin compiles without `btmgr.h` or IARM headers ✓ (pending full build verification)
-- All existing L1 tests pass with new mock (T-9 pending)
-- New L1 tests cover all EventBridge, AuthBridge, DeviceTypeClassifier, and DeviceRegistry paths (T-9 pending)
-- JSON-RPC API surface unchanged ✓
-- PersistentStore compatibility confirmed ✓ (handle formula verified)
-- INV-1 through INV-5 resolved ✓ (INV-3 and INV-4 non-blocking)
-- All existing L1 tests pass with new mock
+- All `BTRMGR_*` includes and call sites removed from `Bluetooth.cpp` ✓ (routed through adapter)
+- Plugin compiles without `btmgr.h` or IARM headers in SDK builds ✓
+- Plugin compiles without any bluetooth-sdk headers in BTMgr builds
+- `find_package(BluetoothSDK)` → SDK build; `find_package(BTMGR)` → BTMgr build; neither → fatal error
+- All existing L1 tests pass with renamed mock
 - New L1 tests cover all EventBridge, AuthBridge, DeviceTypeClassifier, and DeviceRegistry paths
+- Audio methods delegate through `IBtAdapter` in both builds; no `#ifdef` in `Bluetooth.cpp`
 - JSON-RPC API surface unchanged (method names, param shapes, event payloads)
-- PersistentStore compatibility confirmed (handle values stable or migration implemented)
-- INV-1 through INV-4 resolved and design.md updated with confirmed answers
+- PersistentStore compatibility confirmed ✓ (handle formula verified, no migration needed)
+- INV-1 through INV-4 resolved; design.md updated with confirmed answers

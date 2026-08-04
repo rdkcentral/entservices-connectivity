@@ -26,7 +26,7 @@
 #include "PowerManagerInterface.h"
 #include "UtilsThreadRAII.h"
 #include "BluetoothDeviceManager.h"
-#include "BtSdkAdapter.h"
+#include "BtAdapter.h"
 #include <type_traits>
 
 namespace WPEFramework {
@@ -286,7 +286,7 @@ namespace WPEFramework {
             PowerManagerInterfaceRef m_powerManagerPlugin;
             Core::Sink<PowerManagerNotification> m_powerManagerNotification;
             BluetoothDeviceManager m_bluetoothDeviceManager;
-            BtSdkAdapter m_btSdkAdapter;
+            BtAdapter m_btAdapter;
         };
 
     } // Plugin

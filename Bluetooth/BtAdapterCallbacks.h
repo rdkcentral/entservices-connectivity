@@ -19,7 +19,7 @@
 
 #pragma once
 
-// SDK-free callback type definitions shared between IBtSdkAdapter, EventBridge, and AuthBridge.
+// SDK-free callback type definitions shared between IBtAdapter, EventBridge, and AuthBridge.
 // Using only standard types so this header compiles without bluetooth-sdk in test builds.
 
 #include <cstdint>

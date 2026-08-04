@@ -61,7 +61,7 @@ protected:
     Core::JSONRPC::Message message;
     string response;
     StoreMock *p_storeMock = nullptr;
-    NiceMock<WPEFramework::Plugin::BtSdkAdapterImplMock> *p_btSdkMock = nullptr;
+    NiceMock<WPEFramework::Plugin::BtAdapterImplMock> *p_btSdkMock = nullptr;
     NiceMock<COMLinkMock> comLinkMock;
     NiceMock<ServiceMock> service;
     PLUGINHOST_DISPATCHER* dispatcher;
@@ -93,7 +93,7 @@ protected:
                 return nullptr;
         }));
         
-        p_btSdkMock = new NiceMock<WPEFramework::Plugin::BtSdkAdapterImplMock>;
+        p_btSdkMock = new NiceMock<WPEFramework::Plugin::BtAdapterImplMock>;
         ON_CALL(*p_btSdkMock, init(::testing::_, ::testing::_, ::testing::_))
             .WillByDefault(::testing::Invoke(
                 [this](WPEFramework::PluginHost::IShell*,
@@ -103,7 +103,7 @@ protected:
                     p_btSdkMock->m_authCbs = std::move(authCbs);
                     return "";
                 }));
-        WPEFramework::Plugin::BtSdkAdapter::setImpl(p_btSdkMock);
+        WPEFramework::Plugin::BtAdapter::setImpl(p_btSdkMock);
 
         ON_CALL(service, COMLink())
             .WillByDefault(::testing::Invoke(
@@ -151,7 +151,7 @@ protected:
 
         PluginHost::IFactories::Assign(nullptr);
 
-        WPEFramework::Plugin::BtSdkAdapter::setImpl(nullptr);
+        WPEFramework::Plugin::BtAdapter::setImpl(nullptr);
         if (p_btSdkMock != nullptr)
         {
             delete p_btSdkMock;
@@ -183,21 +183,21 @@ protected:
         // Helper: add a paired HEADPHONES device to the mock device list and PS cache.
         const std::string deviceID = "123";
 
-        IBtSdkAdapter::BtDeviceInfo deviceInfo;
+        IBtAdapter::BtDeviceInfo deviceInfo;
         deviceInfo.handleStr    = deviceID;
         deviceInfo.mac          = "00:11:22:33:44:55";
         deviceInfo.name         = "TestHeadphones";
         deviceInfo.deviceType   = "HEADPHONES";
         deviceInfo.paired       = true;
 
-        IBtSdkAdapter::BtDeviceProperties deviceProps;
+        IBtAdapter::BtDeviceProperties deviceProps;
         deviceProps.handleStr  = deviceID;
         deviceProps.mac        = "00:11:22:33:44:55";
         deviceProps.name       = "TestHeadphones";
         deviceProps.deviceType = "HEADPHONES";
 
         ON_CALL(*p_btSdkMock, getPairedDevices())
-            .WillByDefault(::testing::Return(std::vector<IBtSdkAdapter::BtDeviceInfo>{deviceInfo}));
+            .WillByDefault(::testing::Return(std::vector<IBtAdapter::BtDeviceInfo>{deviceInfo}));
 
         EXPECT_CALL(*p_btSdkMock, pairDevice(deviceID))
             .WillOnce(::testing::Return(true));
@@ -327,10 +327,10 @@ TEST_F(BluetoothTest, setDiscoverableWrapper_Failed)
 
 TEST_F(BluetoothTest, getDiscoveredDevicesWrapper_Success)
 {
-    IBtSdkAdapter::BtDeviceInfo info;
+    IBtAdapter::BtDeviceInfo info;
     info.handleStr = "123"; info.name = "TestDevice"; info.deviceType = "WEARABLE HEADSET";
     EXPECT_CALL(*p_btSdkMock, getDiscoveredDevices())
-        .WillOnce(::testing::Return(std::vector<IBtSdkAdapter::BtDeviceInfo>{info}));
+        .WillOnce(::testing::Return(std::vector<IBtAdapter::BtDeviceInfo>{info}));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getDiscoveredDevices"), _T("{}"), response));
     EXPECT_TRUE(response.find("\"discoveredDevices\"") != string::npos);
 }
@@ -338,17 +338,17 @@ TEST_F(BluetoothTest, getDiscoveredDevicesWrapper_Success)
 TEST_F(BluetoothTest, getDiscoveredDevicesWrapper_Failed)
 {
     EXPECT_CALL(*p_btSdkMock, getDiscoveredDevices())
-        .WillOnce(::testing::Return(std::vector<IBtSdkAdapter::BtDeviceInfo>{}));
+        .WillOnce(::testing::Return(std::vector<IBtAdapter::BtDeviceInfo>{}));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getDiscoveredDevices"), _T("{}"), response));
     EXPECT_TRUE(response.find("\"discoveredDevices\"") != string::npos);
 }
 
 TEST_F(BluetoothTest, getPairedDevicesWrapper_Success)
 {
-    IBtSdkAdapter::BtDeviceInfo info;
+    IBtAdapter::BtDeviceInfo info;
     info.handleStr = "123"; info.name = "PairedDevice"; info.deviceType = "SMARTPHONE"; info.connected = true;
     EXPECT_CALL(*p_btSdkMock, getPairedDevices())
-        .WillOnce(::testing::Return(std::vector<IBtSdkAdapter::BtDeviceInfo>{info}));
+        .WillOnce(::testing::Return(std::vector<IBtAdapter::BtDeviceInfo>{info}));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getPairedDevices"), _T("{}"), response));
     EXPECT_TRUE(response.find("\"pairedDevices\"") != string::npos);
 }
@@ -356,17 +356,17 @@ TEST_F(BluetoothTest, getPairedDevicesWrapper_Success)
 TEST_F(BluetoothTest, getPairedDevicesWrapper_Failed)
 {
     EXPECT_CALL(*p_btSdkMock, getPairedDevices())
-        .WillOnce(::testing::Return(std::vector<IBtSdkAdapter::BtDeviceInfo>{}));
+        .WillOnce(::testing::Return(std::vector<IBtAdapter::BtDeviceInfo>{}));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getPairedDevices"), _T("{}"), response));
     EXPECT_TRUE(response.find("\"pairedDevices\"") != string::npos);
 }
 
 TEST_F(BluetoothTest, getConnectedDevicesWrapper_Success)
 {
-    IBtSdkAdapter::BtDeviceInfo info;
+    IBtAdapter::BtDeviceInfo info;
     info.handleStr = "123"; info.name = "ConnectedDevice"; info.deviceType = "HEADPHONES"; info.connected = true;
     EXPECT_CALL(*p_btSdkMock, getConnectedDevices())
-        .WillOnce(::testing::Return(std::vector<IBtSdkAdapter::BtDeviceInfo>{info}));
+        .WillOnce(::testing::Return(std::vector<IBtAdapter::BtDeviceInfo>{info}));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getConnectedDevices"), _T("{}"), response));
     EXPECT_TRUE(response.find("\"connectedDevices\"") != string::npos);
 }
@@ -374,7 +374,7 @@ TEST_F(BluetoothTest, getConnectedDevicesWrapper_Success)
 TEST_F(BluetoothTest, getConnectedDevicesWrapper_Failed)
 {
     EXPECT_CALL(*p_btSdkMock, getConnectedDevices())
-        .WillOnce(::testing::Return(std::vector<IBtSdkAdapter::BtDeviceInfo>{}));
+        .WillOnce(::testing::Return(std::vector<IBtAdapter::BtDeviceInfo>{}));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getConnectedDevices"), _T("{}"), response));
     EXPECT_TRUE(response.find("\"connectedDevices\"") != string::npos);
 }
@@ -660,7 +660,7 @@ TEST_F(BluetoothTest, setEventResponseWrapper_Failed)
 
 TEST_F(BluetoothTest, getDeviceInfoWrapper_Success)
 {
-    IBtSdkAdapter::BtDeviceProperties props;
+    IBtAdapter::BtDeviceProperties props;
     props.handleStr = "123"; props.mac = "00:11:22:33:44:55";
     props.name = "TestDevice"; props.deviceType = "WEARABLE HEADSET";
     props.vendorId = 9999; props.rssi = -50; props.batteryLevel = 80;
@@ -817,10 +817,10 @@ protected:
 #ifndef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
         // Non-migration path: init() calls SDK to reconcile the cache.
         // Return device handle 123 so the HID entry survives the scrub step.
-        IBtSdkAdapter::BtDeviceInfo hidInfo;
+        IBtAdapter::BtDeviceInfo hidInfo;
         hidInfo.handleStr = "123"; hidInfo.deviceType = "HUMAN INTERFACE DEVICE";
         ON_CALL(*p_btSdkMock, getPairedDevices())
-            .WillByDefault(::testing::Return(std::vector<IBtSdkAdapter::BtDeviceInfo>{hidInfo}));
+            .WillByDefault(::testing::Return(std::vector<IBtAdapter::BtDeviceInfo>{hidInfo}));
 #endif
 
         EXPECT_CALL(PowerManagerMock::Mock(), GetPowerState(::testing::_, ::testing::_))
@@ -1013,7 +1013,7 @@ protected:
     BluetoothLegacyPersistenceMigrationParseTest()
         : BluetoothTest(false)
     {
-        IBtSdkAdapter::BtDeviceInfo migrationDevice;
+        IBtAdapter::BtDeviceInfo migrationDevice;
         migrationDevice.handleStr  = "123";
         migrationDevice.mac        = "123";
         migrationDevice.name       = "MigrationTestDevice";
@@ -1027,7 +1027,7 @@ protected:
 
         ON_CALL(*p_btSdkMock, getPairedDevices())
             .WillByDefault(::testing::Return(
-                std::vector<IBtSdkAdapter::BtDeviceInfo>{migrationDevice}));
+                std::vector<IBtAdapter::BtDeviceInfo>{migrationDevice}));
     }
 
     ~BluetoothLegacyPersistenceMigrationParseTest() override
@@ -1106,10 +1106,10 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, legacyPersistenceMigrationS
         GTEST_SKIP() << "Unable to initialize plugin with PersistentStore payload";
     }
 
-    IBtSdkAdapter::BtDeviceInfo pDev;
+    IBtAdapter::BtDeviceInfo pDev;
     pDev.handleStr = "123"; pDev.deviceType = "HEADPHONES"; pDev.name = "AsTestDevice";
     EXPECT_CALL(*p_btSdkMock, getPairedDevices())
-        .WillOnce(::testing::Return(std::vector<IBtSdkAdapter::BtDeviceInfo>{pDev}));
+        .WillOnce(::testing::Return(std::vector<IBtAdapter::BtDeviceInfo>{pDev}));
 
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getPairedDevices"), _T("{}"), response));
     EXPECT_TRUE(response.find("\"autoconnect\":false") != string::npos);
@@ -1197,10 +1197,10 @@ TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, legacyPersistenceMigra
         GTEST_SKIP() << "Unable to prepare malformed filesystem persistence migration file on this test host";
     }
 
-    IBtSdkAdapter::BtDeviceInfo pDev1;
+    IBtAdapter::BtDeviceInfo pDev1;
     pDev1.handleStr = "123"; pDev1.deviceType = "HEADPHONES"; pDev1.name = "AsTestDevice";
     EXPECT_CALL(*p_btSdkMock, getPairedDevices())
-        .WillOnce(::testing::Return(std::vector<IBtSdkAdapter::BtDeviceInfo>{pDev1}));
+        .WillOnce(::testing::Return(std::vector<IBtAdapter::BtDeviceInfo>{pDev1}));
 
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getPairedDevices"), _T("{}"), response));
     EXPECT_TRUE(response.find("\"pairedDevices\"") != string::npos);
@@ -1245,10 +1245,10 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, legacyPersistenceMigrationP
 
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
 
-    IBtSdkAdapter::BtDeviceInfo pDev2;
+    IBtAdapter::BtDeviceInfo pDev2;
     pDev2.handleStr = "123"; pDev2.deviceType = "HEADPHONES"; pDev2.name = "AsTestDevice";
     EXPECT_CALL(*p_btSdkMock, getPairedDevices())
-        .WillOnce(::testing::Return(std::vector<IBtSdkAdapter::BtDeviceInfo>{pDev2}));
+        .WillOnce(::testing::Return(std::vector<IBtAdapter::BtDeviceInfo>{pDev2}));
 
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getPairedDevices"), _T("{}"), response));
     EXPECT_TRUE(response.find("\"autoconnect\":true") != string::npos);
@@ -1268,10 +1268,10 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, legacyPersistenceMigrationP
 
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
 
-    IBtSdkAdapter::BtDeviceInfo pDev3;
+    IBtAdapter::BtDeviceInfo pDev3;
     pDev3.handleStr = "123"; pDev3.deviceType = "HEADPHONES"; pDev3.name = "AsTestDevice";
     EXPECT_CALL(*p_btSdkMock, getPairedDevices())
-        .WillOnce(::testing::Return(std::vector<IBtSdkAdapter::BtDeviceInfo>{pDev3}));
+        .WillOnce(::testing::Return(std::vector<IBtAdapter::BtDeviceInfo>{pDev3}));
 
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getPairedDevices"), _T("{}"), response));
     EXPECT_TRUE(response.find("\"autoconnect\":true") != string::npos);
@@ -1351,10 +1351,10 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, parse_AutoConnectStatusMiss
         GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
     }
 
-    IBtSdkAdapter::BtDeviceInfo pDevUnset;
+    IBtAdapter::BtDeviceInfo pDevUnset;
     pDevUnset.handleStr = "123"; pDevUnset.deviceType = "HEADPHONES"; pDevUnset.name = "MigrationTestDevice";
     EXPECT_CALL(*p_btSdkMock, getPairedDevices())
-        .WillOnce(::testing::Return(std::vector<IBtSdkAdapter::BtDeviceInfo>{pDevUnset}));
+        .WillOnce(::testing::Return(std::vector<IBtAdapter::BtDeviceInfo>{pDevUnset}));
 
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getPairedDevices"), _T("{}"), response));
     EXPECT_TRUE(response.find("\"pairedDevices\"") != string::npos);
@@ -1389,10 +1389,10 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, parse_EntryEmptyDeviceAddr_
         GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
     }
 
-    IBtSdkAdapter::BtDeviceInfo pDevEmpty;
+    IBtAdapter::BtDeviceInfo pDevEmpty;
     pDevEmpty.handleStr = "123"; pDevEmpty.deviceType = "HEADPHONES"; pDevEmpty.name = "MigrationTestDevice";
     EXPECT_CALL(*p_btSdkMock, getPairedDevices())
-        .WillOnce(::testing::Return(std::vector<IBtSdkAdapter::BtDeviceInfo>{pDevEmpty}));
+        .WillOnce(::testing::Return(std::vector<IBtAdapter::BtDeviceInfo>{pDevEmpty}));
 
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getPairedDevices"), _T("{}"), response));
     EXPECT_TRUE(response.find("\"pairedDevices\"") != string::npos);
@@ -1411,10 +1411,10 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, parse_LastConnectionTimeUTC
         GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
     }
 
-    IBtSdkAdapter::BtDeviceInfo pDev5;
+    IBtAdapter::BtDeviceInfo pDev5;
     pDev5.handleStr = "123"; pDev5.deviceType = "HEADPHONES"; pDev5.name = "MigrationTestDevice";
     EXPECT_CALL(*p_btSdkMock, getPairedDevices())
-        .WillOnce(::testing::Return(std::vector<IBtSdkAdapter::BtDeviceInfo>{pDev5}));
+        .WillOnce(::testing::Return(std::vector<IBtAdapter::BtDeviceInfo>{pDev5}));
 
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getPairedDevices"), _T("{}"), response));
     EXPECT_TRUE(response.find("\"pairedDevices\"") != string::npos);
@@ -1442,12 +1442,12 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, parse_MultipleDevices_AllIm
     strcpy(twoPairedDevices.m_deviceProperty[1].m_name, "Device456");
 
     // Override default mock so both devices survive the updateCacheFromDevice() scrub step.
-    IBtSdkAdapter::BtDeviceInfo dev123, dev456;
+    IBtAdapter::BtDeviceInfo dev123, dev456;
     dev123.handleStr = "123"; dev123.deviceType = "HEADPHONES"; dev123.name = "Device123";
     dev456.handleStr = "456"; dev456.deviceType = "SMARTPHONE";  dev456.name = "Device456";
     ON_CALL(*p_btSdkMock, getPairedDevices())
         .WillByDefault(::testing::Return(
-            std::vector<IBtSdkAdapter::BtDeviceInfo>{dev123, dev456}));
+            std::vector<IBtAdapter::BtDeviceInfo>{dev123, dev456}));
 
     if (!initializeFromFilesystemPersistencePayload(payload)) {
         GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";

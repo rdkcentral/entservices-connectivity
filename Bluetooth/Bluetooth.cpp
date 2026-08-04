@@ -342,7 +342,7 @@ namespace WPEFramework
                 return Core::ERROR_NONE == m_bluetoothDeviceManager.getAutoConnect(handleStr, status);
             };
 
-            message = m_btSdkAdapter.init(service, std::move(evtCbs), std::move(authCbs));
+            message = m_btAdapter.init(service, std::move(evtCbs), std::move(authCbs));
             if (!message.empty()) {
                 LOGERR("%s", message.c_str());
                 return message;
@@ -367,7 +367,7 @@ namespace WPEFramework
                 LOGERR("Failed to get PowerManager interface");
             }
 
-            m_bluetoothDeviceManager.setBtSdkAdapter(&m_btSdkAdapter);
+            m_bluetoothDeviceManager.setBtAdapter(&m_btAdapter);
             if (Core::ERROR_NONE != m_bluetoothDeviceManager.init(service)) {
                 message = "Failed to initialize BluetoothDeviceManager";
                 LOGERR("%s", message.c_str());
@@ -388,7 +388,7 @@ namespace WPEFramework
                 m_powerManagerPlugin.Reset();
             }
 
-            m_btSdkAdapter.deinit();
+            m_btAdapter.deinit();
 
             Bluetooth::_instance = nullptr;
         }
@@ -404,7 +404,7 @@ namespace WPEFramework
         void Bluetooth::getStatusSupport(string& status)
         {
             bool powered = false;
-            if (!m_btSdkAdapter.getAdapterPowered(powered)) {
+            if (!m_btAdapter.getAdapterPowered(powered)) {
                 status = STATUS_NO_BLUETOOTH_HARDWARE;
             } else {
                 status = powered ? STATUS_AVAILABLE : STATUS_SOFTWARE_DISABLED;
@@ -415,7 +415,7 @@ namespace WPEFramework
         bool Bluetooth::isAdapterDiscoverable()
         {
             bool discoverable = false;
-            m_btSdkAdapter.isAdapterDiscoverable(discoverable);
+            m_btAdapter.isAdapterDiscoverable(discoverable);
             return discoverable;
         }
 
@@ -426,7 +426,7 @@ namespace WPEFramework
                 return STATUS_AVAILABLE;
             }
 
-            if (!m_btSdkAdapter.startScan(discProfile)) {
+            if (!m_btAdapter.startScan(discProfile)) {
                 LOGERR("Failed to start the discovery..!");
                 return STATUS_NO_BLUETOOTH_HARDWARE;
             }
@@ -447,7 +447,7 @@ namespace WPEFramework
         {
             if (m_discoveryRunning) {
                 stopDiscoveryTimer();
-                bool ok = m_btSdkAdapter.stopScan();
+                bool ok = m_btAdapter.stopScan();
                 if (!ok) LOGERR("Failed to stop the discovery..!");
                 else     LOGWARN("Stopped discovery..!");
                 m_discoveryRunning = false;
@@ -475,7 +475,7 @@ namespace WPEFramework
         JsonArray Bluetooth::getDiscoveredDevices()
         {
             JsonArray deviceArray;
-            for (const auto& info : m_btSdkAdapter.getDiscoveredDevices()) {
+            for (const auto& info : m_btAdapter.getDiscoveredDevices()) {
                 JsonObject deviceDetails;
                 deviceDetails["deviceID"]         = info.handleStr;
                 deviceDetails["name"]             = info.name;
@@ -492,7 +492,7 @@ namespace WPEFramework
         JsonArray Bluetooth::getPairedDevices()
         {
             JsonArray deviceArray;
-            for (const auto& info : m_btSdkAdapter.getPairedDevices()) {
+            for (const auto& info : m_btAdapter.getPairedDevices()) {
                 JsonObject deviceDetails;
                 deviceDetails["deviceID"]         = info.handleStr;
                 deviceDetails["name"]             = info.name;
@@ -519,7 +519,7 @@ namespace WPEFramework
         JsonArray Bluetooth::getConnectedDevices()
         {
             JsonArray deviceArray;
-            for (const auto& info : m_btSdkAdapter.getConnectedDevices()) {
+            for (const auto& info : m_btAdapter.getConnectedDevices()) {
                 JsonObject deviceDetails;
                 deviceDetails["deviceID"]         = info.handleStr;
                 deviceDetails["name"]             = info.name;
@@ -547,8 +547,8 @@ namespace WPEFramework
         {
             // Connection dispatch table eliminated: SDK Device::connect/disconnect handles profile selection.
             const string deviceIdStr = std::to_string(deviceID);
-            bool ok = connect ? m_btSdkAdapter.connectDevice(deviceIdStr)
-                              : m_btSdkAdapter.disconnectDevice(deviceIdStr);
+            bool ok = connect ? m_btAdapter.connectDevice(deviceIdStr)
+                              : m_btAdapter.disconnectDevice(deviceIdStr);
 
             if (ok && connect) {
                 m_bluetoothDeviceManager.setLastConnectTimeUtc(deviceIdStr);
@@ -560,18 +560,14 @@ namespace WPEFramework
 
         bool Bluetooth::setAudioStream(long long int deviceID, const string &audioStreamName)
         {
-#ifdef BLUETOOTH_AUDIO_SUPPORT
-            // TODO(T-7): delegate to SDK AUDIO_SUPPORT routing API.
-            LOGWARN("setAudioStream: BLUETOOTH_AUDIO_SUPPORT not yet implemented");
-#endif
-            return false;
+            return m_btAdapter.setAudioStream(deviceID, audioStreamName);
         }
 
         bool Bluetooth::setDevicePairing(long long int deviceID, bool pair)
         {
             const string deviceIdStr = std::to_string(deviceID);
-            bool ok = pair ? m_btSdkAdapter.pairDevice(deviceIdStr)
-                           : m_btSdkAdapter.unpairDevice(deviceIdStr);
+            bool ok = pair ? m_btAdapter.pairDevice(deviceIdStr)
+                           : m_btAdapter.unpairDevice(deviceIdStr);
 
             if (!ok) {
                 LOGERR("Failed to do %s", (pair ? "Pair" : "Unpair"));
@@ -592,9 +588,9 @@ namespace WPEFramework
         bool Bluetooth::setBluetoothEnabled(const string &enabled)
         {
             if (enabled == "BLUETOOTH_DISABLED") {
-                return m_btSdkAdapter.setAdapterPowered(false);
+                return m_btAdapter.setAdapterPowered(false);
             } else if (enabled == "BLUETOOTH_ENABLED") {
-                return m_btSdkAdapter.setAdapterPowered(true);
+                return m_btAdapter.setAdapterPowered(true);
             } else if (enabled == "BLUETOOTH_INPUT_ENABLED") {
                 LOGERR("Bluetooth IN is not supported by STB");
             }
@@ -603,7 +599,7 @@ namespace WPEFramework
 
         bool Bluetooth::setBluetoothDiscoverable(bool enabled, int timeout)
         {
-            return m_btSdkAdapter.setAdapterDiscoverable(enabled, timeout);
+            return m_btAdapter.setAdapterDiscoverable(enabled, timeout);
         }
 
         // Sets adapter name. No support for "power" yet
@@ -613,7 +609,7 @@ namespace WPEFramework
                 string name;
                 getStringParameter("name", name);
                 LOGWARN("Name received as %s", C_STR(name));
-                return m_btSdkAdapter.setAdapterName(name);
+                return m_btAdapter.setAdapterName(name);
             }
             return false;
         }
@@ -622,44 +618,36 @@ namespace WPEFramework
         bool Bluetooth::getBluetoothProperties(JsonObject* rp)
         {
             std::string name;
-            bool ok = m_btSdkAdapter.getAdapterName(name);
+            bool ok = m_btAdapter.getAdapterName(name);
             if (rp) (*rp)["name"] = name;
             return ok;
         }
 
         bool Bluetooth::setAudioControlCommand(long long int deviceID, const string &audioCtrlCmd)
         {
-#ifdef BLUETOOTH_AUDIO_SUPPORT
-            // TODO(T-7): delegate to SDK AUDIO_SUPPORT media control API.
-            LOGWARN("setAudioControlCommand: BLUETOOTH_AUDIO_SUPPORT not yet implemented (cmd=%s)",
-                    audioCtrlCmd.c_str());
-#endif
-            if (audioCtrlCmd == CMD_AUDIO_CTRL_RESTART) {
-                LOGERR("RESTART command is not implemented");
-            }
-            return false;
+            return m_btAdapter.setAudioControlCommand(deviceID, audioCtrlCmd);
         }
 
         bool Bluetooth::setDeviceVolumeMuteProperties(long long int deviceID, const string &deviceProfile, unsigned char ui8volume, unsigned char mute)
         {
-#ifdef BLUETOOTH_AUDIO_SUPPORT
-            // TODO(T-7): delegate to SDK AUDIO_SUPPORT volume API.
-#endif
-            return false;
+            return m_btAdapter.setDeviceVolumeMute(deviceID, deviceProfile, ui8volume, static_cast<bool>(mute));
         }
 
         JsonObject Bluetooth::getDeviceVolumeMuteProperties(long long int deviceID, const string &deviceProfile)
         {
-#ifdef BLUETOOTH_AUDIO_SUPPORT
-            // TODO(T-7): delegate to SDK AUDIO_SUPPORT volume API.
-#endif
-            return JsonObject();
+            const auto info = m_btAdapter.getDeviceVolumeMute(deviceID, deviceProfile);
+            JsonObject volumeInfo;
+            if (info.valid) {
+                volumeInfo["volume"] = std::to_string(info.volume);
+                volumeInfo["mute"]   = info.mute;
+            }
+            return volumeInfo;
         }
 
         bool Bluetooth::setEventResponse(long long int deviceID, const string &eventType, const string &respValue)
         {
             const string deviceIdStr = std::to_string(deviceID);
-            const std::string mac = m_btSdkAdapter.getMacForHandle(deviceIdStr);
+            const std::string mac = m_btAdapter.getMacForHandle(deviceIdStr);
 
             bool accepted = Utils::String::equal(respValue, "ACCEPTED");
 
@@ -667,7 +655,7 @@ namespace WPEFramework
                 (eventType == EVT_PAIRING_REQUEST ||
                  eventType == EVT_CONNECTION_REQUEST ||
                  eventType == EVT_PLAYBACK_REQUEST)) {
-                m_btSdkAdapter.respondToEvent(mac, accepted);
+                m_btAdapter.respondToEvent(mac, accepted);
                 LOGINFO("Successfully done setEventResponse for deviceID=%lld, accepted=%d",
                         deviceID, static_cast<int>(accepted));
                 return true;
@@ -682,8 +670,8 @@ namespace WPEFramework
             JsonObject deviceDetails;
             const string deviceIdStr = std::to_string(deviceID);
 
-            IBtSdkAdapter::BtDeviceProperties props;
-            if (!m_btSdkAdapter.getDeviceProperties(deviceIdStr, props)) {
+            IBtAdapter::BtDeviceProperties props;
+            if (!m_btAdapter.getDeviceProperties(deviceIdStr, props)) {
                 LOGERR("Failed to get device details for deviceID=%lld", deviceID);
                 return deviceDetails;
             }
@@ -711,10 +699,16 @@ namespace WPEFramework
 
         JsonObject Bluetooth::getMediaTrackInfo(long long int deviceID)
         {
-#ifdef BLUETOOTH_AUDIO_SUPPORT
-            // TODO(T-7): delegate to SDK AUDIO_SUPPORT track info API.
-#endif
-            return JsonObject();
+            const auto info = m_btAdapter.getMediaTrackInfo(deviceID);
+            JsonObject result;
+            result["album"]              = info.album;
+            result["genre"]              = info.genre;
+            result["title"]              = info.title;
+            result["artist"]             = info.artist;
+            result["ui32Duration"]        = std::to_string(info.duration);
+            result["ui32TrackNumber"]     = std::to_string(info.trackNumber);
+            result["ui32NumberOfTracks"]  = std::to_string(info.numberOfTracks);
+            return result;
         }
 
         //

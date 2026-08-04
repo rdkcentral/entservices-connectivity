@@ -2,34 +2,40 @@
 
 The Bluetooth plugin currently depends on BTMgr/BTCore via the BTRMGR C API and IARM for all Bluetooth operations. The RDK-E Bluetooth re-architecture (Phase 4) removes BTManager entirely and replaces it with the bluetooth-sdk, an object-oriented C++ library that communicates directly with BlueZ over D-Bus. This change refactors the entservices-connectivity Bluetooth Thunder plugin to use the bluetooth-sdk instead of BTRMGR, eliminating the IARM and BTMgr runtime dependencies.
 
+A second requirement was added after initial implementation: the plugin must be buildable against **either** the bluetooth-sdk (when available) **or** the legacy BTMgr (as a fallback), determined at CMake configure time via `find_package`. Build image footprint must be minimised — SDK builds include no BTMgr object code or headers; BTMgr builds include no SDK object code or headers.
+
 ## What Changes
 
-- Remove all `BTRMGR_*` C API calls and replace with bluetooth-sdk equivalents.
-- Remove IARM registration and event callback lifecycle; replace with sdk Manager and per-object event registration.
-- Introduce `BtSdkAdapter` as an internal adapter layer that translates bluetooth-sdk events and operations into the existing plugin semantics, preserving the JSON-RPC API surface unchanged.
-- Introduce `DeviceRegistry` to maintain stable numeric device handle identity backward compatible with existing clients and PersistentStore data.
-- Introduce `DeviceTypeClassifier` to infer the device type strings (HEADPHONES, KEYBOARD, etc.) that the plugin currently derives from BTRMGR.
-- Introduce `EventBridge` to map SDK per-object events to the plugin's existing JSON-RPC notification contracts.
-- Introduce `AuthBridge` to bridge the SDK's synchronous auth callback to the plugin's existing async client respondToEvent model.
-- Audio methods (`sendAudioPlaybackCommand`, `setAudioStream`, `setDeviceVolumeMuteInfo`, `getDeviceVolumeMuteInfo`, `getAudioInfo`) are re-routed via the SDK's `AUDIO_SUPPORT` module once it is implemented.
+- Remove all `BTRMGR_*` C API calls from `Bluetooth.cpp` and replace with calls through an internal adapter interface.
+- Remove IARM registration and event callback lifecycle from `Bluetooth.cpp`; move to the SDK-path adapter implementation.
+- Introduce `IBtAdapter` (renamed from the initial `IBtSdkAdapter`) as the backend-neutral pure virtual interface. Both the SDK-path and BTMgr-path implementations satisfy this interface.
+- Rename the dispatch wrapper class to `BtAdapter` (was `BtSdkAdapter`) and update all associated file names to remove "Sdk" from backend-neutral artifacts.
+- Rename `BtSdkAdapterRealImpl` to `BtSdkAdapterImpl` (removing the redundant "Real").
+- Introduce `BtSdkAdapterImpl` — the bluetooth-sdk implementation of `IBtAdapter`, wrapping `bluetooth::Manager/Adapter/Device`. Includes `DeviceRegistry`, `DeviceTypeClassifier`, `EventBridge`, `AuthBridge`.
+- Introduce `BtMgrAdapterImpl` — the BTMgr implementation of `IBtAdapter`, extracting and wrapping all `BTRMGR_*` call sites and IARM lifecycle from the old `Bluetooth.cpp`.
+- Extend `IBtAdapter` to include audio operations (`setAudioStream`, `setAudioControlCommand`, `setDeviceVolumeMute`, `getDeviceVolumeMute`, `getMediaTrackInfo`). `BtSdkAdapterImpl` provides stubs pending AUDIO_SUPPORT (T-7). `BtMgrAdapterImpl` provides working BTMgr implementations immediately.
+- `CMakeLists.txt`: `find_package(BluetoothSDK)` / `find_package(BTMGR)` conditional; compiles the correct impl, links the correct library.
+- `Bluetooth.cpp` audio method bodies become single-line delegates to `m_btAdapter`; all `#ifdef BLUETOOTH_AUDIO_SUPPORT` stubs removed from `Bluetooth.cpp`.
 
 ## Capabilities
 
 ### New Capabilities
-- `bluetooth-sdk-adapter`: Internal adapter layer (not API-facing). Covers DeviceRegistry, DeviceTypeClassifier, EventBridge, AuthBridge, and all BTRMGR-to-SDK translation.
+- `bluetooth-adapter`: Internal adapter layer (not API-facing). Covers `IBtAdapter`, `BtAdapter` dispatch wrapper, `BtSdkAdapterImpl` (SDK path), `BtMgrAdapterImpl` (BTMgr path), `DeviceRegistry`, `DeviceTypeClassifier`, `EventBridge`, `AuthBridge`.
 
 ### Modified Capabilities
-- `bluetooth-btmgr-binding`: Replaced end-to-end. All requirements in the BTMgr Binding And Operation Contract spec section are superseded by SDK-based equivalents.
+- `bluetooth-btmgr-binding`: Replaced end-to-end. All requirements in the BTMgr Binding And Operation Contract spec section are superseded by SDK-based equivalents when the SDK path is active.
 
 ## Impact
 
-- `Bluetooth/Bluetooth.cpp` and `Bluetooth/Bluetooth.h`: BTRMGR includes and all `BTRMGR_*` call sites replaced. Initialization and deinitialization lifecycle replaced.
-- New internal classes: `BtSdkAdapter`, `DeviceRegistry`, `DeviceTypeClassifier`, `EventBridge`, `AuthBridge`.
-- `BluetoothDeviceManager` (`.h` and `.cpp`): public interface **unchanged**, but three internal BTMgr call sites replaced: `addDevice()`, `updateCacheFromDevice()`, and `writeCacheFromFilesystemPersistence()` (migration path). These are updated to use SDK device properties and device lists via `BtSdkAdapter`.
-- `CMakeLists.txt`: Remove btmgr link target; add bluetooth-sdk link target.
-- JSON-RPC API surface: No changes. All method names, parameter shapes, and event payloads are preserved.
-- PersistentStore data: Device handle values stored in PersistentStore remain stable (DeviceRegistry ensures handle derivation is deterministic from MAC address).
-- L1 tests: BTMgr mock replaced with bluetooth-sdk mock. Test coverage targets unchanged.
+- `Bluetooth/Bluetooth.cpp` and `Bluetooth/Bluetooth.h`: `BtSdkAdapter m_btSdkAdapter` renamed to `BtAdapter m_btAdapter`; include updated. All `m_btSdkAdapter.*` call sites renamed. Audio method bodies replaced with single-line adapter delegates.
+- File renames: `IBtSdkAdapter.h` → `IBtAdapter.h`, `BtSdkAdapterCallbacks.h` → `BtAdapterCallbacks.h`, `BtSdkAdapter.h/.cpp` → `BtAdapter.h/.cpp`, `BtSdkAdapterRealImpl.h/.cpp` → `BtSdkAdapterImpl.h/.cpp`, `BtSdkAdapterMock.h` → `BtAdapterMock.h`.
+- Class renames: `IBtSdkAdapter` → `IBtAdapter`, `BtSdkAdapter` → `BtAdapter`, `BtSdkAdapterRealImpl` → `BtSdkAdapterImpl`, `BtSdkAdapterImplMock` → `BtAdapterImplMock`.
+- New files: `BtMgrAdapterImpl.h`, `BtMgrAdapterImpl.cpp`.
+- `BluetoothDeviceManager` (`.h` and `.cpp`): `setBtSdkAdapter` → `setBtAdapter`; `IBtSdkAdapter*` → `IBtAdapter*`.
+- `CMakeLists.txt`: SDK/BTMgr conditional source and link selection.
+- JSON-RPC API surface: No changes.
+- PersistentStore data: Device handle values remain stable.
+- L1 tests: Mock renamed `BtAdapterMock.h` / `BtAdapterImplMock`; audio mock methods added.
 
 ## Non-Goals
 

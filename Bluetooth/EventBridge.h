@@ -27,7 +27,7 @@
 #include <bluetooth/Adapter.h>
 #include <bluetooth/Device.h>
 
-#include "BtSdkAdapterCallbacks.h"
+#include "BtAdapterCallbacks.h"
 #include "DeviceRegistry.h"
 #include "DeviceTypeClassifier.h"
 
@@ -47,7 +47,7 @@ public:
         , m_callbacks(std::move(callbacks))
     {}
 
-    // Called from BtSdkAdapter's adapter event registration callback.
+    // Called from BtAdapter's adapter event registration callback.
     void onAdapterEvent(bluetooth::AdapterEvent event, bluetooth::AdapterEventData data);
 
     // Called from per-device event registration callback.
