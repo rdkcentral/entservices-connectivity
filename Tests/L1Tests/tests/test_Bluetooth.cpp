@@ -2072,6 +2072,171 @@ TEST_F(BluetoothClearMigrationTest, clearMigrationWrapper_ReEnablesGuard_SetAuto
     EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
+/* -------------------------------------------------------------------------
+ * unpairingComplete event while migrated — AS file pruned
+ * When an external component unpairs a device directly through BTRMGR (i.e.,
+ * without calling org.rdk.Bluetooth.1.unpair), the plugin receives a
+ * BTRMGR_EVENT_DEVICE_UNPAIRING_COMPLETE event. The event handler must call
+ * removeDevice() so that the cache, PersistentStore, and AS file are kept in
+ * sync. After the event fires the AS file must no longer contain the device.
+ * ---------------------------------------------------------------------- */
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, unpairingCompleteEvent_WhileMigrated_PrunesAsFile)
+{
+    const std::string seedPayload =
+        "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"deviceType\":\"HEADPHONES\","
+        "\"lastVolumeSetting\":0,\"autoConnectStatus\":false,\"lastConnectionTimeUTC\":0}]}";
+    if (!initializeFromFilesystemPersistencePayload(seedPayload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":true") != string::npos);
+
+    BTRMGR_EventMessage_t eventMsg{};
+    eventMsg.m_eventType = BTRMGR_EVENT_DEVICE_UNPAIRING_COMPLETE;
+    eventMsg.m_pairedDevice.m_deviceHandle = 123;
+    strncpy(eventMsg.m_pairedDevice.m_name, "MigrationTestDevice", BTRMGR_NAME_LEN_MAX - 1);
+    eventMsg.m_pairedDevice.m_deviceType = BTRMGR_DEVICE_TYPE_HEADPHONES;
+    plugin->notifyEventWrapper(eventMsg);
+
+    std::string updatedPayload;
+    ASSERT_TRUE(readFilesystemPersistencePayload(updatedPayload));
+    EXPECT_TRUE(updatedPayload.find("\"deviceAddr\":\"123\"") == std::string::npos)
+        << "Device should have been pruned from AS file after UNPAIRING_COMPLETE event";
+}
+
+/* -------------------------------------------------------------------------
+ * pairingComplete event while migrated — device added to AS file
+ * ---------------------------------------------------------------------- */
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, pairingCompleteEvent_WhileMigrated_AddsDeviceToAsFile)
+{
+    // Start with an empty AS file and perform migration so _isMigrated=true with an empty cache.
+    if (!initializeFromFilesystemPersistencePayload("{\"pairedDevices\":[]}")) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":true") != string::npos);
+
+    BTRMGR_DevicesProperty_t deviceProperty{};
+    deviceProperty.m_deviceHandle = 123;
+    deviceProperty.m_deviceType = BTRMGR_DEVICE_TYPE_HEADPHONES;
+    strncpy(deviceProperty.m_deviceAddress, "123", BTRMGR_NAME_LEN_MAX - 1);
+    strncpy(deviceProperty.m_name, "MigrationTestDevice", BTRMGR_NAME_LEN_MAX - 1);
+
+    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetDeviceProperties(::testing::_, 123, ::testing::_))
+        .WillOnce(::testing::DoAll(
+            ::testing::SetArgPointee<2>(deviceProperty),
+            ::testing::Return(BTRMGR_RESULT_SUCCESS)));
+
+    BTRMGR_EventMessage_t eventMsg{};
+    eventMsg.m_eventType = BTRMGR_EVENT_DEVICE_PAIRING_COMPLETE;
+    eventMsg.m_discoveredDevice.m_deviceHandle = 123;
+    strncpy(eventMsg.m_discoveredDevice.m_name, "MigrationTestDevice", BTRMGR_NAME_LEN_MAX - 1);
+    eventMsg.m_discoveredDevice.m_deviceType = BTRMGR_DEVICE_TYPE_HEADPHONES;
+    eventMsg.m_discoveredDevice.m_isPairedDevice = 1;
+    plugin->notifyEventWrapper(eventMsg);
+
+    std::string updatedPayload;
+    ASSERT_TRUE(readFilesystemPersistencePayload(updatedPayload));
+    EXPECT_TRUE(updatedPayload.find("\"deviceAddr\":\"123\"") != std::string::npos)
+        << "Device should have been added to AS file after PAIRING_COMPLETE event";
+}
+
+/* -------------------------------------------------------------------------
+ * connectionComplete event while migrated — lastConnectionTimeUTC updated in AS file
+ * ---------------------------------------------------------------------- */
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, connectionCompleteEvent_WhileMigrated_UpdatesTimestampInAsFile)
+{
+    const std::string seedPayload =
+        "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"deviceType\":\"HEADPHONES\","
+        "\"lastVolumeSetting\":0,\"autoConnectStatus\":false,\"lastConnectionTimeUTC\":0}]}";
+    if (!initializeFromFilesystemPersistencePayload(seedPayload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":true") != string::npos);
+
+    BTRMGR_EventMessage_t eventMsg{};
+    eventMsg.m_eventType = BTRMGR_EVENT_DEVICE_CONNECTION_COMPLETE;
+    eventMsg.m_pairedDevice.m_deviceHandle = 123;
+    strncpy(eventMsg.m_pairedDevice.m_name, "MigrationTestDevice", BTRMGR_NAME_LEN_MAX - 1);
+    eventMsg.m_pairedDevice.m_deviceType = BTRMGR_DEVICE_TYPE_HEADPHONES;
+    eventMsg.m_pairedDevice.m_isConnected = 1;
+    plugin->notifyEventWrapper(eventMsg);
+
+    std::string updatedPayload;
+    ASSERT_TRUE(readFilesystemPersistencePayload(updatedPayload));
+    // The timestamp must have been updated from 0 to a non-zero value.
+    EXPECT_TRUE(updatedPayload.find("\"lastConnectionTimeUTC\":0") == std::string::npos)
+        << "lastConnectionTimeUTC should be updated in AS file after CONNECTION_COMPLETE event";
+}
+
+/* -------------------------------------------------------------------------
+ * disconnectComplete event while migrated — lastConnectionTimeUTC NOT updated
+ * Symmetry check: disconnect must not stamp a new connection time.
+ * ---------------------------------------------------------------------- */
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, disconnectCompleteEvent_WhileMigrated_DoesNotUpdateTimestamp)
+{
+    const std::string seedPayload =
+        "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"deviceType\":\"HEADPHONES\","
+        "\"lastVolumeSetting\":0,\"autoConnectStatus\":false,\"lastConnectionTimeUTC\":9999999999}]}";
+    if (!initializeFromFilesystemPersistencePayload(seedPayload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":true") != string::npos);
+
+    BTRMGR_EventMessage_t eventMsg{};
+    eventMsg.m_eventType = BTRMGR_EVENT_DEVICE_DISCONNECT_COMPLETE;
+    eventMsg.m_pairedDevice.m_deviceHandle = 123;
+    strncpy(eventMsg.m_pairedDevice.m_name, "MigrationTestDevice", BTRMGR_NAME_LEN_MAX - 1);
+    eventMsg.m_pairedDevice.m_deviceType = BTRMGR_DEVICE_TYPE_HEADPHONES;
+    plugin->notifyEventWrapper(eventMsg);
+
+    std::string updatedPayload;
+    ASSERT_TRUE(readFilesystemPersistencePayload(updatedPayload));
+    EXPECT_TRUE(updatedPayload.find("\"lastConnectionTimeUTC\":9999999999") != std::string::npos)
+        << "lastConnectionTimeUTC should not be changed by a DISCONNECT_COMPLETE event";
+}
+
+/* -------------------------------------------------------------------------
+ * mediaStatus event while migrated — volume persisted via API path, not event
+ * BTRMGR_EVENT_DEVICE_MEDIA_STATUS does not call setLastVolumeSetting because
+ * event-to-API path reliability is uncertain; persistence is owned by
+ * setDeviceVolumeMuteInfo. The event must still fire the onDeviceMediaStatus
+ * notification without touching the AS file.
+ * ---------------------------------------------------------------------- */
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, mediaStatusEvent_WhileMigrated_DoesNotWriteVolumeSetting)
+{
+    const std::string seedPayload =
+        "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"deviceType\":\"HEADPHONES\","
+        "\"lastVolumeSetting\":0,\"autoConnectStatus\":false,\"lastConnectionTimeUTC\":0}]}";
+    if (!initializeFromFilesystemPersistencePayload(seedPayload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":true") != string::npos);
+
+    BTRMGR_EventMessage_t eventMsg{};
+    eventMsg.m_eventType = BTRMGR_EVENT_DEVICE_MEDIA_STATUS;
+    eventMsg.m_mediaInfo.m_deviceHandle = 123;
+    strncpy(eventMsg.m_mediaInfo.m_name, "MigrationTestDevice", BTRMGR_NAME_LEN_MAX - 1);
+    eventMsg.m_mediaInfo.m_deviceType = BTRMGR_DEVICE_TYPE_HEADPHONES;
+    eventMsg.m_mediaInfo.m_mediaDevStatus.m_ui8mediaDevVolume = 42;
+    eventMsg.m_mediaInfo.m_mediaDevStatus.m_enmediaCtrlCmd = BTRMGR_MEDIA_CTRL_VOLUMEUP;
+    plugin->notifyEventWrapper(eventMsg);
+
+    std::string updatedPayload;
+    ASSERT_TRUE(readFilesystemPersistencePayload(updatedPayload));
+    // Volume must NOT change in the AS file — persistence is the API path's responsibility.
+    EXPECT_TRUE(updatedPayload.find("\"lastVolumeSetting\":0") != std::string::npos)
+        << "AS file should not be modified by a DEVICE_MEDIA_STATUS event";
+}
+
 TEST_F(BluetoothTest, featureGateCompileCoverage_FlagOn)
 {
     constexpr bool migrationFlagEnabled = true;

@@ -654,11 +654,7 @@ namespace WPEFramework
                 }
             }
 
-            if (BTRMGR_RESULT_SUCCESS == rc ) {
-                if (connect) {
-                    m_bluetoothDeviceManager.setLastConnectTimeUtc(std::to_string(deviceHandle));
-                }
-            } else {
+            if (BTRMGR_RESULT_SUCCESS != rc) {
                 LOGERR("Failed to do setDeviceConnection");
             }
 
@@ -1038,10 +1034,11 @@ namespace WPEFramework
                     //       events from BTRMgr ??
                     break;
 
-                case BTRMGR_EVENT_DEVICE_PAIRING_COMPLETE:
+                case BTRMGR_EVENT_DEVICE_PAIRING_COMPLETE: {
                     LOGINFO ("Received %s Event from BTRMgr", C_STR(STATUS_PAIRING_CHANGE));
                     params["newStatus"] = STATUS_PAIRING_CHANGE;
-                    params["deviceID"] = C_STR(std::to_string(eventMsg.m_discoveredDevice.m_deviceHandle));
+                    const string pairDeviceId = std::to_string(eventMsg.m_discoveredDevice.m_deviceHandle);
+                    params["deviceID"] = pairDeviceId;
                     params["name"] = string(eventMsg.m_discoveredDevice.m_name);
                     params["deviceType"] = BTRMGR_GetDeviceTypeAsString(eventMsg.m_discoveredDevice.m_deviceType);
                     params["rawDeviceType"] = C_STR(std::to_string(eventMsg.m_discoveredDevice.m_ui32DevClassBtSpec));
@@ -1050,13 +1047,21 @@ namespace WPEFramework
                     params["paired"] = eventMsg.m_discoveredDevice.m_isPairedDevice ? true : false;
                     params["connected"] = eventMsg.m_discoveredDevice.m_isConnected ? true : false;
 
+                    // Only add if not already present — avoids a duplicate write when pair() was called via the plugin API.
+                    BluetoothDeviceInfo existingInfo;
+                    if (Core::ERROR_NONE != m_bluetoothDeviceManager.getPairedDeviceInfo(pairDeviceId, existingInfo)) {
+                        m_bluetoothDeviceManager.addDevice(pairDeviceId);
+                    }
+
                     eventId = EVT_STATUS_CHANGED;
                     break;
+                }
 
-                case BTRMGR_EVENT_DEVICE_UNPAIRING_COMPLETE:
+                case BTRMGR_EVENT_DEVICE_UNPAIRING_COMPLETE: {
                     LOGINFO ("Received %s Event from BTRMgr", C_STR(STATUS_PAIRING_CHANGE));
                     params["newStatus"] = STATUS_PAIRING_CHANGE;
-                    params["deviceID"] = std::to_string(eventMsg.m_pairedDevice.m_deviceHandle);
+                    const string unpairDeviceId = std::to_string(eventMsg.m_pairedDevice.m_deviceHandle);
+                    params["deviceID"] = unpairDeviceId;
                     params["name"] = string(eventMsg.m_pairedDevice.m_name);
                     params["deviceType"] = BTRMGR_GetDeviceTypeAsString(eventMsg.m_pairedDevice.m_deviceType);
                     params["rawDeviceType"] = std::to_string(eventMsg.m_pairedDevice.m_ui32DevClassBtSpec);
@@ -1065,8 +1070,13 @@ namespace WPEFramework
                     params["paired"] = false;
                     params["connected"] = eventMsg.m_pairedDevice.m_isConnected ? true : false;
 
+                    // Keep cache, PersistentStore, and AS file in sync regardless of what
+                    // triggered the unpair (internal API call or external BTRMGR caller).
+                    m_bluetoothDeviceManager.removeDevice(unpairDeviceId);
+
                     eventId = EVT_STATUS_CHANGED;
                     break;
+                }
 
                 case BTRMGR_EVENT_DEVICE_CONNECTION_COMPLETE:
                 case BTRMGR_EVENT_DEVICE_DISCONNECT_COMPLETE: {
@@ -1092,6 +1102,10 @@ namespace WPEFramework
                         }
                     } else {
                         LOGINFO("Unable to retrieve autoconnect status for device %s: %d", deviceId.c_str(), result);
+                    }
+
+                    if (eventMsg.m_eventType == BTRMGR_EVENT_DEVICE_CONNECTION_COMPLETE) {
+                        m_bluetoothDeviceManager.setLastConnectTimeUtc(deviceId);
                     }
 
                     eventId = EVT_STATUS_CHANGED;
@@ -1337,9 +1351,10 @@ namespace WPEFramework
                     eventId = EVT_DEVICE_DISCOVERY_UPDATE;
                     break;
 
-                case BTRMGR_EVENT_DEVICE_MEDIA_STATUS:
+                case BTRMGR_EVENT_DEVICE_MEDIA_STATUS: {
                     LOGINFO ("Received %s Event from BTRMgr", C_STR(EVT_DEVICE_MEDIA_STATUS));
-                    params["deviceID"] = std::to_string(eventMsg.m_mediaInfo.m_deviceHandle);
+                    const string mediaDeviceId = std::to_string(eventMsg.m_mediaInfo.m_deviceHandle);
+                    params["deviceID"] = mediaDeviceId;
                     params["name"] = string(eventMsg.m_mediaInfo.m_name);
                     params["deviceType"] = BTRMGR_GetDeviceTypeAsString(eventMsg.m_mediaInfo.m_deviceType);
                     params["volume"] = std::to_string(eventMsg.m_mediaInfo.m_mediaDevStatus.m_ui8mediaDevVolume);
@@ -1363,6 +1378,7 @@ namespace WPEFramework
 
                     eventId = EVT_DEVICE_MEDIA_STATUS;
                     break;
+                }
 
                 // TODO: implement or delete these values from enum
                 case BTRMGR_EVENT_MAX:
