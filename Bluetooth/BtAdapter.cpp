@@ -52,12 +52,12 @@ static BtMgrAdapterImpl g_btAdapterImpl;
 #endif
 #endif
 
-static IBtAdapter& getImpl() {
+IBtAdapter& BtAdapter::getImpl() {
 #ifndef RDK_SERVICES_L1_TEST
-    if (!BtAdapter::impl) BtAdapter::impl = &g_btAdapterImpl;
+    if (!impl) impl = &g_btAdapterImpl;
 #endif
-    assert(BtAdapter::impl != nullptr);
-    return *BtAdapter::impl;
+    assert(impl != nullptr);
+    return *impl;
 }
 
 std::string BtAdapter::init(PluginHost::IShell* service,

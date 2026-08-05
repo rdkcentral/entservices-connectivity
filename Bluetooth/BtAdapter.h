@@ -91,6 +91,7 @@ public:
 
 private:
     static IBtAdapter* impl;
+    static IBtAdapter& getImpl();
 };
 
 } // namespace Plugin
