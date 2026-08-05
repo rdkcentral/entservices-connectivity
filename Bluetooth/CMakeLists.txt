@@ -32,6 +32,7 @@ set(BLUETOOTH_PLUGIN_SOURCES
         Bluetooth.cpp
         BluetoothDeviceManager.cpp
         BtAdapter.cpp
+        DeviceRegistry.cpp
         Module.cpp
 )
 
@@ -52,7 +53,6 @@ if (NOT RDK_SERVICES_L1_TEST)
         message(STATUS "Bluetooth plugin: using bluetooth-sdk backend")
         list(APPEND BLUETOOTH_PLUGIN_SOURCES
             BtSdkAdapterImpl.cpp
-            DeviceRegistry.cpp
             DeviceTypeClassifier.cpp
             EventBridge.cpp
             AuthBridge.cpp
