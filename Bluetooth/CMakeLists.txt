@@ -37,16 +37,20 @@ set(BLUETOOTH_PLUGIN_SOURCES
 
 # Probe for both backends. SDK takes priority; BTMgr is the fallback.
 # L1 test builds skip both backend probes (mock injected via BtAdapter::setImpl).
+message("*** _DEBUG: Mark 1");
 if (NOT RDK_SERVICES_L1_TEST)
-    find_package(BluetoothSDK QUIET)
+    message("*** _DEBUG: Mark 2");
+    find_package(BluetoothSDK)
     if (NOT BluetoothSDK_FOUND)
-        find_package(bluetooth-sdk QUIET)
+        message("*** _DEBUG: Mark 3");
+        find_package(bluetooth-sdk)
         if (bluetooth-sdk_FOUND)
+            message("*** _DEBUG: Mark 4");
             set(BluetoothSDK_FOUND TRUE)
         endif()
     endif()
 
-    find_package(BTMGR QUIET)
+    find_package(BTMGR)
 
     if (BluetoothSDK_FOUND)
         message(STATUS "Bluetooth plugin: using bluetooth-sdk backend")
@@ -64,6 +68,8 @@ if (NOT RDK_SERVICES_L1_TEST)
         message(FATAL_ERROR "Bluetooth plugin: neither BluetoothSDK nor BTMGR found")
     endif()
 endif()
+
+message("*** _DEBUG: Mark 5");
 
 if (BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION)
     list(APPEND BLUETOOTH_PLUGIN_SOURCES BluetoothPersistenceAdapter.cpp)
@@ -109,7 +115,7 @@ if (NOT RDK_SERVICES_L1_TEST)
     endif()
 endif()
 
-find_package(IARMBus QUIET)
+find_package(IARMBus)
 if (IARMBUS_FOUND OR IARMBus_FOUND)
     target_include_directories(${MODULE_NAME} PRIVATE ${IARMBUS_INCLUDE_DIRS})
     target_link_libraries(${MODULE_NAME} PRIVATE ${IARMBUS_LIBRARIES})
