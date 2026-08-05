@@ -27,7 +27,6 @@
 #include "BtAdapter.h"
 #include "IBtAdapter.h"
 #include "DeviceRegistry.h"
-#include "DeviceTypeClassifier.h"
 
 #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
 #include "BluetoothPersistenceAdapter.h"
