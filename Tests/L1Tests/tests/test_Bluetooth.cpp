@@ -48,6 +48,7 @@
 
 using ::testing::NiceMock;
 using namespace WPEFramework;
+using namespace WPEFramework::Plugin;
 
 namespace {
 const string callSign = _T("Bluetooth");
@@ -471,8 +472,6 @@ TEST_F(BluetoothTest, setAudioStreamWrapper_MissingParameters_Failure)
     EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
-TEST_F(BluetoothTest, setAudioStreamWrapper_Failed)
-{
 TEST_F(BluetoothTest, setAudioStreamWrapper_Failed)
 {
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAudioStream"), _T("{\"deviceID\":\"123\",\"audioStreamName\":\"PRIMARY\"}"), response));
