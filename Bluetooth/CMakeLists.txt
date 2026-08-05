@@ -37,15 +37,11 @@ set(BLUETOOTH_PLUGIN_SOURCES
 
 # Probe for both backends. SDK takes priority; BTMgr is the fallback.
 # L1 test builds skip both backend probes (mock injected via BtAdapter::setImpl).
-message("*** _DEBUG: Mark 1");
 if (NOT RDK_SERVICES_L1_TEST)
-    message("*** _DEBUG: Mark 2");
     find_package(BluetoothSDK)
     if (NOT BluetoothSDK_FOUND)
-        message("*** _DEBUG: Mark 3");
         find_package(bluetooth-sdk)
         if (bluetooth-sdk_FOUND)
-            message("*** _DEBUG: Mark 4");
             set(BluetoothSDK_FOUND TRUE)
         endif()
     endif()
@@ -69,7 +65,6 @@ if (NOT RDK_SERVICES_L1_TEST)
     endif()
 endif()
 
-message("*** _DEBUG: Mark 5");
 
 if (BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION)
     list(APPEND BLUETOOTH_PLUGIN_SOURCES BluetoothPersistenceAdapter.cpp)
