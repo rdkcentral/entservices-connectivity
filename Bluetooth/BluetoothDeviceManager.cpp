@@ -491,8 +491,6 @@ namespace WPEFramework {
 
         Core::hresult BluetoothDeviceManager::init(PluginHost::IShell* service)
         {
-            LOGINFO("*** _DEBUG: Migration fix: 20260806");
-
             LOGINFO("BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION is %s",
 #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
                 "enabled"
