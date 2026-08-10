@@ -38,7 +38,12 @@ set(BLUETOOTH_PLUGIN_SOURCES
 
 # Probe for both backends. SDK takes priority; BTMgr is the fallback.
 # L1 test builds skip both backend probes (mock injected via BtAdapter::setImpl).
-if (NOT RDK_SERVICES_L1_TEST)
+# L2 test builds inject BTMgr mock headers via force-include; compile the BTMgr
+# adapter without requiring the real package.
+if (RDK_SERVICE_L2_TEST)
+    message(STATUS "Bluetooth plugin: L2 test build - using BTMgr mock backend")
+    list(APPEND BLUETOOTH_PLUGIN_SOURCES BtMgrAdapterImpl.cpp)
+elseif (NOT RDK_SERVICES_L1_TEST)
     find_package(BLUETOOTH_SDK)
 
     if (BLUETOOTH_SDK_FOUND)
@@ -51,7 +56,7 @@ if (NOT RDK_SERVICES_L1_TEST)
         )
     else()
         find_package(BTMGR)
-    
+
         if (BTMGR_FOUND)
             message(STATUS "Bluetooth plugin: using BTMgr fallback backend")
             list(APPEND BLUETOOTH_PLUGIN_SOURCES BtMgrAdapterImpl.cpp)
@@ -89,7 +94,7 @@ if (RDK_SERVICE_L2_TEST)
 endif (RDK_SERVICE_L2_TEST)
 
 # Per-backend link and include configuration.
-if (NOT RDK_SERVICES_L1_TEST)
+if (NOT RDK_SERVICES_L1_TEST AND NOT RDK_SERVICE_L2_TEST)
     if (BLUETOOTH_SDK_FOUND)
         target_compile_definitions(${MODULE_NAME} PRIVATE BLUETOOTH_USE_SDK=1)
         if (BLUETOOTH_SDK_INCLUDE_DIRS)
