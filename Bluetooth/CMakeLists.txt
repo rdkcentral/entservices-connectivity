@@ -39,17 +39,9 @@ set(BLUETOOTH_PLUGIN_SOURCES
 # Probe for both backends. SDK takes priority; BTMgr is the fallback.
 # L1 test builds skip both backend probes (mock injected via BtAdapter::setImpl).
 if (NOT RDK_SERVICES_L1_TEST)
-    find_package(BluetoothSDK)
-    if (NOT BluetoothSDK_FOUND)
-        find_package(bluetooth-sdk)
-        if (bluetooth-sdk_FOUND)
-            set(BluetoothSDK_FOUND TRUE)
-        endif()
-    endif()
+    find_package(BLUETOOTH_SDK)
 
-    find_package(BTMGR)
-
-    if (BluetoothSDK_FOUND)
+    if (BLUETOOTH_SDK_FOUND)
         message(STATUS "Bluetooth plugin: using bluetooth-sdk backend")
         list(APPEND BLUETOOTH_PLUGIN_SOURCES
             BtSdkAdapterImpl.cpp
@@ -57,12 +49,16 @@ if (NOT RDK_SERVICES_L1_TEST)
             EventBridge.cpp
             AuthBridge.cpp
         )
-    elseif (BTMGR_FOUND)
-        message(STATUS "Bluetooth plugin: using BTMgr fallback backend")
-        list(APPEND BLUETOOTH_PLUGIN_SOURCES BtMgrAdapterImpl.cpp)
     else()
-        message(FATAL_ERROR "Bluetooth plugin: neither BluetoothSDK nor BTMGR found")
-    endif()
+        find_package(BTMGR)
+    
+        if (BTMGR_FOUND)
+            message(STATUS "Bluetooth plugin: using BTMgr fallback backend")
+            list(APPEND BLUETOOTH_PLUGIN_SOURCES BtMgrAdapterImpl.cpp)
+        else()
+            message(FATAL_ERROR "Bluetooth plugin: neither BLUETOOTH_SDK nor BTMGR found")
+        endif(BTMGR_FOUND)
+    endif(BLUETOOTH_SDK_FOUND)
 endif()
 
 
@@ -94,15 +90,13 @@ endif (RDK_SERVICE_L2_TEST)
 
 # Per-backend link and include configuration.
 if (NOT RDK_SERVICES_L1_TEST)
-    if (BluetoothSDK_FOUND)
+    if (BLUETOOTH_SDK_FOUND)
         target_compile_definitions(${MODULE_NAME} PRIVATE BLUETOOTH_USE_SDK=1)
-        if (BLUETOOTHSDK_INCLUDE_DIRS)
-            target_include_directories(${MODULE_NAME} PRIVATE ${BLUETOOTHSDK_INCLUDE_DIRS})
+        if (BLUETOOTH_SDK_INCLUDE_DIRS)
+            target_include_directories(${MODULE_NAME} PRIVATE ${BLUETOOTH_SDK_INCLUDE_DIRS})
         endif()
-        if (BLUETOOTHSDK_LIBRARIES)
-            target_link_libraries(${MODULE_NAME} PRIVATE ${BLUETOOTHSDK_LIBRARIES})
-        elseif (bluetooth-sdk_FOUND)
-            target_link_libraries(${MODULE_NAME} PRIVATE bluetooth-sdk::bluetooth-sdk)
+        if (BLUETOOTH_SDK_LIBRARIES)
+            target_link_libraries(${MODULE_NAME} PRIVATE ${BLUETOOTH_SDK_LIBRARIES})
         endif()
     elseif (BTMGR_FOUND)
         target_include_directories(${MODULE_NAME} PRIVATE ${BTMGR_INCLUDE_DIRS})
