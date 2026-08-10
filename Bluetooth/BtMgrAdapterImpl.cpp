@@ -23,9 +23,9 @@
 #include <cstring>
 
 #include "btmgr.h"
+#include <UtilsIarm.h>
 #include <UtilsLogging.h>
 #include <UtilsString.h>
-#include "IarmBusHelper.h"
 
 namespace WPEFramework {
 namespace Plugin {
