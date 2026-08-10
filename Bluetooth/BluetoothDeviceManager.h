@@ -90,7 +90,7 @@ namespace WPEFramework {
                 Core::hresult writeStorageFromCache();
         #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
                 Core::hresult writeCacheFromFilesystemPersistence(const std::string& rawContent);
-                void writeFilesystemPersistenceFromCache();
+                void writeFilesystemPersistenceFromCache(const std::unordered_map<std::string, BluetoothDeviceInfo>& cacheSnapshot);
                 Core::hresult readMigrationVersionFromStorage(std::string& version) const;
                 Core::hresult writeMigrationVersionToStorage();
                 std::atomic<bool> _isMigrated{false};

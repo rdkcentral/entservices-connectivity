@@ -1907,6 +1907,141 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, write_AutoConnectStatusUnse
 }
 
 // ============================================================================
+// MAC-keyed cache: import, persistence payload, mutation, and eviction
+// ============================================================================
+
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, macKeyedEntry_GetAutoConnectByMacSucceeds)
+{
+    // A device whose MAC is not known to BTRMGR is imported with its MAC as the cache
+    // key. After performMigration, getAutoConnect must locate the entry using the MAC.
+    const std::string mac = "AA:BB:CC:DD:EE:FF";
+    const std::string payload =
+        "{\"pairedDevices\":[{\"deviceAddr\":\"" + mac + "\",\"deviceType\":\"HEADPHONES\","
+        "\"autoConnectStatus\":true,\"lastConnectionTimeUTC\":1712345678}]}";
+
+    if (!initializeFromFilesystemPersistencePayload(payload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":true") != string::npos);
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getAutoConnect"),
+        std::string("{\"deviceID\":\"") + mac + "\"}", response));
+    EXPECT_TRUE(response.find("\"autoconnect\":true") != string::npos);
+    EXPECT_TRUE(response.find("\"success\":true") != string::npos);
+}
+
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, macKeyedEntry_WriteStoragePayloadUsesMacAsDeviceID)
+{
+    // writeStorageFromCache must serialize the MAC address as "deviceID" for a MAC-keyed
+    // cache entry, so the PersistentStore payload round-trips the device identity correctly.
+    const std::string mac = "AA:BB:CC:DD:EE:FF";
+    const std::string payload =
+        "{\"pairedDevices\":[{\"deviceAddr\":\"" + mac + "\",\"deviceType\":\"HEADPHONES\","
+        "\"autoConnectStatus\":true,\"lastConnectionTimeUTC\":0}]}";
+
+    if (!initializeFromFilesystemPersistencePayload(payload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    std::string persistedJson;
+    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, PERSISTENT_STORE_KEY_DEVICE_INFO, ::testing::_))
+        .Times(::testing::AtLeast(1))
+        .WillRepeatedly(::testing::DoAll(
+            ::testing::SaveArg<2>(&persistedJson),
+            ::testing::Return(Core::ERROR_NONE)));
+    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, PERSISTENT_STORE_KEY_MIGRATION_VERSION, ::testing::_))
+        .WillRepeatedly(::testing::Return(Core::ERROR_NONE));
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":true") != string::npos);
+
+    EXPECT_FALSE(persistedJson.empty());
+    EXPECT_TRUE(persistedJson.find(std::string("\"deviceID\":\"") + mac + "\"") != string::npos);
+    EXPECT_TRUE(persistedJson.find(std::string("\"deviceAddr\":\"") + mac + "\"") != string::npos);
+    EXPECT_TRUE(persistedJson.find("\"autoconnect\":1") != string::npos);
+}
+
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, macKeyedEntry_SetAutoConnectByMacSucceeds)
+{
+    // setAutoConnect must accept the MAC address as deviceID and update the MAC-keyed
+    // cache entry; the change must be visible through a subsequent getAutoConnect call.
+    const std::string mac = "AA:BB:CC:DD:EE:FF";
+    const std::string payload =
+        "{\"pairedDevices\":[{\"deviceAddr\":\"" + mac + "\",\"deviceType\":\"HEADPHONES\","
+        "\"autoConnectStatus\":true,\"lastConnectionTimeUTC\":0}]}";
+
+    if (!initializeFromFilesystemPersistencePayload(payload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":true") != string::npos);
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
+        std::string("{\"deviceID\":\"") + mac + "\",\"enable\":false}", response));
+    EXPECT_TRUE(response.find("\"success\":true") != string::npos);
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getAutoConnect"),
+        std::string("{\"deviceID\":\"") + mac + "\"}", response));
+    EXPECT_TRUE(response.find("\"autoconnect\":false") != string::npos);
+    EXPECT_TRUE(response.find("\"success\":true") != string::npos);
+}
+
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, macKeyedEntry_PairEvictsMacKeyedEntryAndAddsHandleKeyedEntry)
+{
+    // addDevice (called via pair) must evict any MAC-keyed cache entry for the same
+    // physical device and replace it with a handle-keyed entry. After eviction,
+    // getAutoConnect by the original MAC must fail and getAutoConnect by the new
+    // BTRMGR handle must succeed.
+    const std::string mac = "AA:BB:CC:DD:EE:FF";
+    const std::string payload =
+        "{\"pairedDevices\":[{\"deviceAddr\":\"" + mac + "\",\"deviceType\":\"HEADPHONES\","
+        "\"autoConnectStatus\":true,\"lastConnectionTimeUTC\":0}]}";
+
+    if (!initializeFromFilesystemPersistencePayload(payload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":true") != string::npos);
+
+    // Confirm MAC-keyed entry is accessible before eviction.
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getAutoConnect"),
+        std::string("{\"deviceID\":\"") + mac + "\"}", response));
+    EXPECT_TRUE(response.find("\"autoconnect\":true") != string::npos);
+
+    // Pair a device (handle 999) whose BTRMGR-reported address matches the MAC-keyed entry.
+    EXPECT_CALL(*p_btmgrMock, BTRMGR_PairDevice(::testing::_, static_cast<BTRMgrDeviceHandle>(999LL)))
+        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
+
+    BTRMGR_DevicesProperty_t deviceProperty = {};
+    strncpy(deviceProperty.m_deviceAddress, mac.c_str(), sizeof(deviceProperty.m_deviceAddress) - 1);
+    deviceProperty.m_deviceType = BTRMGR_DEVICE_TYPE_HEADPHONES;
+    strncpy(deviceProperty.m_name, "MyBTDevice", sizeof(deviceProperty.m_name) - 1);
+
+    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetDeviceProperties(::testing::_, static_cast<BTRMgrDeviceHandle>(999LL), ::testing::_))
+        .WillOnce(::testing::DoAll(
+            ::testing::SetArgPointee<2>(deviceProperty),
+            ::testing::Return(BTRMGR_RESULT_SUCCESS)));
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("pair"), _T("{\"deviceID\":\"999\"}"), response));
+    EXPECT_TRUE(response.find("\"success\":true") != string::npos);
+
+    // MAC-keyed entry must be gone after eviction.
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getAutoConnect"),
+        std::string("{\"deviceID\":\"") + mac + "\"}", response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
+
+    // Handle-keyed entry must be accessible with default (disabled) autoconnect.
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getAutoConnect"),
+        _T("{\"deviceID\":\"999\"}"), response));
+    EXPECT_TRUE(response.find("\"autoconnect\":false") != string::npos);
+    EXPECT_TRUE(response.find("\"success\":true") != string::npos);
+}
+
+// ============================================================================
 // performMigration / clearMigration wrapper API tests
 // ============================================================================
 
