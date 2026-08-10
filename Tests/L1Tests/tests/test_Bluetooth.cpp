@@ -1499,11 +1499,10 @@ TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, write_InitialDeviceAut
 
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
 
-    // performMigration does not write to the filesystem; trigger the first sync via a mutation
-    // so that Write() is exercised with the UNSET autoConnectStatus (no setAutoConnect call,
-    // which would change the status from UNSET to DISABLED).
-    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setDeviceVolumeMuteInfo"),
-        _T("{\"deviceID\":\"123\",\"deviceType\":\"HEADPHONES\",\"volume\":0,\"mute\":0}"), response));
+    // performMigration does not write to the filesystem; trigger the first sync via setAutoConnect.
+    // UNSET and DISABLED both serialize as false, so the assertion below still holds.
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
+        _T("{\"deviceID\":\"123\",\"enable\":false}"), response));
 
     std::string filesystemPayload;
     ASSERT_TRUE(readFilesystemPersistencePayload(filesystemPayload));
