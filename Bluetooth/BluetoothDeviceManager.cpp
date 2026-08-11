@@ -81,8 +81,12 @@ namespace WPEFramework {
                 auto it = addrToDeviceId.find(info.deviceAddr);
                 if (it != addrToDeviceId.end()) {
                     importedCache[it->second] = std::move(info);
+                } else if (!info.deviceAddr.empty()) {
+                    // BTRMGR doesn't know this device; key by MAC so it is preserved in persistence.
+                    LOGWARN("No BTRMGR handle for addr=%s, importing with MAC as key", info.deviceAddr.c_str());
+                    importedCache[info.deviceAddr] = std::move(info);
                 } else {
-                    LOGWARN("No paired device handle found for addr=%s during filesystem persistence import, skipping", info.deviceAddr.c_str());
+                    LOGWARN("Skipping device with empty deviceAddr during filesystem persistence import");
                 }
             }
 
@@ -93,10 +97,10 @@ namespace WPEFramework {
             return Core::ERROR_NONE;
         }
 
-        void BluetoothDeviceManager::writeFilesystemPersistenceFromCache()
+        void BluetoothDeviceManager::writeFilesystemPersistenceFromCache(const std::unordered_map<std::string, BluetoothDeviceInfo>& snapshot)
         {
             BluetoothPersistenceAdapter adapter;
-            std::unordered_map<std::string, BluetoothDeviceInfo> cacheSnapshot = getPairedDeviceInfos();
+            std::unordered_map<std::string, BluetoothDeviceInfo> cacheSnapshot = snapshot;
 
             // Filter out Human Interface Devices — The legacy behavior doesn't persist them to the filesystem.
             for (auto it = cacheSnapshot.begin(); it != cacheSnapshot.end(); ) {
@@ -326,6 +330,7 @@ namespace WPEFramework {
                     }
 
                     BluetoothDeviceInfo deviceInfo;
+                    deviceInfo.deviceAddr = deviceInfoObj.HasLabel("deviceAddr") ? deviceInfoObj["deviceAddr"].String() : "";
                     deviceInfo.deviceType = std::move(deviceType);
                     deviceInfo.autoConnectStatus = autoConnectStatus;
                     deviceInfo.lastConnectTimeUtc = std::move(lastConnectTimeUtc);
@@ -431,6 +436,7 @@ namespace WPEFramework {
             }
 
             JsonArray deviceInfoArray;
+            std::unordered_map<std::string, BluetoothDeviceInfo> cacheSnapshot;
 
             _adminLock.Lock();
 
@@ -440,31 +446,33 @@ namespace WPEFramework {
 
                 JsonObject deviceInfoObj;
                 deviceInfoObj["deviceID"] = deviceID;
+                deviceInfoObj["deviceAddr"] = deviceInfo.deviceAddr;
                 deviceInfoObj["deviceType"] = deviceInfo.deviceType;
                 deviceInfoObj["autoconnect"] = static_cast<int>(deviceInfo.autoConnectStatus);
                 deviceInfoObj["lastConnectTimeUtc"] = deviceInfo.lastConnectTimeUtc;
                 deviceInfoObj["lastVolumeSetting"] = deviceInfo.lastVolumeSetting;
 
                 deviceInfoArray.Add(deviceInfoObj);
+                cacheSnapshot[deviceID] = deviceInfo;
             }
 
             string bluetoothDeviceInfoStr;
             deviceInfoArray.ToString(bluetoothDeviceInfoStr);
 
             _adminLock.Unlock();
-            
-            LOGINFO("Saving device info JSON: %s", bluetoothDeviceInfoStr.c_str());
 
             Core::hresult result = pPersistentStore->SetValue(PERSISTENT_STORE_NAMESPACE, PERSISTENT_STORE_KEY_DEVICE_INFO, bluetoothDeviceInfoStr);
 
             if (Core::ERROR_NONE != result) {
                 LOGERR("Failed to save device info to PersistentStore, hresult=%d", result);
-            }
+            } else {
+                LOGINFO("Saved device info JSON to PersistentStore: %s", bluetoothDeviceInfoStr.c_str());
 #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
-            else if (_isMigrated.load()) {
-                writeFilesystemPersistenceFromCache();
-            }
+                if (_isMigrated.load()) {
+                    writeFilesystemPersistenceFromCache(cacheSnapshot);
+                }
 #endif
+            }
 
             pPersistentStore->Release();
 
@@ -749,6 +757,16 @@ namespace WPEFramework {
             deviceInfo.deviceAddr   = props.mac;
             deviceInfo.deviceType   = props.deviceType;
             deviceInfo.friendlyName = props.name.empty() ? deviceID : props.name;
+
+            // Evict any MAC-keyed entry left from migration import for the same physical device.
+            if (!deviceInfo.deviceAddr.empty()) {
+                auto macIt = _pairedDeviceCache.find(deviceInfo.deviceAddr);
+                if (macIt != _pairedDeviceCache.end()) {
+                    LOGINFO("Evicting MAC-keyed cache entry for addr=%s, replacing with handle-keyed entry %s", deviceInfo.deviceAddr.c_str(), deviceID.c_str());
+                    _pairedDeviceCache.erase(macIt);
+                }
+            }
+
             _pairedDeviceCache[deviceID] = std::move(deviceInfo);
 
             _adminLock.Unlock();
