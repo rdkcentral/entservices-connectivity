@@ -65,8 +65,8 @@ public:
 
     bool pairDevice(const std::string& handleStr);
     bool unpairDevice(const std::string& handleStr);
-    bool connectDevice(const std::string& handleStr);
-    bool disconnectDevice(const std::string& handleStr);
+    bool connectDevice(const std::string& handleStr, const std::string& deviceType = "");
+    bool disconnectDevice(const std::string& handleStr, const std::string& deviceType = "");
 
     bool getDeviceProperties(const std::string& handleStr,
                              IBtAdapter::BtDeviceProperties& props) const;

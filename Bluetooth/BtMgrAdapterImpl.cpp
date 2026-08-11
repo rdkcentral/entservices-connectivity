@@ -200,13 +200,21 @@ bool BtMgrAdapterImpl::unpairDevice(const std::string& handleStr) {
     return BTRMGR_UnpairDevice(0, h) == BTRMGR_RESULT_SUCCESS;
 }
 
-bool BtMgrAdapterImpl::connectDevice(const std::string& handleStr) {
+bool BtMgrAdapterImpl::connectDevice(const std::string& handleStr, const std::string& deviceType) {
     BTRMgrDeviceHandle h = static_cast<BTRMgrDeviceHandle>(std::stoll(handleStr));
+    if (isAudioOutputDeviceType(deviceType))
+        return BTRMGR_StartAudioStreamingOut(0, h, BTRMGR_DEVICE_OP_TYPE_AUDIO_OUTPUT) == BTRMGR_RESULT_SUCCESS;
+    if (isAudioInputDeviceType(deviceType))
+        return BTRMGR_StartAudioStreamingIn(0, h, BTRMGR_DEVICE_OP_TYPE_AUDIO_INPUT) == BTRMGR_RESULT_SUCCESS;
     return BTRMGR_ConnectToDevice(0, h, BTRMGR_DEVICE_OP_TYPE_UNKNOWN) == BTRMGR_RESULT_SUCCESS;
 }
 
-bool BtMgrAdapterImpl::disconnectDevice(const std::string& handleStr) {
+bool BtMgrAdapterImpl::disconnectDevice(const std::string& handleStr, const std::string& deviceType) {
     BTRMgrDeviceHandle h = static_cast<BTRMgrDeviceHandle>(std::stoll(handleStr));
+    if (isAudioOutputDeviceType(deviceType))
+        return BTRMGR_StopAudioStreamingOut(0, h) == BTRMGR_RESULT_SUCCESS;
+    if (isAudioInputDeviceType(deviceType))
+        return BTRMGR_StopAudioStreamingIn(0, h) == BTRMGR_RESULT_SUCCESS;
     return BTRMGR_DisconnectFromDevice(0, h) == BTRMGR_RESULT_SUCCESS;
 }
 
@@ -279,7 +287,8 @@ bool BtMgrAdapterImpl::setAudioControlCommand(long long int deviceID,
                                                const std::string& cmd) {
     BTRMgrDeviceHandle h = static_cast<BTRMgrDeviceHandle>(deviceID);
 
-    if (cmd == "PLAY")          return BTRMGR_MediaControl(0, h, BTRMGR_MEDIA_CTRL_PLAY)      == BTRMGR_RESULT_SUCCESS;
+    if (cmd == "PLAY")          return BTRMGR_StartAudioStreamingIn(0, h,
+                                           BTRMGR_DEVICE_OP_TYPE_AUDIO_INPUT) == BTRMGR_RESULT_SUCCESS;
     if (cmd == "PAUSE")         return BTRMGR_MediaControl(0, h, BTRMGR_MEDIA_CTRL_PAUSE)     == BTRMGR_RESULT_SUCCESS;
     if (cmd == "RESUME")        return BTRMGR_MediaControl(0, h, BTRMGR_MEDIA_CTRL_PLAY)      == BTRMGR_RESULT_SUCCESS;
     if (cmd == "STOP")          return BTRMGR_MediaControl(0, h, BTRMGR_MEDIA_CTRL_STOP)      == BTRMGR_RESULT_SUCCESS;
@@ -526,6 +535,49 @@ void BtMgrAdapterImpl::onEvent(void* data, size_t /*len*/) {
         break;
     }
 
+    case BTRMGR_EVENT_MEDIA_TRACK_STARTED:
+    case BTRMGR_EVENT_MEDIA_TRACK_PLAYING: {
+        const auto& m = msg.m_mediaInfo;
+        if (m_evtCbs.onPlaybackChange)
+            m_evtCbs.onPlaybackChange("started", static_cast<long long int>(m.m_deviceHandle),
+                                       m.m_mediaPositionInfo.m_mediaDuration,
+                                       m.m_mediaPositionInfo.m_mediaPosition);
+        break;
+    }
+
+    case BTRMGR_EVENT_MEDIA_TRACK_PAUSED:
+    case BTRMGR_EVENT_MEDIA_PLAYBACK_ENDED: {
+        const auto& m = msg.m_mediaInfo;
+        if (m_evtCbs.onPlaybackChange)
+            m_evtCbs.onPlaybackChange("paused", static_cast<long long int>(m.m_deviceHandle),
+                                       m.m_mediaPositionInfo.m_mediaDuration,
+                                       m.m_mediaPositionInfo.m_mediaPosition);
+        break;
+    }
+
+    case BTRMGR_EVENT_MEDIA_TRACK_STOPPED: {
+        const auto& m = msg.m_mediaInfo;
+        if (m_evtCbs.onPlaybackChange)
+            m_evtCbs.onPlaybackChange("stopped", static_cast<long long int>(m.m_deviceHandle),
+                                       m.m_mediaPositionInfo.m_mediaDuration,
+                                       m.m_mediaPositionInfo.m_mediaPosition);
+        break;
+    }
+
+    case BTRMGR_EVENT_MEDIA_TRACK_CHANGED: {
+        const auto& m = msg.m_mediaInfo;
+        if (m_evtCbs.onNewTrack)
+            m_evtCbs.onNewTrack(static_cast<long long int>(m.m_deviceHandle),
+                                m.m_mediaTrackInfo.pcAlbum,
+                                m.m_mediaTrackInfo.pcGenre,
+                                m.m_mediaTrackInfo.pcTitle,
+                                m.m_mediaTrackInfo.pcArtist,
+                                m.m_mediaTrackInfo.ui32Duration,
+                                m.m_mediaTrackInfo.ui32TrackNumber,
+                                m.m_mediaTrackInfo.ui32NumberOfTracks);
+        break;
+    }
+
     default:
         break;
     }
@@ -559,6 +611,17 @@ int BtMgrAdapterImpl::deviceOpTypeFromProfile(const std::string& p) {
     if (Utils::String::contains(p, "LE TILE") || Utils::String::contains(p, "LE"))
         return static_cast<int>(BTRMGR_DEVICE_OP_TYPE_LE);
     return static_cast<int>(BTRMGR_DEVICE_OP_TYPE_AUDIO_OUTPUT);
+}
+
+// static
+bool BtMgrAdapterImpl::isAudioOutputDeviceType(const std::string& t) {
+    return t == "LOUDSPEAKER" || t == "HEADPHONES"
+        || t == "WEARABLE HEADSET" || t == "HIFI AUDIO DEVICE" || t == "HANDSFREE";
+}
+
+// static
+bool BtMgrAdapterImpl::isAudioInputDeviceType(const std::string& t) {
+    return t == "SMARTPHONE" || t == "TABLET";
 }
 
 void BtMgrAdapterImpl::cacheHandleToMac(const std::string& handleStr,

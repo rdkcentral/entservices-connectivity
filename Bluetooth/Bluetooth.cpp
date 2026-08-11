@@ -307,6 +307,31 @@ namespace WPEFramework
                 }
                 return false;
             };
+            evtCbs.onPlaybackChange = [this](const std::string& action, long long int deviceId,
+                                             uint32_t duration, uint32_t position) {
+                JsonObject params;
+                params["action"]      = action;
+                params["deviceID"]    = std::to_string(deviceId);
+                params["position"]    = std::to_string(position);
+                params["Duration"]    = std::to_string(duration);
+                sendNotify(C_STR(EVT_PLAYBACK_STARTED), params);
+            };
+            evtCbs.onNewTrack = [this](long long int deviceId,
+                                       const std::string& album, const std::string& genre,
+                                       const std::string& title, const std::string& artist,
+                                       uint32_t duration, uint32_t trackNumber,
+                                       uint32_t numberOfTracks) {
+                JsonObject params;
+                params["deviceID"]           = std::to_string(deviceId);
+                params["album"]              = album;
+                params["genre"]              = genre;
+                params["title"]              = title;
+                params["artist"]             = artist;
+                params["ui32Duration"]       = duration;
+                params["ui32TrackNumber"]    = trackNumber;
+                params["ui32NumberOfTracks"] = numberOfTracks;
+                sendNotify(C_STR(EVT_PLAYBACK_NEW_TRACK), params);
+            };
 
             // Build AuthBridge callbacks — emit auth request notifications to clients.
             BtAuthCallbacks authCbs;
@@ -547,8 +572,8 @@ namespace WPEFramework
         {
             // Connection dispatch table eliminated: SDK Device::connect/disconnect handles profile selection.
             const string deviceIdStr = std::to_string(deviceID);
-            bool ok = connect ? m_btAdapter.connectDevice(deviceIdStr)
-                              : m_btAdapter.disconnectDevice(deviceIdStr);
+            bool ok = connect ? m_btAdapter.connectDevice(deviceIdStr, deviceType)
+                              : m_btAdapter.disconnectDevice(deviceIdStr, deviceType);
 
             if (ok && connect) {
                 m_bluetoothDeviceManager.setLastConnectTimeUtc(deviceIdStr);

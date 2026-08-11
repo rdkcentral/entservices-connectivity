@@ -60,8 +60,8 @@ public:
 
     bool pairDevice(const std::string& handleStr) override;
     bool unpairDevice(const std::string& handleStr) override;
-    bool connectDevice(const std::string& handleStr) override;
-    bool disconnectDevice(const std::string& handleStr) override;
+    bool connectDevice(const std::string& handleStr, const std::string& deviceType = "") override;
+    bool disconnectDevice(const std::string& handleStr, const std::string& deviceType = "") override;
 
     bool getDeviceProperties(const std::string& handleStr,
                              BtDeviceProperties& props) const override;
@@ -87,6 +87,8 @@ private:
 
     // Maps BTRMGR device operation type from a profile string.
     static int deviceOpTypeFromProfile(const std::string& profile);
+    static bool isAudioOutputDeviceType(const std::string& deviceType);
+    static bool isAudioInputDeviceType(const std::string& deviceType);
 
     // Static IARM event callback — routes to s_instance.
     static int staticEventCallback(const char* owner, int eventId,

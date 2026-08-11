@@ -72,8 +72,8 @@ public:
 
     virtual bool pairDevice(const std::string& handleStr) = 0;
     virtual bool unpairDevice(const std::string& handleStr) = 0;
-    virtual bool connectDevice(const std::string& handleStr) = 0;
-    virtual bool disconnectDevice(const std::string& handleStr) = 0;
+    virtual bool connectDevice(const std::string& handleStr, const std::string& deviceType = "") = 0;
+    virtual bool disconnectDevice(const std::string& handleStr, const std::string& deviceType = "") = 0;
 
     // Returns device properties as a plain struct (no SDK types).
     struct BtDeviceProperties {

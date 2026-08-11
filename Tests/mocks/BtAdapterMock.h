@@ -55,8 +55,8 @@ public:
 
     MOCK_METHOD(bool, pairDevice,       (const std::string&), (override));
     MOCK_METHOD(bool, unpairDevice,     (const std::string&), (override));
-    MOCK_METHOD(bool, connectDevice,    (const std::string&), (override));
-    MOCK_METHOD(bool, disconnectDevice, (const std::string&), (override));
+    MOCK_METHOD(bool, connectDevice,    (const std::string&, const std::string&), (override));
+    MOCK_METHOD(bool, disconnectDevice, (const std::string&, const std::string&), (override));
 
     MOCK_METHOD(bool, getDeviceProperties,
         (const std::string&, IBtAdapter::BtDeviceProperties&),

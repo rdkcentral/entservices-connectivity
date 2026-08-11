@@ -55,6 +55,15 @@ struct BtEventCallbacks {
                        bool paired, bool connected)> onRequestFailed;
 
     std::function<bool(const std::string& handleStr, bool& autoConnect)> getAutoConnect;
+
+    // Media/playback events fired by the BTMgr adapter from BTRMGR_EVENT_MEDIA_* events.
+    std::function<void(const std::string& action, long long int deviceId,
+                       uint32_t duration, uint32_t position)> onPlaybackChange;
+    std::function<void(long long int deviceId,
+                       const std::string& album, const std::string& genre,
+                       const std::string& title, const std::string& artist,
+                       uint32_t duration, uint32_t trackNumber,
+                       uint32_t numberOfTracks)> onNewTrack;
 };
 
 struct BtAuthCallbacks {

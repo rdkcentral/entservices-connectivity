@@ -185,13 +185,13 @@ bool BtSdkAdapterImpl::unpairDevice(const std::string& handleStr) {
     if (it == m_devicesByHandle.end()) return false;
     return static_cast<bool>(it->second->unpair());
 }
-bool BtSdkAdapterImpl::connectDevice(const std::string& handleStr) {
+bool BtSdkAdapterImpl::connectDevice(const std::string& handleStr, const std::string& /*deviceType*/) {
     std::lock_guard<std::mutex> lock(m_devicesMutex);
     auto it = m_devicesByHandle.find(handleStr);
     if (it == m_devicesByHandle.end()) return false;
     return static_cast<bool>(it->second->connect(true));
 }
-bool BtSdkAdapterImpl::disconnectDevice(const std::string& handleStr) {
+bool BtSdkAdapterImpl::disconnectDevice(const std::string& handleStr, const std::string& /*deviceType*/) {
     std::lock_guard<std::mutex> lock(m_devicesMutex);
     auto it = m_devicesByHandle.find(handleStr);
     if (it == m_devicesByHandle.end()) return false;

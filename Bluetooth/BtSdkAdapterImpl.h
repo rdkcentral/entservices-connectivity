@@ -70,8 +70,8 @@ public:
 
     bool pairDevice(const std::string& handleStr) override;
     bool unpairDevice(const std::string& handleStr) override;
-    bool connectDevice(const std::string& handleStr) override;
-    bool disconnectDevice(const std::string& handleStr) override;
+    bool connectDevice(const std::string& handleStr, const std::string& deviceType = "") override;
+    bool disconnectDevice(const std::string& handleStr, const std::string& deviceType = "") override;
 
     bool getDeviceProperties(const std::string& handleStr,
                              BtDeviceProperties& props) const override;

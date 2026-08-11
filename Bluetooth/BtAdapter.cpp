@@ -83,8 +83,8 @@ std::vector<IBtAdapter::BtDeviceInfo> BtAdapter::getConnectedDevices()  const { 
 
 bool BtAdapter::pairDevice(const std::string& h)     { return getImpl().pairDevice(h); }
 bool BtAdapter::unpairDevice(const std::string& h)   { return getImpl().unpairDevice(h); }
-bool BtAdapter::connectDevice(const std::string& h)  { return getImpl().connectDevice(h); }
-bool BtAdapter::disconnectDevice(const std::string& h) { return getImpl().disconnectDevice(h); }
+bool BtAdapter::connectDevice(const std::string& h, const std::string& dt)  { return getImpl().connectDevice(h, dt); }
+bool BtAdapter::disconnectDevice(const std::string& h, const std::string& dt) { return getImpl().disconnectDevice(h, dt); }
 
 bool BtAdapter::getDeviceProperties(const std::string& h,
                                          IBtAdapter::BtDeviceProperties& p) const {
