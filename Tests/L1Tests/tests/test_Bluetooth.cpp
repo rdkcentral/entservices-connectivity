@@ -1742,19 +1742,19 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, macKeyedEntry_PairEvictsMac
         std::string("{\"deviceID\":\"") + mac + "\"}", response));
     EXPECT_TRUE(response.find("\"autoconnect\":true") != string::npos);
 
-    // Pair a device (handle 999) whose BTRMGR-reported address matches the MAC-keyed entry.
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_PairDevice(::testing::_, static_cast<BTRMgrDeviceHandle>(999LL)))
-        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
+    // Pair a device (handle 999) whose reported address matches the MAC-keyed entry.
+    EXPECT_CALL(*p_btSdkMock, pairDevice(std::string("999")))
+        .WillOnce(::testing::Return(true));
 
-    BTRMGR_DevicesProperty_t deviceProperty = {};
-    strncpy(deviceProperty.m_deviceAddress, mac.c_str(), sizeof(deviceProperty.m_deviceAddress) - 1);
-    deviceProperty.m_deviceType = BTRMGR_DEVICE_TYPE_HEADPHONES;
-    strncpy(deviceProperty.m_name, "MyBTDevice", sizeof(deviceProperty.m_name) - 1);
+    IBtAdapter::BtDeviceProperties props;
+    props.mac        = mac;
+    props.deviceType = "HEADPHONES";
+    props.name       = "MyBTDevice";
 
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetDeviceProperties(::testing::_, static_cast<BTRMgrDeviceHandle>(999LL), ::testing::_))
+    EXPECT_CALL(*p_btSdkMock, getDeviceProperties(std::string("999"), ::testing::_))
         .WillOnce(::testing::DoAll(
-            ::testing::SetArgPointee<2>(deviceProperty),
-            ::testing::Return(BTRMGR_RESULT_SUCCESS)));
+            ::testing::SetArgReferee<1>(props),
+            ::testing::Return(true)));
 
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("pair"), _T("{\"deviceID\":\"999\"}"), response));
     EXPECT_TRUE(response.find("\"success\":true") != string::npos);

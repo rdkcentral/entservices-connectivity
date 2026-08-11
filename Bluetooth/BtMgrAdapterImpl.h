@@ -94,19 +94,19 @@ private:
 
     void onEvent(void* data, size_t len);
 
-    void cacheHandleToMac(const std::string& handleStr, const std::string& mac);
+    void cacheHandleToMac(const std::string& handleStr, const std::string& mac) const;
 
     BtEventCallbacks m_evtCbs;
     BtAuthCallbacks  m_authCbs;
 
-    mutable std::mutex                              m_mapMutex;
-    std::unordered_map<std::string, std::string>    m_handleToMac;  // handle → MAC
-    std::unordered_map<std::string, std::string>    m_macToHandle;  // MAC → handle
+    mutable std::mutex                                       m_mapMutex;
+    mutable std::unordered_map<std::string, std::string>    m_handleToMac;  // handle → MAC
+    mutable std::unordered_map<std::string, std::string>    m_macToHandle;  // MAC → handle
 
     // Pending respondToEvent state (one at a time, matches BTMgr semantics).
     mutable std::mutex  m_pendingMutex;
     std::string         m_pendingMac;
-    int                 m_pendingEventType{0};  // BTRMGR_EventType_t value
+    int                 m_pendingEventType{0};  // BTRMGR_Events_t value
 
     static BtMgrAdapterImpl* s_instance;
 };

@@ -70,8 +70,9 @@ std::string BtMgrAdapterImpl::init(PluginHost::IShell* /* service */,
     }
 
     BTRMGR_RegisterEventCallback(
-        [](BTRMGR_EventMessage_t eventMsg) {
+        [](BTRMGR_EventMessage_t eventMsg) -> BTRMGR_Result_t {
             if (s_instance) s_instance->onEvent(&eventMsg, sizeof(eventMsg));
+            return BTRMGR_RESULT_SUCCESS;
         });
 
     return "";
@@ -132,7 +133,8 @@ bool BtMgrAdapterImpl::stopScan() {
 
 // ── Device lists ──────────────────────────────────────────────────────────────
 
-static IBtAdapter::BtDeviceInfo deviceInfoFromBtmgr(const BTRMGR_DeviceInfo_t& d) {
+template <typename T>
+static IBtAdapter::BtDeviceInfo deviceInfoFromBtmgr(const T& d, bool isPaired) {
     IBtAdapter::BtDeviceInfo info;
     info.mac        = d.m_deviceAddress;
     info.handleStr  = std::to_string(d.m_deviceHandle);
@@ -140,7 +142,7 @@ static IBtAdapter::BtDeviceInfo deviceInfoFromBtmgr(const BTRMGR_DeviceInfo_t& d
     const char* dt  = BTRMGR_GetDeviceTypeAsString(d.m_deviceType);
     info.deviceType = dt ? dt : "UNKNOWN";
     info.connected  = d.m_isConnected  != 0;
-    info.paired     = d.m_isPairedDevice != 0;
+    info.paired     = isPaired;
     info.classOfDevice = d.m_ui32DevClassBtSpec;
     info.appearance    = static_cast<uint16_t>(d.m_ui16DevAppearanceBleSpec);
     return info;
@@ -152,7 +154,8 @@ std::vector<IBtAdapter::BtDeviceInfo> BtMgrAdapterImpl::getDiscoveredDevices() c
     memset(&list, 0, sizeof(list));
     if (BTRMGR_GetDiscoveredDevices(0, &list) != BTRMGR_RESULT_SUCCESS) return result;
     for (int i = 0; i < list.m_numOfDevices; ++i) {
-        auto info = deviceInfoFromBtmgr(list.m_deviceProperty[i]);
+        const auto& d = list.m_deviceProperty[i];
+        auto info = deviceInfoFromBtmgr(d, d.m_isPairedDevice != 0);
         cacheHandleToMac(info.handleStr, info.mac);
         result.push_back(std::move(info));
     }
@@ -165,8 +168,7 @@ std::vector<IBtAdapter::BtDeviceInfo> BtMgrAdapterImpl::getPairedDevices() const
     memset(&list, 0, sizeof(list));
     if (BTRMGR_GetPairedDevices(0, &list) != BTRMGR_RESULT_SUCCESS) return result;
     for (int i = 0; i < list.m_numOfDevices; ++i) {
-        auto info = deviceInfoFromBtmgr(list.m_deviceProperty[i]);
-        info.paired = true;
+        auto info = deviceInfoFromBtmgr(list.m_deviceProperty[i], true);
         cacheHandleToMac(info.handleStr, info.mac);
         result.push_back(std::move(info));
     }
@@ -179,8 +181,7 @@ std::vector<IBtAdapter::BtDeviceInfo> BtMgrAdapterImpl::getConnectedDevices() co
     memset(&list, 0, sizeof(list));
     if (BTRMGR_GetConnectedDevices(0, &list) != BTRMGR_RESULT_SUCCESS) return result;
     for (int i = 0; i < list.m_numOfDevices; ++i) {
-        auto info = deviceInfoFromBtmgr(list.m_deviceProperty[i]);
-        info.connected = true;
+        auto info = deviceInfoFromBtmgr(list.m_deviceProperty[i], true);
         cacheHandleToMac(info.handleStr, info.mac);
         result.push_back(std::move(info));
     }
@@ -221,8 +222,6 @@ bool BtMgrAdapterImpl::getDeviceProperties(const std::string& handleStr,
     props.name         = p.m_name;
     const char* dt     = BTRMGR_GetDeviceTypeAsString(p.m_deviceType);
     props.deviceType   = dt ? dt : "UNKNOWN";
-    props.classOfDevice = p.m_ui32DevClassBtSpec;
-    props.appearance   = static_cast<uint16_t>(p.m_ui16DevAppearanceBleSpec);
     props.rssi         = static_cast<int16_t>(p.m_rssi);
     props.signalLevel  = static_cast<int16_t>(p.m_signalLevel);
     props.batteryLevel = p.m_batteryLevel;
@@ -259,7 +258,7 @@ void BtMgrAdapterImpl::respondToEvent(const std::string& mac, bool accepted) {
     if (handleStr.empty()) return;
 
     rsp.m_deviceHandle = static_cast<BTRMgrDeviceHandle>(std::stoll(handleStr));
-    rsp.m_eventType    = static_cast<BTRMGR_EventType_t>(m_pendingEventType);
+    rsp.m_eventType    = static_cast<BTRMGR_Events_t>(m_pendingEventType);
     rsp.m_eventResp    = accepted ? 1 : 0;
 
     BTRMGR_SetEventResponse(0, &rsp);
@@ -563,7 +562,7 @@ int BtMgrAdapterImpl::deviceOpTypeFromProfile(const std::string& p) {
 }
 
 void BtMgrAdapterImpl::cacheHandleToMac(const std::string& handleStr,
-                                         const std::string& mac) const {
+                                         const std::string& mac) const {  // mutable map members allow const
     std::lock_guard<std::mutex> lk(m_mapMutex);
     m_handleToMac[handleStr] = mac;
     m_macToHandle[mac]       = handleStr;
