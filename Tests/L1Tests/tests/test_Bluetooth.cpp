@@ -384,28 +384,28 @@ TEST_F(BluetoothTest, getConnectedDevicesWrapper_Failed)
 TEST_F(BluetoothTest, connectWrapper_Smartphone_Success)
 {
     setupDevice();
-    EXPECT_CALL(*p_btSdkMock, connectDevice("123")).WillOnce(::testing::Return(true));
+    EXPECT_CALL(*p_btSdkMock, connectDevice("123", ::testing::_)).WillOnce(::testing::Return(true));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("connect"), _T("{\"deviceID\":\"123\",\"deviceType\":\"SMARTPHONE\"}"), response));
 }
 
 TEST_F(BluetoothTest, connectWrapper_AudioDevice_Success)
 {
     setupDevice();
-    EXPECT_CALL(*p_btSdkMock, connectDevice("123")).WillOnce(::testing::Return(true));
+    EXPECT_CALL(*p_btSdkMock, connectDevice("123", ::testing::_)).WillOnce(::testing::Return(true));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("connect"), _T("{\"deviceID\":\"123\",\"deviceType\":\"HEADPHONES\"}"), response));
 }
 
 TEST_F(BluetoothTest, connectWrapper_HIDDevice_Success)
 {
     setupDevice();
-    EXPECT_CALL(*p_btSdkMock, connectDevice("123")).WillOnce(::testing::Return(true));
+    EXPECT_CALL(*p_btSdkMock, connectDevice("123", ::testing::_)).WillOnce(::testing::Return(true));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("connect"), _T("{\"deviceID\":\"123\",\"deviceType\":\"KEYBOARD\"}"), response));
 }
 
 TEST_F(BluetoothTest, connectWrapper_LEDevice_Success)
 {
     setupDevice();
-    EXPECT_CALL(*p_btSdkMock, connectDevice("123")).WillOnce(::testing::Return(true));
+    EXPECT_CALL(*p_btSdkMock, connectDevice("123", ::testing::_)).WillOnce(::testing::Return(true));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("connect"), _T("{\"deviceID\":\"123\",\"deviceType\":\"LE TILE\"}"), response));
 }
 
@@ -417,26 +417,26 @@ TEST_F(BluetoothTest, connectWrapper_MissingDeviceID_Failure)
 
 TEST_F(BluetoothTest, connectWrapper_Failed)
 {
-    EXPECT_CALL(*p_btSdkMock, connectDevice("123")).WillOnce(::testing::Return(false));
+    EXPECT_CALL(*p_btSdkMock, connectDevice("123", ::testing::_)).WillOnce(::testing::Return(false));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("connect"), _T("{\"deviceID\":\"123\",\"deviceType\":\"SMARTPHONE\"}"), response));
     EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, disconnectWrapper_Smartphone_Success)
 {
-    EXPECT_CALL(*p_btSdkMock, disconnectDevice("123")).WillOnce(::testing::Return(true));
+    EXPECT_CALL(*p_btSdkMock, disconnectDevice("123", ::testing::_)).WillOnce(::testing::Return(true));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("disconnect"), _T("{\"deviceID\":\"123\",\"deviceType\":\"SMARTPHONE\"}"), response));
 }
 
 TEST_F(BluetoothTest, disconnectWrapper_AudioDevice_Success)
 {
-    EXPECT_CALL(*p_btSdkMock, disconnectDevice("123")).WillOnce(::testing::Return(true));
+    EXPECT_CALL(*p_btSdkMock, disconnectDevice("123", ::testing::_)).WillOnce(::testing::Return(true));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("disconnect"), _T("{\"deviceID\":\"123\",\"deviceType\":\"HEADPHONES\"}"), response));
 }
 
 TEST_F(BluetoothTest, disconnectWrapper_HIDDevice_Success)
 {
-    EXPECT_CALL(*p_btSdkMock, disconnectDevice("123")).WillOnce(::testing::Return(true));
+    EXPECT_CALL(*p_btSdkMock, disconnectDevice("123", ::testing::_)).WillOnce(::testing::Return(true));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("disconnect"), _T("{\"deviceID\":\"123\",\"deviceType\":\"KEYBOARD\"}"), response));
 }
 
@@ -448,7 +448,7 @@ TEST_F(BluetoothTest, disconnectWrapper_MissingDeviceID_Failure)
 
 TEST_F(BluetoothTest, disconnectWrapper_Failed)
 {
-    EXPECT_CALL(*p_btSdkMock, disconnectDevice("123")).WillOnce(::testing::Return(false));
+    EXPECT_CALL(*p_btSdkMock, disconnectDevice("123", ::testing::_)).WillOnce(::testing::Return(false));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("disconnect"), _T("{\"deviceID\":\"123\"}"), response));
     EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
@@ -841,7 +841,7 @@ protected:
 
 TEST_F(BluetoothTest, onPowerModeChanged_SameState_NoAction)
 {
-    EXPECT_CALL(*p_btSdkMock, disconnectDevice(::testing::_)).Times(0);
+    EXPECT_CALL(*p_btSdkMock, disconnectDevice(::testing::_, ::testing::_)).Times(0);
     EXPECT_CALL(*p_btSdkMock, setAdapterPowered(::testing::_)).Times(0);
     plugin->onPowerModeChanged(
         WPEFramework::Exchange::IPowerManager::POWER_STATE_ON,
@@ -858,7 +858,7 @@ TEST_F(BluetoothTest, onPowerModeChanged_OnToStandby_NonHidDevice_AutoConnectDis
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
         _T("{\"deviceID\":\"123\",\"enable\":false}"), response));
 
-    EXPECT_CALL(*p_btSdkMock, disconnectDevice("123"))
+    EXPECT_CALL(*p_btSdkMock, disconnectDevice("123", ::testing::_))
         .WillOnce(::testing::Return(true));
 
     plugin->onPowerModeChanged(
@@ -875,7 +875,7 @@ TEST_F(BluetoothTest, onPowerModeChanged_UnknownToStandby_NonHidDevice_AutoConne
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
         _T("{\"deviceID\":\"123\",\"enable\":false}"), response));
 
-    EXPECT_CALL(*p_btSdkMock, disconnectDevice("123"))
+    EXPECT_CALL(*p_btSdkMock, disconnectDevice("123", ::testing::_))
         .WillOnce(::testing::Return(true));
 
     plugin->onPowerModeChanged(
@@ -892,7 +892,7 @@ TEST_F(BluetoothTest, onPowerModeChanged_OnToStandbyLightSleep_NonHidDevice_Auto
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
         _T("{\"deviceID\":\"123\",\"enable\":false}"), response));
 
-    EXPECT_CALL(*p_btSdkMock, disconnectDevice("123"))
+    EXPECT_CALL(*p_btSdkMock, disconnectDevice("123", ::testing::_))
         .WillOnce(::testing::Return(true));
 
     plugin->onPowerModeChanged(
@@ -908,7 +908,7 @@ TEST_F(BluetoothTest, onPowerModeChanged_OnToStandby_NonHidDevice_AutoConnectEna
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
         _T("{\"deviceID\":\"123\",\"enable\":true}"), response));
 
-    EXPECT_CALL(*p_btSdkMock, disconnectDevice(::testing::_)).Times(0);
+    EXPECT_CALL(*p_btSdkMock, disconnectDevice(::testing::_, ::testing::_)).Times(0);
 
     plugin->onPowerModeChanged(
         WPEFramework::Exchange::IPowerManager::POWER_STATE_ON,
@@ -917,7 +917,7 @@ TEST_F(BluetoothTest, onPowerModeChanged_OnToStandby_NonHidDevice_AutoConnectEna
 
 TEST_F(BluetoothTest, onPowerModeChanged_OnToStandby_EmptyCache_NoDisconnect)
 {
-    EXPECT_CALL(*p_btSdkMock, disconnectDevice(::testing::_)).Times(0);
+    EXPECT_CALL(*p_btSdkMock, disconnectDevice(::testing::_, ::testing::_)).Times(0);
 
     plugin->onPowerModeChanged(
         WPEFramework::Exchange::IPowerManager::POWER_STATE_ON,
@@ -928,7 +928,7 @@ TEST_F(BluetoothTest, onPowerModeChanged_OnToStandby_EmptyCache_NoDisconnect)
 
 TEST_F(BluetoothPowerModeTest, onPowerModeChanged_OnToStandby_HidDevice_AutoConnectDisabled_NoDisconnect)
 {
-    EXPECT_CALL(*p_btSdkMock, disconnectDevice(::testing::_)).Times(0);
+    EXPECT_CALL(*p_btSdkMock, disconnectDevice(::testing::_, ::testing::_)).Times(0);
     plugin->onPowerModeChanged(
         WPEFramework::Exchange::IPowerManager::POWER_STATE_ON,
         WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY);
@@ -974,7 +974,7 @@ TEST_F(BluetoothTest, onPowerModeChanged_OnToDeepSleep_NonHidDevice_AlwaysDiscon
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
         _T("{\"deviceID\":\"123\",\"enable\":true}"), response));
 
-    EXPECT_CALL(*p_btSdkMock, disconnectDevice("123"))
+    EXPECT_CALL(*p_btSdkMock, disconnectDevice("123", ::testing::_))
         .WillOnce(::testing::Return(true));
 
     plugin->onPowerModeChanged(
@@ -985,7 +985,7 @@ TEST_F(BluetoothTest, onPowerModeChanged_OnToDeepSleep_NonHidDevice_AlwaysDiscon
 
 TEST_F(BluetoothPowerModeTest, onPowerModeChanged_OnToDeepSleep_HidDevice_NoDisconnect)
 {
-    EXPECT_CALL(*p_btSdkMock, disconnectDevice(::testing::_)).Times(0);
+    EXPECT_CALL(*p_btSdkMock, disconnectDevice(::testing::_, ::testing::_)).Times(0);
 
     plugin->onPowerModeChanged(
         WPEFramework::Exchange::IPowerManager::POWER_STATE_ON,
@@ -996,7 +996,7 @@ TEST_F(BluetoothPowerModeTest, onPowerModeChanged_OnToDeepSleep_HidDevice_NoDisc
 
 TEST_F(BluetoothTest, onPowerModeChanged_UnhandledTransition_NoAction)
 {
-    EXPECT_CALL(*p_btSdkMock, disconnectDevice(::testing::_)).Times(0);
+    EXPECT_CALL(*p_btSdkMock, disconnectDevice(::testing::_, ::testing::_)).Times(0);
     EXPECT_CALL(*p_btSdkMock, setAdapterPowered(::testing::_)).Times(0);
 
     // STANDBY → STANDBY_LIGHT_SLEEP: does not match any if/else-if branch.
