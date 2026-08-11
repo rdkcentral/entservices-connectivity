@@ -17,15 +17,21 @@
 * limitations under the License.
 **/
 
+#include "Module.h"
 #include "BtMgrAdapterImpl.h"
 
 #include <cstdlib>
 #include <cstring>
 
 #include "btmgr.h"
-#include <UtilsIarm.h>
 #include <UtilsLogging.h>
 #include <UtilsString.h>
+
+namespace {
+// IARM client name used when registering with BTMgr.
+// Matches Utils::IARM::NAME from entservices-helpers without pulling in libIBus.h.
+constexpr const char* kIarmClientName = "Thunder_Plugins";
+} // namespace
 
 namespace WPEFramework {
 namespace Plugin {
@@ -57,7 +63,7 @@ std::string BtMgrAdapterImpl::init(PluginHost::IShell* /* service */,
     m_authCbs = std::move(authCallbacks);
     s_instance = this;
 
-    BTRMGR_Result_t rc = BTRMGR_RegisterForCallbacks(Utils::IARM::NAME);
+    BTRMGR_Result_t rc = BTRMGR_RegisterForCallbacks(kIarmClientName);
     if (rc != BTRMGR_RESULT_SUCCESS) {
         s_instance = nullptr;
         return std::string("BTRMGR_RegisterForCallbacks failed: ") + std::to_string(rc);
@@ -72,7 +78,7 @@ std::string BtMgrAdapterImpl::init(PluginHost::IShell* /* service */,
 }
 
 void BtMgrAdapterImpl::deinit() {
-    BTRMGR_UnRegisterFromCallbacks(Utils::IARM::NAME);
+    BTRMGR_UnRegisterFromCallbacks(kIarmClientName);
     s_instance = nullptr;
 }
 

@@ -38,11 +38,25 @@ set(BLUETOOTH_PLUGIN_SOURCES
 
 # Probe for both backends. SDK takes priority; BTMgr is the fallback.
 # L1 test builds skip both backend probes (mock injected via BtAdapter::setImpl).
-# L2 test builds inject BTMgr mock headers via force-include; compile the BTMgr
-# adapter without requiring the real package.
+# L2 test builds select a backend via BLUETOOTH_L2_BACKEND (default: BTMGR).
+#   BTMGR: compile BtMgrAdapterImpl.cpp with mock btmgr headers (current CI path).
+#   SDK:   compile BtSdkAdapterImpl.cpp + friends with mock bluetooth-sdk headers;
+#          requires Tests/mocks/bluetooth/ stub headers on the include path.
+set(BLUETOOTH_L2_BACKEND "BTMGR" CACHE STRING "Bluetooth adapter backend for L2 test builds (BTMGR or SDK)")
 if (RDK_SERVICE_L2_TEST)
-    message(STATUS "Bluetooth plugin: L2 test build - using BTMgr mock backend")
-    list(APPEND BLUETOOTH_PLUGIN_SOURCES BtMgrAdapterImpl.cpp)
+    if (BLUETOOTH_L2_BACKEND STREQUAL "SDK")
+        message(STATUS "Bluetooth plugin: L2 test build - using bluetooth-sdk mock backend")
+        list(APPEND BLUETOOTH_PLUGIN_SOURCES
+            BtSdkAdapterImpl.cpp
+            DeviceTypeClassifier.cpp
+            EventBridge.cpp
+            AuthBridge.cpp
+            ${CMAKE_SOURCE_DIR}/../entservices-connectivity/Tests/mocks/bluetoothSDK.cpp
+        )
+    else()
+        message(STATUS "Bluetooth plugin: L2 test build - using BTMgr mock backend")
+        list(APPEND BLUETOOTH_PLUGIN_SOURCES BtMgrAdapterImpl.cpp)
+    endif()
 elseif (NOT RDK_SERVICES_L1_TEST)
     find_package(BLUETOOTH_SDK)
 
@@ -94,7 +108,12 @@ if (RDK_SERVICE_L2_TEST)
 endif (RDK_SERVICE_L2_TEST)
 
 # Per-backend link and include configuration.
-if (NOT RDK_SERVICES_L1_TEST AND NOT RDK_SERVICE_L2_TEST)
+if (RDK_SERVICE_L2_TEST AND BLUETOOTH_L2_BACKEND STREQUAL "SDK")
+    target_compile_definitions(${MODULE_NAME} PRIVATE BLUETOOTH_USE_SDK=1)
+    # Shadow the real bluetooth-sdk headers with test stubs.
+    target_include_directories(${MODULE_NAME} BEFORE PRIVATE
+        ${CMAKE_SOURCE_DIR}/../entservices-connectivity/Tests/mocks)
+elseif (NOT RDK_SERVICES_L1_TEST AND NOT RDK_SERVICE_L2_TEST)
     if (BLUETOOTH_SDK_FOUND)
         target_compile_definitions(${MODULE_NAME} PRIVATE BLUETOOTH_USE_SDK=1)
         if (BLUETOOTH_SDK_INCLUDE_DIRS)
