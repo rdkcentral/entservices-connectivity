@@ -1,6 +1,6 @@
 #top plugin
 
-set(PLUGIN_NAME TOP)
+set(PLUGIN_NAME ResourceManager)
 set(MODULE_NAME ${NAMESPACE}${PLUGIN_NAME})
 
 set(PLUGIN_TOP_STARTUPORDER "" CACHE STRING "To configure startup order of TOP plugin")

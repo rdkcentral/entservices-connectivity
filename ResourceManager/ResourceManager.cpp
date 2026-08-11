@@ -61,7 +61,7 @@ namespace WPEFramework {
             return {};
         }
 
-        const string ResourceManager::Information() const
+        string ResourceManager::Information() const
         {
             return "{\"service\": \"" + SERVICE_NAME + "\"}";
         }
