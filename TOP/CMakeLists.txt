@@ -5,10 +5,10 @@ set(MODULE_NAME ${NAMESPACE}${PLUGIN_NAME})
 
 set(PLUGIN_TOP_STARTUPORDER "" CACHE STRING "To configure startup order of TOP plugin")
 
-find(package(${NAMESPACE}Plugins REQUIRED)) /// which is basically WPEFrameworkPlugins
+find_package(${NAMESPACE}Plugins REQUIRED) # WPEFrameworkPlugins
 
 add_library(${MODULE_NAME} SHARED
-        resourcemanager.cpp
+        ResourceManager.cpp
         Module.cpp
 )
 
@@ -23,8 +23,8 @@ target_include_directories(${MODULE_NAME} PRIVATE
 target_link_libraries(${MODULE_NAME}
         PRIVATE
         ${NAMESPACE}Plugins::${NAMESPACE}Plugins
-) // beginning we are finding this WPEFrameworkPlugins and then linking it to our module so that plugin have access to everything thunder provides
-//like PluginHost::IPlugin, JSONRPC, JsonObject, BEGIN_INTERFACE_MAP
+) # links WPEFrameworkPlugins so the plugin has access to everything Thunder provides
+# e.g. PluginHost::IPlugin, JSONRPC, JsonObject, BEGIN_INTERFACE_MAP
 
 install(TARGETS ${MODULE_NAME}
         DESTINATION lib/${STORAGE_DIRECTORY}/plugins)

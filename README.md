@@ -128,3 +128,16 @@ Every Thunder plugin follows this exact same pattern.
   Module.h               -- provides PluginHost::IPlugin, JSONRPC base classes
 
 ====================================================================
+
+
+
+Here's the short version of the 6 key pieces:
+
+| # | What | Where | Role |
+|---|---|---|---|
+| 1 | `public PluginHost::JSONRPC` | ResourceManager.h | Gives the class JSON-RPC capability |
+| 2 | `INTERFACE_ENTRY(PluginHost::IDispatcher)` | ResourceManager.h | Tells Thunder "yes, I accept JSON-RPC calls" |
+| 3 | `static const string METHOD_*` | `.h` + `.cpp` | The exact method name strings callers use over the wire |
+| 4 | `Register(METHOD_*, &handler, this)` | Constructor in `.cpp` | Builds the name→function lookup table |
+| 5 | `uint32_t method(const JsonObject& parameters, JsonObject& response)` | `.cpp` | The mandatory signature for every handler |
+| 6 | `response["key"] = value` | Inside each method | What actually gets serialized and sent back |
