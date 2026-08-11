@@ -13,7 +13,7 @@ string(TOLOWER ${NAMESPACE} STORAGE_DIRECTORY)
 include(CmakeHelperFunctions)
 
 if(PLUGIN_TOP)
-    add_subdirectory(TOP)
+    add_subdirectory(ResourceManager)
 endif()
 
 if(WPEFRAMEWORK_CREATE_IPKG_TARGETS)
