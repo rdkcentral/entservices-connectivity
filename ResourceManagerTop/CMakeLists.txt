@@ -8,7 +8,7 @@ set(PLUGIN_TOP_STARTUPORDER "" CACHE STRING "To configure startup order of TOP p
 find_package(${NAMESPACE}Plugins REQUIRED) # WPEFrameworkPlugins
 
 add_library(${MODULE_NAME} SHARED
-        ResourceManager.cpp
+        ResourceManagerTop.cpp
         Module.cpp
 )
 
