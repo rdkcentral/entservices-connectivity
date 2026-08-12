@@ -26,7 +26,7 @@ namespace Plugin {
 
 // static
 std::string DeviceRegistry::deriveHandle(const std::string& mac) {
-    if (mac.size() < 17) return "";
+    if (mac.size() < 17) return "0";
     char hexStr[13] = {};
     hexStr[0]  = mac[0];  hexStr[1]  = mac[1];
     hexStr[2]  = mac[3];  hexStr[3]  = mac[4];

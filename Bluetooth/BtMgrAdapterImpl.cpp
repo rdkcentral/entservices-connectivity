@@ -202,18 +202,11 @@ bool BtMgrAdapterImpl::unpairDevice(const std::string& handleStr) {
 
 bool BtMgrAdapterImpl::connectDevice(const std::string& handleStr, const std::string& deviceType) {
     BTRMgrDeviceHandle h = static_cast<BTRMgrDeviceHandle>(std::stoll(handleStr));
-    if (deviceType == "LE TILE")
-        return BTRMGR_ConnectToDevice(0, h, BTRMGR_DEVICE_OP_TYPE_LE) == BTRMGR_RESULT_SUCCESS;
-    if (deviceType == "HUMAN INTERFACE DEVICE" ||
-        deviceType.find("KEYBOARD") != std::string::npos ||
-        deviceType.find("MOUSE") != std::string::npos ||
-        deviceType.find("JOYSTICK") != std::string::npos)
-        return BTRMGR_ConnectToDevice(0, h, BTRMGR_DEVICE_OP_TYPE_HID) == BTRMGR_RESULT_SUCCESS;
     if (isAudioOutputDeviceType(deviceType))
         return BTRMGR_StartAudioStreamingOut(0, h, BTRMGR_DEVICE_OP_TYPE_AUDIO_OUTPUT) == BTRMGR_RESULT_SUCCESS;
     if (isAudioInputDeviceType(deviceType))
         return BTRMGR_StartAudioStreamingIn(0, h, BTRMGR_DEVICE_OP_TYPE_AUDIO_INPUT) == BTRMGR_RESULT_SUCCESS;
-    return BTRMGR_StartAudioStreamingOut(0, h, BTRMGR_DEVICE_OP_TYPE_AUDIO_OUTPUT) == BTRMGR_RESULT_SUCCESS;
+    return BTRMGR_ConnectToDevice(0, h, BTRMGR_DEVICE_OP_TYPE_UNKNOWN) == BTRMGR_RESULT_SUCCESS;
 }
 
 bool BtMgrAdapterImpl::disconnectDevice(const std::string& handleStr, const std::string& deviceType) {
@@ -521,12 +514,12 @@ void BtMgrAdapterImpl::onEvent(void* data, size_t /*len*/) {
         }
         cacheHandleToMac(handleStr, d.m_deviceAddress);
 
+        // Check if paired device should auto-accept (mirrors AuthBridge policy).
+        bool autoAccept = false;
+        if (m_authCbs.isPaired && m_authCbs.isPaired(handleStr)) {
+            autoAccept = true;
+        }
         if (autoAccept) {
-            {
-                std::lock_guard<std::mutex> lk(m_pendingMutex);
-                m_pendingMac       = d.m_deviceAddress;
-                m_pendingEventType = static_cast<int>(BTRMGR_EVENT_RECEIVED_EXTERNAL_CONNECT_REQUEST);
-            }
             respondToEvent(d.m_deviceAddress, true);
             return;
         }
@@ -604,30 +597,20 @@ std::string BtMgrAdapterImpl::deriveHandle(const std::string& mac) {
 
 // static
 int BtMgrAdapterImpl::deviceOpTypeFromProfile(const std::string& p) {
-    const bool hasAudio = Utils::String::contains(p, "LOUDSPEAKER") ||
-                          Utils::String::contains(p, "HEADPHONES") ||
-                          Utils::String::contains(p, "WEARABLE HEADSET") ||
-                          Utils::String::contains(p, "HIFI AUDIO DEVICE");
-    const bool hasHid   = Utils::String::contains(p, "KEYBOARD") ||
-                          Utils::String::contains(p, "MOUSE") ||
-                          Utils::String::contains(p, "JOYSTICK");
-
-    if (hasAudio && hasHid) {
-        return static_cast<int>(BTRMGR_DEVICE_OP_TYPE_AUDIO_AND_HID);
-    }
-    if (hasAudio) {
+    if (Utils::String::contains(p, "LOUDSPEAKER") ||
+        Utils::String::contains(p, "HEADPHONES") ||
+        Utils::String::contains(p, "WEARABLE HEADSET") ||
+        Utils::String::contains(p, "HIFI AUDIO DEVICE"))
         return static_cast<int>(BTRMGR_DEVICE_OP_TYPE_AUDIO_OUTPUT);
-    }
-    if (Utils::String::contains(p, "SMARTPHONE") || Utils::String::contains(p, "TABLET")) {
+    if (Utils::String::contains(p, "SMARTPHONE") || Utils::String::contains(p, "TABLET"))
         return static_cast<int>(BTRMGR_DEVICE_OP_TYPE_AUDIO_INPUT);
-    }
-    if (hasHid) {
+    if (Utils::String::contains(p, "KEYBOARD") ||
+        Utils::String::contains(p, "MOUSE") ||
+        Utils::String::contains(p, "JOYSTICK"))
         return static_cast<int>(BTRMGR_DEVICE_OP_TYPE_HID);
-    }
-    if (Utils::String::contains(p, "LE TILE") || Utils::String::contains(p, "LE")) {
+    if (Utils::String::contains(p, "LE TILE") || Utils::String::contains(p, "LE"))
         return static_cast<int>(BTRMGR_DEVICE_OP_TYPE_LE);
-    }
-    return static_cast<int>(BTRMGR_DEVICE_OP_TYPE_UNKNOWN);
+    return static_cast<int>(BTRMGR_DEVICE_OP_TYPE_AUDIO_OUTPUT);
 }
 
 // static

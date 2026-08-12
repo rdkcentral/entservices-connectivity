@@ -245,7 +245,6 @@ void BtSdkAdapterImpl::onAdapterEvent(bluetooth::AdapterEvent event,
     if (event == bluetooth::AdapterEvent::DeviceDiscovered && data.device) {
         registerDeviceEvents(data.device);
     } else if (event == bluetooth::AdapterEvent::DeviceDisappeared && data.device) {
-        unregisterDeviceEvents(data.device);
         std::string mac;
         data.device->address(mac);
         m_registry.unregisterDevice(mac);
