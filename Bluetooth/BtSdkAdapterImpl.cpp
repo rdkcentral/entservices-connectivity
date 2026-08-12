@@ -294,8 +294,12 @@ bluetooth::ScanFilter BtSdkAdapterImpl::buildScanFilter(const std::string& profi
                        || profile.find("MOUSE")    != std::string::npos
                        || profile.find("JOYSTICK") != std::string::npos;
 
-    if (profile.find("LE TILE") != std::string::npos || profile.find("LE") != std::string::npos) {
-        filter.type = bluetooth::ScanType::LeOnly; return filter;
+    if (profile.find("LE TILE") != std::string::npos ||
+         profile == "LE" ||
+         profile.find(", LE") != std::string::npos ||
+         profile.find("LE,") != std::string::npos) {
+         filter.type = bluetooth::ScanType::LeOnly;
+         return filter;
     }
     if (profile.find("SMARTPHONE") != std::string::npos || profile.find("TABLET") != std::string::npos) {
         filter.type = bluetooth::ScanType::ClassicOnly;
