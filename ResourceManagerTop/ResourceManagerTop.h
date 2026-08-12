@@ -26,11 +26,11 @@
 
 namespace WPEFramework {
     namespace Plugin {
-        class ResourceManager : public PluginHost::IPlugin, public PluginHost::JSONRPC {
+        class ResourceManagerTop : public PluginHost::IPlugin, public PluginHost::JSONRPC {
             private:
                 // To Prevent Copy
-                ResourceManager(const ResourceManager&) = delete;
-                ResourceManager& operator=(const ResourceManager&) = delete; 
+                ResourceManagerTop(const ResourceManagerTop&) = delete;
+                ResourceManagerTop& operator=(const ResourceManagerTop&) = delete; 
 
                 //JSON-RPC Registered Methods
                 uint32_t getApiVersionNumber(const JsonObject& parameters, JsonObject& response);
@@ -48,14 +48,14 @@ namespace WPEFramework {
                 static const string METHOD_GET_SYSTEM_RESOURCE_INFO;
                 static const string METHOD_GET_STATE;
 
-                ResourceManager();
-                virtual ~ResourceManager();
+                ResourceManagerTop();
+                virtual ~ResourceManagerTop();
 
                 virtual const string Initialize(PluginHost::IShell* shell) override;
                 virtual void Deinitialize(PluginHost::IShell* service) override;
                 virtual string Information() const override;
 
-                BEGIN_INTERFACE_MAP(ResourceManager)
+                BEGIN_INTERFACE_MAP(ResourceManagerTop)
                 INTERFACE_ENTRY(PluginHost::IPlugin)
                 INTERFACE_ENTRY(PluginHost::IDispatcher)
                 END_INTERFACE_MAP
@@ -63,6 +63,6 @@ namespace WPEFramework {
                 uint32_t m_apiVersionNumber;
                 PluginHost::IShell* _service;
 
-        }; // class ResourceManager
+        }; // class ResourceManagerTop
     } // namespace Plugin
 } // namespace WPEFramework

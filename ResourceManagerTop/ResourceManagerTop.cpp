@@ -6,16 +6,16 @@
 
 using namespace WPEFramework;
 
-const string WPEFramework::Plugin::ResourceManager::SERVICE_NAME = "org.rdk.ResourceManagerTop";
+const string WPEFramework::Plugin::ResourceManagerTop::SERVICE_NAME = "org.rdk.ResourceManagerTop";
 
-const string WPEFramework::Plugin::ResourceManager::METHOD_GET_API_VERSION_NUMBER = "getApiVersionNumber";
-const string WPEFramework::Plugin::ResourceManager::METHOD_GET_SYSTEM_RESOURCE_INFO = "getSystemResourceInfo";
-const string WPEFramework::Plugin::ResourceManager::METHOD_GET_STATE = "getState";
+const string WPEFramework::Plugin::ResourceManagerTop::METHOD_GET_API_VERSION_NUMBER = "getApiVersionNumber";
+const string WPEFramework::Plugin::ResourceManagerTop::METHOD_GET_SYSTEM_RESOURCE_INFO = "getSystemResourceInfo";
+const string WPEFramework::Plugin::ResourceManagerTop::METHOD_GET_STATE = "getState";
 
 
 namespace WPEFramework {
     namespace {
-        static Plugin::Metadata<Plugin::ResourceManager> metadata(
+        static Plugin::Metadata<Plugin::ResourceManagerTop> metadata(
             // Version (Major, Minor, Patch)
             API_VERSION_NUMBER_MAJOR, API_VERSION_NUMBER_MINOR, API_VERSION_NUMBER_PATCH,
             // Preconditions
@@ -30,29 +30,29 @@ namespace WPEFramework {
     namespace Plugin {
 
         SERVICE_REGISTRATION(
-            ResourceManager,
+            ResourceManagerTop,
             API_VERSION_NUMBER_MAJOR,
             API_VERSION_NUMBER_MINOR,
             API_VERSION_NUMBER_PATCH
         );
 
         //constructor
-        ResourceManager::ResourceManager()
+        ResourceManagerTop::ResourceManagerTop()
             : PluginHost::JSONRPC()
             , m_apiVersionNumber(API_VERSION_NUMBER_MAJOR)
             , _service(nullptr)
         {
-            Register(METHOD_GET_API_VERSION_NUMBER, &ResourceManager::getApiVersionNumber, this);
-            Register(METHOD_GET_SYSTEM_RESOURCE_INFO, &ResourceManager::getSystemResourceInfo, this);
-            Register(METHOD_GET_STATE, &ResourceManager::getState, this);
+            Register(METHOD_GET_API_VERSION_NUMBER, &ResourceManagerTop::getApiVersionNumber, this);
+            Register(METHOD_GET_SYSTEM_RESOURCE_INFO, &ResourceManagerTop::getSystemResourceInfo, this);
+            Register(METHOD_GET_STATE, &ResourceManagerTop::getState, this);
         }
 
         //Destructor
-        ResourceManager::~ResourceManager() {}
+        ResourceManagerTop::~ResourceManagerTop() {}
 
         /////////////IMPLEMENT LIFECYCLE METHODS//////////////////////
 
-        const string ResourceManager::Initialize(PluginHost::IShell* shell)
+        const string ResourceManagerTop::Initialize(PluginHost::IShell* shell)
         {
             ASSERT(shell != nullptr);
             _service = shell;
@@ -61,12 +61,12 @@ namespace WPEFramework {
             return {};
         }
 
-        string ResourceManager::Information() const
+        string ResourceManagerTop::Information() const
         {
             return "{\"service\": \"" + SERVICE_NAME + "\"}";
         }
 
-        void ResourceManager::Deinitialize(PluginHost::IShell* service)
+        void ResourceManagerTop::Deinitialize(PluginHost::IShell* service)
         {
             if (_service != nullptr) {
                 _service->Release();
@@ -78,7 +78,7 @@ namespace WPEFramework {
         //////////////IMPLEMENTATION OF INTERNAL LOGIC///////////
 
         // Runs "top -n 1 -b | head" and returns its output as a string
-        string ResourceManager::exec_top()
+        string ResourceManagerTop::exec_top()
         {
             char buffer[256];
             string result;
@@ -97,7 +97,7 @@ namespace WPEFramework {
 
         ///////IMPLEMENTATION OF REGISTERED METHODS///////////
 
-        uint32_t ResourceManager::getApiVersionNumber(const JsonObject& parameters, JsonObject& response)
+        uint32_t ResourceManagerTop::getApiVersionNumber(const JsonObject& parameters, JsonObject& response)
         {
             LOGINFOMETHOD();
             response["version"] = m_apiVersionNumber;
@@ -105,7 +105,7 @@ namespace WPEFramework {
             return Core::ERROR_NONE;
         }
 
-        uint32_t ResourceManager::getState(const JsonObject& parameters, JsonObject& response)
+        uint32_t ResourceManagerTop::getState(const JsonObject& parameters, JsonObject& response)
         {
             LOGINFOMETHOD();
             if (_service == nullptr) {
@@ -121,7 +121,7 @@ namespace WPEFramework {
             return Core::ERROR_NONE;
         }
 
-        uint32_t ResourceManager::getSystemResourceInfo(const JsonObject& parameters, JsonObject& response)
+        uint32_t ResourceManagerTop::getSystemResourceInfo(const JsonObject& parameters, JsonObject& response)
         {
             LOGINFOMETHOD();
             if (_service == nullptr) {
