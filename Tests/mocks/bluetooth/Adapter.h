@@ -28,6 +28,7 @@
 #include <Status.h>
 #include <bluetooth/Advertisement.h>
 #include <bluetooth/Device.h>
+#include <bluetooth/Uuid.h
 
 #include <functional>
 #include <memory>

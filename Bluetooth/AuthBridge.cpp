@@ -46,13 +46,15 @@ bool AuthBridge::onAuthRequest(bluetooth::AuthorisationType type, std::shared_pt
 
     std::string mac;
     device->address(mac);
-    const std::string handleStr = m_registry.getHandleForMac(mac);
-    const std::string deviceType = m_registry.getDeviceType(
-        handleStr.empty() ? DeviceRegistry::deriveHandle(mac) : handleStr);
 
+    // Ensure MAC↔handle mapping exists so setEventResponse(deviceID) can resolve back to MAC.
+    m_registry.registerDevice(mac);
+
+    const std::string handleStr = m_registry.getHandleForMac(mac);
+    const std::string deviceType = m_registry.getDeviceType(handleStr);
     // ── PairingRequest: always escalate to client ────────────────────────────
     if (type == bluetooth::AuthorisationType::PairingRequest) {
-        if (!m_callbacks.onPairingRequest) return true;
+        if (!m_callbacks.onPairingRequest) return false;
 
         std::string name;
         device->name(name);

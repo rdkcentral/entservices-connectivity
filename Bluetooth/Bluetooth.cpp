@@ -363,8 +363,10 @@ namespace WPEFramework
                 sendNotify(C_STR(EVT_CONNECTION_REQUEST), params);
             };
             authCbs.isPaired = [this](const std::string& handleStr) -> bool {
-                AutoConnectStatus status;
-                return Core::ERROR_NONE == m_bluetoothDeviceManager.getAutoConnect(handleStr, status);
+                for (const auto& info : m_btAdapter.getPairedDevices()) {
+                    if (info.handleStr == handleStr) return true;
+                }
+                return false;
             };
 
             message = m_btAdapter.init(service, std::move(evtCbs), std::move(authCbs));

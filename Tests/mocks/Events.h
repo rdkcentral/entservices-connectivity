@@ -22,13 +22,7 @@
 #pragma once
 
 #include <functional>
-
-template <typename Event, typename EventData>
-class EventEmitter {
-public:
-    void registerForEvents(std::function<void(Event, EventData)> cb) {
-        m_eventCallback = std::move(cb);
-    }
+#include <utility>
     void unregisterForEvents() { m_eventCallback = nullptr; }
 
 protected:
