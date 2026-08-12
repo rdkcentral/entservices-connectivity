@@ -79,8 +79,8 @@ std::string BtMgrAdapterImpl::init(PluginHost::IShell* /* service */,
 }
 
 void BtMgrAdapterImpl::deinit() {
-    BTRMGR_UnRegisterFromCallbacks(kIarmClientName);
     s_instance = nullptr;
+    BTRMGR_UnRegisterFromCallbacks(kIarmClientName);
 }
 
 // ── Adapter operations ────────────────────────────────────────────────────────
