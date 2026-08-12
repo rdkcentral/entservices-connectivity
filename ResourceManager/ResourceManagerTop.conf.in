@@ -1,4 +1,4 @@
-#This is the confing file that you see in the device
+#This is the config file that you see in the device
 
 precondition = ["Platform"]
 callsign = "org.rdk.ResourceManagerTop"

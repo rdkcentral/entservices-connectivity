@@ -141,3 +141,31 @@ Here's the short version of the 6 key pieces:
 | 4 | `Register(METHOD_*, &handler, this)` | Constructor in `.cpp` | Builds the name→function lookup table |
 | 5 | `uint32_t method(const JsonObject& parameters, JsonObject& response)` | `.cpp` | The mandatory signature for every handler |
 | 6 | `response["key"] = value` | Inside each method | What actually gets serialized and sent back |
+
+====================================================================
+## ResourceManagerTop curl commands
+
+### Status
+```bash
+curl.exe -d '{"jsonrpc":"2.0","id":2,"method":"Controller.1.status@org.rdk.ResourceManagerTop"}' http://127.0.0.1:9998/jsonrpc
+```
+
+### Activate
+```bash
+curl.exe -d '{"jsonrpc":"2.0","id":1,"method":"Controller.1.activate","params":{"callsign":"org.rdk.ResourceManagerTop"}}' http://127.0.0.1:9998/jsonrpc
+```
+
+### getApiVersionNumber
+```bash
+curl.exe -d '{"jsonrpc":"2.0","id":10,"method":"org.rdk.ResourceManagerTop.1.getApiVersionNumber","params":{}}' http://127.0.0.1:9998/jsonrpc
+```
+
+### getSystemResourceInfo
+```bash
+curl.exe -d '{"jsonrpc":"2.0","id":11,"method":"org.rdk.ResourceManagerTop.1.getSystemResourceInfo","params":{}}' http://127.0.0.1:9998/jsonrpc
+```
+
+### getState
+```bash
+curl.exe -d '{"jsonrpc":"2.0","id":12,"method":"org.rdk.ResourceManagerTop.1.getState","params":{}}' http://127.0.0.1:9998/jsonrpc
+```
