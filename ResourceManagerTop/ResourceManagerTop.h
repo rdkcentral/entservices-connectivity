@@ -50,6 +50,7 @@ namespace WPEFramework {
                 static const string METHOD_GET_API_VERSION_NUMBER;
                 static const string METHOD_GET_SYSTEM_RESOURCE_INFO;
                 static const string METHOD_GET_STATE;
+                static const string METHOD_KILL_PROCESS;
 
                 ResourceManagerTop();
                 virtual ~ResourceManagerTop();

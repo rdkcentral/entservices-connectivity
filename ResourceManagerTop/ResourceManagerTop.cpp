@@ -96,7 +96,7 @@ namespace WPEFramework {
             LOGINFO("exec_top completed, output size: %zu bytes", result.size());
             return result;
         }
-        bool kill_process(const int& pid)
+        bool ResourceManagerTop::kill_process(const int& pid)
         {
             if(pid<0)
             {
@@ -115,7 +115,7 @@ namespace WPEFramework {
                 return false;
             }
         }
-        bool kil_process_by_name(const string& processName)
+        bool ResourceManagerTop::kill_process_by_name(const string& processName)
         {
             if(processName.empty())
             {
@@ -210,7 +210,7 @@ namespace WPEFramework {
             {
                 string processName;
                 getStringParameter("processName", processName);
-                if(kill_process_by_name(processName))
+                if(ResourceManagerTop::kill_process_by_name(processName))
                 {
                     response["success"] = true;
                     response["message"] = "Process killed successfully";
