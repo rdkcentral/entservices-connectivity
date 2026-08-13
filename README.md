@@ -177,5 +177,14 @@ curl -d '{"jsonrpc":"2.0","id":11,"method":"org.rdk.ResourceManagerTop.1.getSyst
 curl -d '{"jsonrpc":"2.0","id":12,"method":"org.rdk.ResourceManagerTop.1.getState","params":{}}' http://127.0.0.1:9998/jsonrpc
 ```
 
+## killProcess (by PID)
+
+```bash
+curl -d '{"jsonrpc":"2.0","id":13,"method":"org.rdk.ResourceManagerTop.1.killProcess","params":{"pid":1234}}' http://127.0.0.1:9998/jsonrpc
 ```
+
+## killProcess (by process name)
+
+```bash
+curl -d '{"jsonrpc":"2.0","id":14,"method":"org.rdk.ResourceManagerTop.1.killProcess","params":{"processName":"myapp"}}' http://127.0.0.1:9998/jsonrpc
 ```

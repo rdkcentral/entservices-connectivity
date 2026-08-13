@@ -11,6 +11,7 @@ const string WPEFramework::Plugin::ResourceManagerTop::SERVICE_NAME = "org.rdk.R
 const string WPEFramework::Plugin::ResourceManagerTop::METHOD_GET_API_VERSION_NUMBER = "getApiVersionNumber";
 const string WPEFramework::Plugin::ResourceManagerTop::METHOD_GET_SYSTEM_RESOURCE_INFO = "getSystemResourceInfo";
 const string WPEFramework::Plugin::ResourceManagerTop::METHOD_GET_STATE = "getState";
+const string WPEFramework::Plugin::ResourceManagerTop::METHOD_KILL_PROCESS = "killProcess";
 
 
 namespace WPEFramework {
@@ -45,6 +46,7 @@ namespace WPEFramework {
             Register(METHOD_GET_API_VERSION_NUMBER, &ResourceManagerTop::getApiVersionNumber, this);
             Register(METHOD_GET_SYSTEM_RESOURCE_INFO, &ResourceManagerTop::getSystemResourceInfo, this);
             Register(METHOD_GET_STATE, &ResourceManagerTop::getState, this);
+            Register(METHOD_KILL_PROCESS, &ResourceManagerTop::killProcess,this);
         }
 
         //Destructor
