@@ -82,7 +82,7 @@ namespace WPEFramework {
         {
             char buffer[256];
             string result;
-            FILE* pipe = popen("top -n 1 -b | head", "r");
+            FILE* pipe = popen("top -n 1 -b | head -n 20", "r");
             if (!pipe) {
                 LOGERR("popen failed: unable to run top command");
                 return "";
@@ -93,6 +93,45 @@ namespace WPEFramework {
             pclose(pipe);
             LOGINFO("exec_top completed, output size: %zu bytes", result.size());
             return result;
+        }
+        bool kill_process(const int& pid)
+        {
+            if(pid<0)
+            {
+                LOGERR("INVALID PID: %d", pid);
+                retunr false;
+            }
+            int ret = kill(pid, SIGKILL);
+            if(ret == 0)
+            {
+                LOGINFO("Process with PID %d killed successfully", pid);
+                return true;
+            }
+            else
+            {
+                LOGERR("Failed to kill process with PID %d, error: %s", pid, strerror(errno));
+                return false;
+            }
+        }
+        bool kil_process_by_name(const string& processName)
+        {
+            if(processName.empty())
+            {
+                LOGERR("Process name is empty");
+                return false;
+            }
+            string command = "pkill -9 " + processName;
+            int ret = system(command.c_str());
+            if(ret == 0)
+            {
+                LOGINFO("Process with name %s killed successfully", processName.c_str());
+                return true;
+            }
+            else
+            {
+                LOGERR("Failed to kill process with name %s, error: %s", processName.c_str(), strerror(errno));
+                return false;
+            }
         }
 
         ///////IMPLEMENTATION OF REGISTERED METHODS///////////
@@ -144,6 +183,50 @@ namespace WPEFramework {
             response["success"] = true;
             LOGINFO("getSystemResourceInfo: success");
             return Core::ERROR_NONE;
+        }
+
+        unit32_t ResourceManagerTop::killProcess(const JsonObject& parameters, JsonObject& response)
+        {
+            if(parameters.HasLabel("pid"))
+            {
+                int pid;
+                getNumberParameter("pid", pid);
+                if(kill_process(pid))
+                {
+                    response["success"] = true;
+                    response["message"] = "Process killed successfully";
+                    return Core::ERROR_NONE;
+                }
+                else
+                {
+                    response["success"] = false;
+                    response["message"] = "Failed to kill process";
+                    return Core::ERROR_GENERAL;
+                }
+            }
+            else if(parameters.HasLabel("processName"))
+            {
+                string processName;
+                getStringParameter("processName", processName);
+                if(kill_process_by_name(processName))
+                {
+                    response["success"] = true;
+                    response["message"] = "Process killed successfully";
+                    return Core::ERROR_NONE;
+                }
+                else
+                {
+                    response["success"] = false;
+                    response["message"] = "Failed to kill process";
+                    return Core::ERROR_GENERAL;
+                }
+            }
+            else
+            {
+                response["success"] = false;
+                response["message"] = "Missing required parameter: pid or processName";
+                return Core::ERROR_BAD_REQUEST;
+            }
         }
 
     } // namespace Plugin

@@ -35,10 +35,13 @@ namespace WPEFramework {
                 //JSON-RPC Registered Methods
                 uint32_t getApiVersionNumber(const JsonObject& parameters, JsonObject& response);
                 uint32_t getSystemResourceInfo(const JsonObject& parameters, JsonObject& response);
+                uint32_t killProcess(const JsonObject& parameters, JsonObject& response);
                 uint32_t getState(const JsonObject& parameters, JsonObject& response);
             private:
                 //Internal Logic
                 string exec_top();
+                bool kill_process(const int& pid);
+                bool kill_process_by_name(const string& processName);
             public:
                 //Service Name
                 static const string SERVICE_NAME;

@@ -144,28 +144,38 @@ Here's the short version of the 6 key pieces:
 
 ====================================================================
 ## ResourceManagerTop curl commands
+````markdown
+# ResourceManagerTop cURL Commands
 
-### Status
+## Status
+
 ```bash
-curl.exe -d '{"jsonrpc":"2.0","id":2,"method":"Controller.1.status@org.rdk.ResourceManagerTop"}' http://127.0.0.1:9998/jsonrpc
+curl -d '{"jsonrpc":"2.0","id":2,"method":"Controller.1.status@org.rdk.ResourceManagerTop"}' http://127.0.0.1:9998/jsonrpc
+````
+
+## Activate
+
+```bash
+curl -d '{"jsonrpc":"2.0","id":1,"method":"Controller.1.activate","params":{"callsign":"org.rdk.ResourceManagerTop"}}' http://127.0.0.1:9998/jsonrpc
 ```
 
-### Activate
+## getApiVersionNumber
+
 ```bash
-curl.exe -d '{"jsonrpc":"2.0","id":1,"method":"Controller.1.activate","params":{"callsign":"org.rdk.ResourceManagerTop"}}' http://127.0.0.1:9998/jsonrpc
+curl -d '{"jsonrpc":"2.0","id":10,"method":"org.rdk.ResourceManagerTop.1.getApiVersionNumber","params":{}}' http://127.0.0.1:9998/jsonrpc
 ```
 
-### getApiVersionNumber
+## getSystemResourceInfo
+
 ```bash
-curl.exe -d '{"jsonrpc":"2.0","id":10,"method":"org.rdk.ResourceManagerTop.1.getApiVersionNumber","params":{}}' http://127.0.0.1:9998/jsonrpc
+curl -d '{"jsonrpc":"2.0","id":11,"method":"org.rdk.ResourceManagerTop.1.getSystemResourceInfo","params":{}}' http://127.0.0.1:9998/jsonrpc
 ```
 
-### getSystemResourceInfo
+## getState
+
 ```bash
-curl.exe -d '{"jsonrpc":"2.0","id":11,"method":"org.rdk.ResourceManagerTop.1.getSystemResourceInfo","params":{}}' http://127.0.0.1:9998/jsonrpc
+curl -d '{"jsonrpc":"2.0","id":12,"method":"org.rdk.ResourceManagerTop.1.getState","params":{}}' http://127.0.0.1:9998/jsonrpc
 ```
 
-### getState
-```bash
-curl.exe -d '{"jsonrpc":"2.0","id":12,"method":"org.rdk.ResourceManagerTop.1.getState","params":{}}' http://127.0.0.1:9998/jsonrpc
+```
 ```
