@@ -99,7 +99,7 @@ namespace WPEFramework {
             if(pid<0)
             {
                 LOGERR("INVALID PID: %d", pid);
-                retunr false;
+                return false;
             }
             int ret = kill(pid, SIGKILL);
             if(ret == 0)
@@ -185,7 +185,7 @@ namespace WPEFramework {
             return Core::ERROR_NONE;
         }
 
-        unit32_t ResourceManagerTop::killProcess(const JsonObject& parameters, JsonObject& response)
+        uint32_t ResourceManagerTop::killProcess(const JsonObject& parameters, JsonObject& response)
         {
             if(parameters.HasLabel("pid"))
             {
