@@ -36,6 +36,10 @@ set(BLUETOOTH_PLUGIN_SOURCES
         Module.cpp
 )
 
+# FindBTMGR.cmake / FindBLUETOOTH_SDK.cmake live here; must be on the module path
+# before any find_package() call below.
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/")
+
 # Probe for both backends. SDK takes priority; BTMgr is the fallback.
 # L1 test builds skip both backend probes (mock injected via BtAdapter::setImpl).
 # L2 test builds select a backend via BLUETOOTH_L2_BACKEND (default: BTMGR).
@@ -93,9 +97,6 @@ if (BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION)
         target_compile_definitions(${MODULE_NAME} PRIVATE BLUETOOTH_PERSISTENT_FILE_PATH="${BLUETOOTH_PERSISTENT_FILE_PATH}")
     endif ()
 endif ()
-
-list(APPEND CMAKE_MODULE_PATH
-        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/")
 
 if (RDK_SERVICE_L2_TEST)
     find_library(TESTMOCKLIB_LIBRARIES NAMES TestMocklib)
