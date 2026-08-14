@@ -103,8 +103,9 @@ namespace WPEFramework {
             std::unordered_map<std::string, BluetoothDeviceInfo> cacheSnapshot = snapshot;
 
             // Filter out Human Interface Devices — The legacy behavior doesn't persist them to the filesystem.
+            // Gamepads share the "HUMAN INTERFACE DEVICE" type string but must be persisted.
             for (auto it = cacheSnapshot.begin(); it != cacheSnapshot.end(); ) {
-                if (it->second.deviceType == "HUMAN INTERFACE DEVICE") {
+                if ((it->second.deviceType == "HUMAN INTERFACE DEVICE") && !it->second.isGamePad) {
                     it = cacheSnapshot.erase(it);
                 } else {
                     ++it;
@@ -335,6 +336,7 @@ namespace WPEFramework {
                     deviceInfo.autoConnectStatus = autoConnectStatus;
                     deviceInfo.lastConnectTimeUtc = std::move(lastConnectTimeUtc);
                     deviceInfo.lastVolumeSetting = lastVolumeSetting;
+                    deviceInfo.isGamePad = deviceInfoObj.HasLabel("isGamePad") ? deviceInfoObj["isGamePad"].Boolean() : false;
 
                     _pairedDeviceCache[deviceID] = std::move(deviceInfo);
 
@@ -372,6 +374,7 @@ namespace WPEFramework {
                 string deviceId = std::to_string(pairedDevices.m_deviceProperty[i].m_deviceHandle);
                 const char* deviceTypeStr = BTRMGR_GetDeviceTypeAsString(pairedDevices.m_deviceProperty[i].m_deviceType);
                 string deviceType = string(deviceTypeStr ? deviceTypeStr : "UNKNOWN");
+                const bool isGamePad = (pairedDevices.m_deviceProperty[i].m_deviceType == BTRMGR_DEVICE_TYPE_HID_GAMEPAD);
                 const std::string deviceAddr = (pairedDevices.m_deviceProperty[i].m_deviceAddress[0] != '\0')
                     ? std::string(pairedDevices.m_deviceProperty[i].m_deviceAddress)
                     : std::string();
@@ -391,12 +394,15 @@ namespace WPEFramework {
                         existing.deviceType = deviceType;
                         LOGINFO("Backfilled deviceType for deviceID=%s from BTRMGR: %s\n", deviceId.c_str(), deviceType.c_str());
                     }
+                    // BTRMGR is authoritative for the gamepad classification.
+                    existing.isGamePad = isGamePad;
                 } else if (!backfillOnly) {
                     // Device found that's not yet cached; add only when not in backfill-only mode.
                     LOGINFO("Adding device to cache: deviceID=%s, deviceType=%s\n", deviceId.c_str(), deviceType.c_str());
                     BluetoothDeviceInfo deviceInfo;
                     deviceInfo.deviceAddr = std::move(deviceAddr);
                     deviceInfo.deviceType = std::move(deviceType);
+                    deviceInfo.isGamePad = isGamePad;
                     deviceInfo.friendlyName = (pairedDevices.m_deviceProperty[i].m_name[0] != '\0') ? std::string(pairedDevices.m_deviceProperty[i].m_name) : deviceId;
                     _pairedDeviceCache[deviceId] = std::move(deviceInfo);
                 } else {
@@ -458,6 +464,7 @@ namespace WPEFramework {
                 deviceInfoObj["deviceID"] = deviceID;
                 deviceInfoObj["deviceAddr"] = deviceInfo.deviceAddr;
                 deviceInfoObj["deviceType"] = deviceInfo.deviceType;
+                deviceInfoObj["isGamePad"] = deviceInfo.isGamePad;
                 deviceInfoObj["autoconnect"] = static_cast<int>(deviceInfo.autoConnectStatus);
                 deviceInfoObj["lastConnectTimeUtc"] = deviceInfo.lastConnectTimeUtc;
                 deviceInfoObj["lastVolumeSetting"] = deviceInfo.lastVolumeSetting;
@@ -774,6 +781,7 @@ namespace WPEFramework {
             deviceInfo.deviceAddr = (deviceProperty.m_deviceAddress[0] != '\0') ? std::string(deviceProperty.m_deviceAddress) : std::string();
             const char* deviceTypeStr = BTRMGR_GetDeviceTypeAsString(deviceProperty.m_deviceType);
             deviceInfo.deviceType = (deviceTypeStr != nullptr) ? deviceTypeStr : "UNKNOWN";
+            deviceInfo.isGamePad = (deviceProperty.m_deviceType == BTRMGR_DEVICE_TYPE_HID_GAMEPAD);
             deviceInfo.friendlyName = (deviceProperty.m_name[0] != '\0') ? std::string(deviceProperty.m_name) : deviceID;
 
             // Evict any MAC-keyed entry left from migration import for the same physical device.
