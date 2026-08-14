@@ -71,8 +71,11 @@ std::string BtMgrAdapterImpl::init(PluginHost::IShell* /* service */,
 
     BTRMGR_RegisterEventCallback(
         [](BTRMGR_EventMessage_t eventMsg) -> BTRMGR_Result_t {
-            if (s_instance) s_instance->onEvent(&eventMsg, sizeof(eventMsg));
-            return BTRMGR_RESULT_SUCCESS;
+            if (s_instance) {
+                 s_instance->onEvent(&eventMsg, sizeof(eventMsg));
+                 return BTRMGR_RESULT_SUCCESS;
+             }
+             return BTRMGR_RESULT_INIT_FAILED;
         });
 
     return "";
