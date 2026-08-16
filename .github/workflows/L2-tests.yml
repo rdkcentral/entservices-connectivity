@@ -27,6 +27,7 @@ jobs:
       matrix:
         compiler: [ gcc, clang ]
         coverage: [ with-coverage, without-coverage ]
+        bluetooth_backend: [ BTMGR, SDK ]
         exclude:
           - compiler: clang
             coverage: with-coverage
@@ -424,6 +425,7 @@ jobs:
           -DUSE_THUNDER_R4=ON
           -DPLUGIN_L2Tests=ON
           -DRDK_SERVICE_L2_TEST=ON
+          -DBLUETOOTH_TEST_BACKEND=${{ matrix.bluetooth_backend }}
           -DDS_FOUND=ON
           -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
           &&

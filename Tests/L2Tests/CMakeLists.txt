@@ -23,9 +23,16 @@ set(THUNDER_PORT 9998)
 find_package(${NAMESPACE}Plugins REQUIRED)
 
 if(PLUGIN_BLUETOOTH)
-    set(SRC_FILES ${SRC_FILES} tests/Bluetooth_L2Test.cpp)
+    string(TOUPPER "${BLUETOOTH_TEST_BACKEND}" BLUETOOTH_L2_TEST_BACKEND)
+    if(BLUETOOTH_L2_TEST_BACKEND STREQUAL "SDK")
+        set(BLUETOOTH_L2_TEST_SOURCE tests/Bluetooth_Sdk_L2Test.cpp)
+    else()
+        set(BLUETOOTH_L2_TEST_SOURCE tests/Bluetooth_L2Test.cpp)
+    endif()
+
+    set(SRC_FILES ${SRC_FILES} ${BLUETOOTH_L2_TEST_SOURCE})
     if(BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION)
-        set_property(SOURCE tests/Bluetooth_L2Test.cpp
+        set_property(SOURCE ${BLUETOOTH_L2_TEST_SOURCE}
             APPEND PROPERTY COMPILE_DEFINITIONS BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION=1)
     endif()
 endif()
@@ -71,6 +78,7 @@ if(SRC_FILES)
         ../../../entservices-testframework/Tests/mocks/devicesettings
         ../../../entservices-testframework/Tests/mocks/MockPlugin
         ../../../entservices-testframework/Tests/L2Tests/L2TestsPlugin
+        ${CMAKE_SOURCE_DIR}/Tests/mocks
         ${CMAKE_INSTALL_PREFIX}/include
         )
 
