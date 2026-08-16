@@ -106,6 +106,8 @@ protected:
                     return "";
                 }));
         WPEFramework::Plugin::BtAdapter::setImpl(p_btSdkMock);
+        ON_CALL(*p_btSdkMock, respondToEvent(::testing::_, ::testing::_))
+            .WillByDefault(::testing::Return(true));
 
         ON_CALL(service, COMLink())
             .WillByDefault(::testing::Invoke(

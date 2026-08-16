@@ -63,7 +63,7 @@ public:
         (const, override));
 
     MOCK_METHOD(std::string, getMacForHandle, (const std::string&), (const, override));
-    MOCK_METHOD(void, respondToEvent, (const std::string&, bool), (override));
+    MOCK_METHOD(bool, respondToEvent, (const std::string&, bool), (override));
 
     MOCK_METHOD(bool, setAudioStream,
         (long long int, const std::string&), (override));
