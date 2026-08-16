@@ -78,7 +78,7 @@ public:
 
     std::string getMacForHandle(const std::string& handleStr) const override;
 
-    void respondToEvent(const std::string& mac, bool accepted) override;
+    bool respondToEvent(const std::string& mac, bool accepted) override;
 
     // Audio stubs pending T-7 (BLUETOOTH_AUDIO_SUPPORT / AUDIO_SUPPORT SDK module).
     bool               setAudioStream(long long int deviceID, const std::string& streamName) override;

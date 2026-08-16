@@ -680,7 +680,10 @@ namespace WPEFramework
                 (eventType == EVT_PAIRING_REQUEST ||
                  eventType == EVT_CONNECTION_REQUEST ||
                  eventType == EVT_PLAYBACK_REQUEST)) {
-                m_btAdapter.respondToEvent(mac, accepted);
+                if (!m_btAdapter.respondToEvent(mac, accepted)) {
+                    LOGERR("setEventResponse: failed for deviceID=%lld", deviceID);
+                    return false;
+                }
                 LOGINFO("Successfully done setEventResponse for deviceID=%lld, accepted=%d",
                         deviceID, static_cast<int>(accepted));
                 return true;

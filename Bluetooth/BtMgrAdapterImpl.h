@@ -67,7 +67,7 @@ public:
                              BtDeviceProperties& props) const override;
 
     std::string getMacForHandle(const std::string& handleStr) const override;
-    void respondToEvent(const std::string& mac, bool accepted) override;
+    bool respondToEvent(const std::string& mac, bool accepted) override;
 
     bool               setAudioStream(long long int deviceID,
                                        const std::string& streamName) override;
@@ -95,6 +95,8 @@ private:
                                    void* data, size_t len);
 
     void onEvent(void* data, size_t len);
+
+    bool respondToEvent(const std::string& mac, int eventType, bool accepted);
 
     void cacheHandleToMac(const std::string& handleStr, const std::string& mac) const;
 

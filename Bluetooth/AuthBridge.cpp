@@ -126,14 +126,15 @@ bool AuthBridge::onAuthRequest(bluetooth::AuthorisationType type, std::shared_pt
     return pending->accepted;
 }
 
-void AuthBridge::onRespondToEvent(const std::string& mac, bool accepted) {
+bool AuthBridge::onRespondToEvent(const std::string& mac, bool accepted) {
     std::lock_guard<std::mutex> lock(m_pendingMutex);
     auto it = m_pendingAuths.find(mac);
-    if (it != m_pendingAuths.end()) {
-        it->second->accepted  = accepted;
-        it->second->resolved  = true;
-        it->second->cv.notify_all();
-    }
+    if (it == m_pendingAuths.end()) return false;
+
+    it->second->accepted  = accepted;
+    it->second->resolved  = true;
+    it->second->cv.notify_all();
+    return true;
 }
 
 bool AuthBridge::isAutoAcceptDevice(const std::string& deviceType,

@@ -95,8 +95,8 @@ std::string BtAdapter::getMacForHandle(const std::string& h) const {
     return getImpl().getMacForHandle(h);
 }
 
-void BtAdapter::respondToEvent(const std::string& mac, bool accepted) {
-    getImpl().respondToEvent(mac, accepted);
+bool BtAdapter::respondToEvent(const std::string& mac, bool accepted) {
+    return getImpl().respondToEvent(mac, accepted);
 }
 
 // static — pure computation, no impl needed

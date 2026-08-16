@@ -66,7 +66,7 @@ public:
 
     // Called by setEventResponseWrapper to resolve a pending auth decision.
     // mac is the device's Bluetooth MAC address string.
-    void onRespondToEvent(const std::string& mac, bool accepted);
+    bool onRespondToEvent(const std::string& mac, bool accepted);
 
 private:
     bool isAutoAcceptDevice(const std::string& deviceType,

@@ -96,7 +96,7 @@ public:
     // Resolve a handle string to the device's MAC address.
     virtual std::string getMacForHandle(const std::string& handleStr) const = 0;
 
-    virtual void respondToEvent(const std::string& mac, bool accepted) = 0;
+    virtual bool respondToEvent(const std::string& mac, bool accepted) = 0;
 
     // ── Audio operations ──────────────────────────────────────────────────────
     // deviceID is vestigial in setAudioStream (adapter-level op, not device-level).

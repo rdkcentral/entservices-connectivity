@@ -253,9 +253,22 @@ std::string BtMgrAdapterImpl::getMacForHandle(const std::string& handleStr) cons
     return (it != m_handleToMac.end()) ? it->second : "";
 }
 
-void BtMgrAdapterImpl::respondToEvent(const std::string& mac, bool accepted) {
-    std::lock_guard<std::mutex> lk(m_pendingMutex);
-    if (m_pendingMac != mac || m_pendingEventType == 0) return;
+bool BtMgrAdapterImpl::respondToEvent(const std::string& mac, bool accepted) {
+    int eventType = 0;
+    {
+        std::lock_guard<std::mutex> lk(m_pendingMutex);
+        if (m_pendingMac != mac || m_pendingEventType == 0) return false;
+        eventType = m_pendingEventType;
+        m_pendingMac.clear();
+        m_pendingEventType = 0;
+    }
+
+    return respondToEvent(mac, eventType, accepted);
+}
+
+bool BtMgrAdapterImpl::respondToEvent(const std::string& mac,
+                                      int eventType,
+                                      bool accepted) {
 
     BTRMGR_EventResponse_t rsp;
     memset(&rsp, 0, sizeof(rsp));
@@ -266,15 +279,13 @@ void BtMgrAdapterImpl::respondToEvent(const std::string& mac, bool accepted) {
         auto it = m_macToHandle.find(mac);
         if (it != m_macToHandle.end()) handleStr = it->second;
     }
-    if (handleStr.empty()) return;
+    if (handleStr.empty()) return false;
 
     rsp.m_deviceHandle = static_cast<BTRMgrDeviceHandle>(std::stoll(handleStr));
-    rsp.m_eventType    = static_cast<BTRMGR_Events_t>(m_pendingEventType);
+    rsp.m_eventType    = static_cast<BTRMGR_Events_t>(eventType);
     rsp.m_eventResp    = accepted ? 1 : 0;
 
-    BTRMGR_SetEventResponse(0, &rsp);
-    m_pendingMac       = "";
-    m_pendingEventType = 0;
+    return BTRMGR_SetEventResponse(0, &rsp) == BTRMGR_RESULT_SUCCESS;
 }
 
 // ── Audio operations ──────────────────────────────────────────────────────────
@@ -523,7 +534,13 @@ void BtMgrAdapterImpl::onEvent(void* data, size_t /*len*/) {
             autoAccept = true;
         }
         if (autoAccept) {
-            respondToEvent(d.m_deviceAddress, true);
+            if (!respondToEvent(
+                    d.m_deviceAddress,
+                    static_cast<int>(BTRMGR_EVENT_RECEIVED_EXTERNAL_CONNECT_REQUEST),
+                    true)) {
+                LOGERR("Failed to auto-accept connection request for %s",
+                       d.m_deviceAddress);
+            }
             return;
         }
 

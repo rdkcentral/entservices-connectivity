@@ -227,8 +227,8 @@ std::string BtSdkAdapterImpl::getMacForHandle(const std::string& handleStr) cons
     return m_registry.getMacForHandle(handleStr);
 }
 
-void BtSdkAdapterImpl::respondToEvent(const std::string& mac, bool accepted) {
-    if (m_authBridge) m_authBridge->onRespondToEvent(mac, accepted);
+bool BtSdkAdapterImpl::respondToEvent(const std::string& mac, bool accepted) {
+    return m_authBridge && m_authBridge->onRespondToEvent(mac, accepted);
 }
 
 // Audio stubs — implemented when BLUETOOTH_AUDIO_SUPPORT / SDK AUDIO_SUPPORT module is available (T-7).
