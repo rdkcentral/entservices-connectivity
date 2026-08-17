@@ -38,6 +38,10 @@ string(TOLOWER ${NAMESPACE} STORAGE_DIRECTORY)
 # for writing pc and config files
 include(CmakeHelperFunctions)
 
+if(PLUGIN_BLUETOOTH)
+    add_subdirectory(Bluetooth)
+endif()
+
 if(RDK_SERVICES_L1_TEST)
     add_subdirectory(Tests/L1Tests)
 endif()
@@ -45,10 +49,6 @@ endif()
 if(RDK_SERVICE_L2_TEST)
     add_subdirectory(Tests/L2Tests)
     add_subdirectory(Tests/L2Tests/StoreMockPlugin)
-endif()
-
-if(PLUGIN_BLUETOOTH)
-    add_subdirectory(Bluetooth)
 endif()
 
 if(WPEFRAMEWORK_CREATE_IPKG_TARGETS)

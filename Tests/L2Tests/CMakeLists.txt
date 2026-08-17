@@ -52,6 +52,10 @@ if(SRC_FILES)
     target_compile_options(${MODULE_NAME} PRIVATE -Wno-error)
     target_link_libraries(${MODULE_NAME} PRIVATE ${NAMESPACE}Plugins::${NAMESPACE}Plugins)
 
+    if(BLUETOOTH_L2_TEST_BACKEND STREQUAL "SDK" AND TARGET ${NAMESPACE}Bluetooth)
+        target_link_libraries(${MODULE_NAME} PRIVATE ${NAMESPACE}Bluetooth)
+    endif()
+
     if (NOT L2_TEST_OOP_RPC)
         find_library(TESTMOCKLIB_LIBRARIES NAMES TestMocklib)
         if (TESTMOCKLIB_LIBRARIES)
