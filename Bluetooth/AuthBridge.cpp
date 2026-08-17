@@ -19,6 +19,7 @@
 
 #include "AuthBridge.h"
 
+#include <core/core.h>
 #include <UtilsLogging.h>
 
 namespace WPEFramework {
