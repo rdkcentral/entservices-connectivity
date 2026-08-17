@@ -150,6 +150,8 @@ protected:
         dispatcher->Deactivate();
         dispatcher->Release();
 
+        plugin.Release();
+
         Core::IWorkerPool::Assign(nullptr);
         workerPool.Release();
 
