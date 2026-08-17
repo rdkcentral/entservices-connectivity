@@ -94,7 +94,7 @@ void Bluetooth_Sdk_L2Test::SetUpTestSuite()
             g_bluetoothActive = true;
             break;
         }
-        if (status != Core::ERROR_INPROGRESS) {
+        if (status != Core::ERROR_TIMEDOUT && status != Core::ERROR_INPROGRESS) {
             break;
         }
         std::this_thread::sleep_for(std::chrono::seconds(2));
