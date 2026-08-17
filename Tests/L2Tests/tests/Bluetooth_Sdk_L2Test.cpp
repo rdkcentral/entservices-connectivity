@@ -67,8 +67,6 @@ void ConfigureSdkMocks()
         .WillByDefault(::testing::Return(std::vector<std::shared_ptr<bluetooth::Device>>{}));
     ON_CALL(*g_adapter, getDevices(::testing::_))
         .WillByDefault(::testing::Return(std::vector<std::shared_ptr<bluetooth::Device>>{}));
-    ON_CALL(*g_adapter, registerForEvents(::testing::_));
-    ON_CALL(*g_adapter, unregisterForEvents());
 }
 
 } // namespace
