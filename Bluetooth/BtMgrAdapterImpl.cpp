@@ -59,6 +59,7 @@ BtMgrAdapterImpl* BtMgrAdapterImpl::s_instance = nullptr;
 std::string BtMgrAdapterImpl::init(PluginHost::IShell* /* service */,
                                     BtEventCallbacks&& eventCallbacks,
                                     BtAuthCallbacks&& authCallbacks) {
+    printf("*** _DEBUG: BtMgrAdapterImpl::init: entry\n");    
     m_evtCbs  = std::move(eventCallbacks);
     m_authCbs = std::move(authCallbacks);
     s_instance = this;
