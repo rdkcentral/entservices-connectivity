@@ -240,7 +240,7 @@ namespace WPEFramework
             BTRMGR_Result_t rc = BTRMGR_RegisterForCallbacks(Utils::IARM::NAME);
             if (BTRMGR_RESULT_SUCCESS != rc)
             {
-                message = "Failed to Register BTRMgr...!";
+                message = "Failed to Register BTRMgr...!!";
                 LOGERR("%s", message.c_str());
                 return message;
             }
