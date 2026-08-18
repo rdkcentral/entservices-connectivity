@@ -1,0 +1,22 @@
+name: Coverity Incremental Analysis Scan
+
+on:
+  pull_request:
+    branches: [ develop ]
+
+  workflow_dispatch:
+    inputs:
+      pullRequestNumber:
+        description: 'Coverity Run: Pull Request Number'
+        required: true
+        type: string
+
+jobs:
+  call_coverity_incremental_scan:
+    uses: rdk-common/build_tools_workflows/.github/workflows/coverity_component_incremental_scan.yml@develop
+    with:
+      pullRequestNumber: ${{ github.event.inputs.pullRequestNumber || github.event.pull_request.number }}
+      branchName: ${{ github.event.pull_request.base.ref }}
+      # Specify your actual build command here
+      buildCommand: bash build.sh
+      customSetup: apt-get update -y && apt-get install -y libjsonrpccpp-dev autoconf automake libtool
