@@ -61,8 +61,8 @@ IBtAdapter& BtAdapter::getImpl() {
 }
 
 std::string BtAdapter::init(PluginHost::IShell* service,
-                                BtEventCallbacks evtCbs,
-                                BtAuthCallbacks  authCbs) {
+                                BtEventCallbacks&& evtCbs,
+                                BtAuthCallbacks&& authCbs) {
     return getImpl().init(service, std::move(evtCbs), std::move(authCbs));
 }
 void BtAdapter::deinit() { getImpl().deinit(); }

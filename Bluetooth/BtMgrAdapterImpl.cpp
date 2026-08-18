@@ -57,8 +57,8 @@ BtMgrAdapterImpl* BtMgrAdapterImpl::s_instance = nullptr;
 // ── Lifecycle ────────────────────────────────────────────────────────────────
 
 std::string BtMgrAdapterImpl::init(PluginHost::IShell* /* service */,
-                                    BtEventCallbacks eventCallbacks,
-                                    BtAuthCallbacks  authCallbacks) {
+                                    BtEventCallbacks&& eventCallbacks,
+                                    BtAuthCallbacks&& authCallbacks) {
     m_evtCbs  = std::move(eventCallbacks);
     m_authCbs = std::move(authCallbacks);
     s_instance = this;
@@ -70,6 +70,7 @@ std::string BtMgrAdapterImpl::init(PluginHost::IShell* /* service */,
     }
 
     BTRMGR_RegisterEventCallback(
+        // coverity[pass_by_value] - BTRMGR_EventCallback ABI requires an event value.
         [](BTRMGR_EventMessage_t eventMsg) -> BTRMGR_Result_t {
             if (s_instance) {
                  s_instance->onEvent(&eventMsg, sizeof(eventMsg));

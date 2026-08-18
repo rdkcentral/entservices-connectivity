@@ -37,8 +37,8 @@ public:
     virtual ~IBtAdapter() = default;
 
     virtual std::string init(PluginHost::IShell* service,
-                             BtEventCallbacks eventCallbacks,
-                             BtAuthCallbacks authCallbacks) = 0;
+                             BtEventCallbacks&& eventCallbacks,
+                             BtAuthCallbacks&& authCallbacks) = 0;
     virtual void deinit() = 0;
 
     virtual bool getAdapterPowered(bool& powered) const = 0;

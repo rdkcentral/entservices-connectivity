@@ -40,8 +40,8 @@ public:
     ~BtMgrAdapterImpl() override = default;
 
     std::string init(PluginHost::IShell* service,
-                     BtEventCallbacks eventCallbacks,
-                     BtAuthCallbacks  authCallbacks) override;
+                     BtEventCallbacks&& eventCallbacks,
+                     BtAuthCallbacks&& authCallbacks) override;
     void deinit() override;
 
     bool getAdapterPowered(bool& powered) const override;

@@ -27,8 +27,8 @@ namespace WPEFramework {
 namespace Plugin {
 
 std::string BtSdkAdapterImpl::init(PluginHost::IShell* /* service */,
-                                        BtEventCallbacks eventCallbacks,
-                                        BtAuthCallbacks  authCallbacks) {
+                                        BtEventCallbacks&& eventCallbacks,
+                                        BtAuthCallbacks&& authCallbacks) {
     m_eventBridge = std::make_unique<EventBridge>(m_registry, std::move(eventCallbacks));
     m_authBridge  = std::make_unique<AuthBridge>(m_registry, std::move(authCallbacks));
 

@@ -56,7 +56,7 @@ class AuthBridge {
 public:
     static constexpr int AUTH_TIMEOUT_SECONDS = 30;
 
-    explicit AuthBridge(DeviceRegistry& registry, BtAuthCallbacks callbacks)
+    explicit AuthBridge(DeviceRegistry& registry, BtAuthCallbacks&& callbacks)
         : m_registry(registry)
         , m_callbacks(std::move(callbacks))
     {}

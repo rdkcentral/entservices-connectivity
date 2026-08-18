@@ -42,7 +42,7 @@ namespace Plugin {
  */
 class EventBridge {
 public:
-    explicit EventBridge(DeviceRegistry& registry, BtEventCallbacks callbacks)
+    explicit EventBridge(DeviceRegistry& registry, BtEventCallbacks&& callbacks)
         : m_registry(registry)
         , m_callbacks(std::move(callbacks))
     {}

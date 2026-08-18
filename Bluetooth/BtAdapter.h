@@ -45,8 +45,8 @@ public:
     static void setImpl(IBtAdapter* newImpl);
 
     std::string init(PluginHost::IShell* service,
-                     BtEventCallbacks eventCallbacks,
-                     BtAuthCallbacks  authCallbacks);
+                     BtEventCallbacks&& eventCallbacks,
+                     BtAuthCallbacks&& authCallbacks);
     void deinit();
 
     bool getAdapterPowered(bool& powered) const;
