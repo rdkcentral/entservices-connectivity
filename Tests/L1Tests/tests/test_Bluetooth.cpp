@@ -99,8 +99,8 @@ protected:
         ON_CALL(*p_btSdkMock, init(::testing::_, ::testing::_, ::testing::_))
             .WillByDefault(::testing::Invoke(
                 [this](WPEFramework::PluginHost::IShell*,
-                       WPEFramework::Plugin::BtEventCallbacks evtCbs,
-                       WPEFramework::Plugin::BtAuthCallbacks  authCbs) -> std::string {
+                       WPEFramework::Plugin::BtEventCallbacks&& evtCbs,
+                       WPEFramework::Plugin::BtAuthCallbacks&& authCbs) -> std::string {
                     p_btSdkMock->m_evtCbs  = std::move(evtCbs);
                     p_btSdkMock->m_authCbs = std::move(authCbs);
                     return "";

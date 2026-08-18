@@ -35,7 +35,7 @@ public:
     virtual ~BtAdapterImplMock() = default;
 
     MOCK_METHOD(std::string, init,
-        (WPEFramework::PluginHost::IShell*, BtEventCallbacks, BtAuthCallbacks),
+        (WPEFramework::PluginHost::IShell*, BtEventCallbacks&&, BtAuthCallbacks&&),
         (override));
     MOCK_METHOD(void, deinit, (), (override));
 
