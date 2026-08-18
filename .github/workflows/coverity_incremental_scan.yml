@@ -16,7 +16,8 @@ jobs:
     uses: rdk-common/build_tools_workflows/.github/workflows/coverity_component_incremental_scan.yml@develop
     with:
       pullRequestNumber: ${{ github.event.inputs.pullRequestNumber || github.event.pull_request.number }}
-      branchName: ${{ github.event.pull_request.base.ref }}
-      # Specify your actual build command here
-      buildCommand: bash build.sh
+      branchName: ${{ github.event.pull_request.base.ref || github.ref_name }}
+      buildCommand: |
+        bash build_dependencies.sh
+        bash cov_build.sh
       customSetup: apt-get update -y && apt-get install -y libjsonrpccpp-dev autoconf automake libtool
