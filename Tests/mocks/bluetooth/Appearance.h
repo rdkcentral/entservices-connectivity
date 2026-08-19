@@ -42,6 +42,7 @@ public:
 
     enum class SubCategory : uint16_t {
         Generic = 0x0000,
+        Gamepad = 0x0004,
     };
 };
 
