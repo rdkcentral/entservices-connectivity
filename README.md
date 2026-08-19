@@ -168,7 +168,7 @@ curl -d '{"jsonrpc":"2.0","id":10,"method":"org.rdk.ResourceManagerTop.1.getApiV
 ## getSystemResourceInfo
 
 ```bash
-curl -d '{"jsonrpc":"2.0","id":11,"method":"org.rdk.ResourceManagerTop.1.getSystemResourceInfo","params":{}}' http://127.0.0.1:9998/jsonrpc
+  curl -d '{"jsonrpc":"2.0","id":11,"method":"org.rdk.ResourceManagerTop.1.getSystemResourceInfo","params":{}}' http://127.0.0.1:9998/jsonrpc
 ```
 
 ## getState
@@ -180,11 +180,17 @@ curl -d '{"jsonrpc":"2.0","id":12,"method":"org.rdk.ResourceManagerTop.1.getStat
 ## killProcess (by PID)
 
 ```bash
-curl -d '{"jsonrpc":"2.0","id":13,"method":"org.rdk.ResourceManagerTop.1.killProcess","params":{"pid":1234}}' http://127.0.0.1:9998/jsonrpc
+curl -d '{"jsonrpc":"2.0","id":13,"method":"org.rdk.ResourceManagerTop.1.killProcess","params":{"pid":13272}}' http://127.0.0.1:9998/jsonrpc
 ```
 
 ## killProcess (by process name)
 
 ```bash
 curl -d '{"jsonrpc":"2.0","id":14,"method":"org.rdk.ResourceManagerTop.1.killProcess","params":{"processName":"myapp"}}' http://127.0.0.1:9998/jsonrpc
+```
+
+## CallKill via ResourceMonitor
+
+```bash
+curl -X POST http://localhost:9998/jsonrpc -d '{"jsonrpc":"2.0","id":1,"method":"ResourceManagerTop.1 killProcessViaResourceMonitor","params":{"pid":1234}}'
 ```

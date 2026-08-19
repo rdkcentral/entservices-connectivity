@@ -12,6 +12,7 @@ const string WPEFramework::Plugin::ResourceManagerTop::METHOD_GET_API_VERSION_NU
 const string WPEFramework::Plugin::ResourceManagerTop::METHOD_GET_SYSTEM_RESOURCE_INFO = "getSystemResourceInfo";
 const string WPEFramework::Plugin::ResourceManagerTop::METHOD_GET_STATE = "getState";
 const string WPEFramework::Plugin::ResourceManagerTop::METHOD_KILL_PROCESS = "killProcess";
+const string WPEFramework::Plugin::ResourceManagerTop::METHOD_KILL_PROCESS_VIA_RESOURCE_MONITOR = "killProcessViaResourceMonitor";
 
 
 namespace WPEFramework {
@@ -46,7 +47,8 @@ namespace WPEFramework {
             Register(METHOD_GET_API_VERSION_NUMBER, &ResourceManagerTop::getApiVersionNumber, this);
             Register(METHOD_GET_SYSTEM_RESOURCE_INFO, &ResourceManagerTop::getSystemResourceInfo, this);
             Register(METHOD_GET_STATE, &ResourceManagerTop::getState, this);
-            Register(METHOD_KILL_PROCESS, &ResourceManagerTop::killProcess,this);
+            Register(METHOD_KILL_PROCESS, &ResourceManagerTop::killProcess, this);
+            Register(METHOD_KILL_PROCESS_VIA_RESOURCE_MONITOR, &ResourceManagerTop::killProcessViaResourceMonitor, this);
         }
 
         //Destructor
@@ -223,12 +225,39 @@ namespace WPEFramework {
                     return Core::ERROR_GENERAL;
                 }
             }
-            else
-            {
+        } // killProcess
+
+        uint32_t ResourceManagerTop::killProcessViaResourceMonitor(const JsonObject& parameters, JsonObject& response)
+        {
+            LOGINFOMETHOD();
+
+            if (!parameters.HasLabel("pid")) {
                 response["success"] = false;
-                response["message"] = "Missing required parameter: pid or processName";
+                response["message"] = "Missing required parameter: pid";
                 return Core::ERROR_BAD_REQUEST;
             }
+
+            int pid;
+            getNumberParameter("pid", pid);
+
+            Exchange::IResourceMonitor* rm =
+                _service->QueryInterfaceByCallsign<Exchange::IResourceMonitor>("org.rdk.ResourceMonitor");
+
+            if (rm == nullptr) {
+                LOGERR("killProcessViaResourceMonitor: ResourceMonitor plugin not available");
+                response["success"] = false;
+                response["message"] = "ResourceMonitor plugin not available";
+                return Core::ERROR_UNAVAILABLE;
+            }
+
+            bool result = false;
+            rm->KillProcess(pid, result);
+            rm->Release();
+
+            LOGINFO("killProcessViaResourceMonitor: pid=%d result=%s", pid, result ? "success" : "failed");
+            response["success"] = result;
+            response["message"] = result ? "Process killed via ResourceMonitor" : "ResourceMonitor failed to kill process";
+            return result ? Core::ERROR_NONE : Core::ERROR_GENERAL;
         }
 
     } // namespace Plugin

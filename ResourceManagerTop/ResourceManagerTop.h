@@ -23,6 +23,7 @@
 #include "UtilsThreadRAII.h"
 #include "UtilsLogging.h"
 #include "UtilsJsonRpc.h"
+#include <interfaces/IResourceMonitor.h>
 
 namespace WPEFramework {
     namespace Plugin {
@@ -36,6 +37,7 @@ namespace WPEFramework {
                 uint32_t getApiVersionNumber(const JsonObject& parameters, JsonObject& response);
                 uint32_t getSystemResourceInfo(const JsonObject& parameters, JsonObject& response);
                 uint32_t killProcess(const JsonObject& parameters, JsonObject& response);
+                uint32_t killProcessViaResourceMonitor(const JsonObject& parameters, JsonObject& response);
                 uint32_t getState(const JsonObject& parameters, JsonObject& response);
             private:
                 //Internal Logic
@@ -51,6 +53,7 @@ namespace WPEFramework {
                 static const string METHOD_GET_SYSTEM_RESOURCE_INFO;
                 static const string METHOD_GET_STATE;
                 static const string METHOD_KILL_PROCESS;
+                static const string METHOD_KILL_PROCESS_VIA_RESOURCE_MONITOR;
 
                 ResourceManagerTop();
                 virtual ~ResourceManagerTop();
