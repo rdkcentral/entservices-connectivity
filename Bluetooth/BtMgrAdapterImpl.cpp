@@ -146,6 +146,7 @@ static IBtAdapter::BtDeviceInfo deviceInfoFromBtmgr(const T& d, bool isPaired) {
     info.name       = d.m_name;
     const char* dt  = BTRMGR_GetDeviceTypeAsString(d.m_deviceType);
     info.deviceType = dt ? dt : "UNKNOWN";
+    info.isGamePad  = (d.m_deviceType == BTRMGR_DEVICE_TYPE_HID_GAMEPAD);
     info.connected  = d.m_isConnected  != 0;
     info.paired     = isPaired;
     info.classOfDevice = d.m_ui32DevClassBtSpec;
@@ -235,6 +236,7 @@ bool BtMgrAdapterImpl::getDeviceProperties(const std::string& handleStr,
     props.name         = p.m_name;
     const char* dt     = BTRMGR_GetDeviceTypeAsString(p.m_deviceType);
     props.deviceType   = dt ? dt : "UNKNOWN";
+    props.isGamePad    = (p.m_deviceType == BTRMGR_DEVICE_TYPE_HID_GAMEPAD);
     props.rssi         = static_cast<int16_t>(p.m_rssi);
     props.signalLevel  = static_cast<int16_t>(p.m_signalLevel);
     props.batteryLevel = p.m_batteryLevel;

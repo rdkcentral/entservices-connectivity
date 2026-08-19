@@ -55,6 +55,8 @@ namespace WPEFramework {
             long long           lastVolumeSetting   = 0;
             AutoConnectStatus   autoConnectStatus   = AUTO_CONNECT_STATUS_UNSET;
             std::string         lastConnectTimeUtc  = "";
+            // BTRMGR reports gamepads as "HUMAN INTERFACE DEVICE"; this disambiguates them.
+            bool                isGamePad           = false;
         } BluetoothDeviceInfo;
 
         class BluetoothDeviceManager {

@@ -59,6 +59,7 @@ public:
         std::string mac;
         std::string name;
         std::string deviceType;
+        bool        isGamePad{false};
         bool        connected{false};
         bool        paired{false};
         uint32_t    classOfDevice{0};
@@ -81,6 +82,7 @@ public:
         std::string mac;
         std::string name;
         std::string deviceType;
+        bool        isGamePad{false};
         uint32_t    classOfDevice{0};
         uint16_t    appearance{0};
         int16_t     rssi{0};

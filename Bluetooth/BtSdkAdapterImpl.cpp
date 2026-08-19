@@ -19,6 +19,7 @@
 
 #include "BtSdkAdapterImpl.h"
 
+#include <bluetooth/Appearance.h>
 #include <bluetooth/Uuid.h>
 #include <UtilsLogging.h>
 #include <LogRedirect.h>
@@ -145,6 +146,8 @@ IBtAdapter::BtDeviceInfo BtSdkAdapterImpl::deviceToInfo(
     if (device->getAllProperties(props)) {
         info.classOfDevice = props.classOfDevice.value_or(0);
         info.appearance    = props.appearance.value_or(0);
+        info.isGamePad     = (info.appearance == (static_cast<uint16_t>(bluetooth::Appearance::Category::HumanInterfaceDevice)
+                            | static_cast<uint16_t>(bluetooth::Appearance::SubCategory::Gamepad)));
         if (props.uuids.has_value()) info.uuids = props.uuids.value();
     }
     return info;
@@ -215,6 +218,8 @@ bool BtSdkAdapterImpl::getDeviceProperties(const std::string& handleStr,
     if (!device->getAllProperties(sdkProps)) return false;
     props.classOfDevice = sdkProps.classOfDevice.value_or(0);
     props.appearance    = sdkProps.appearance.value_or(0);
+    props.isGamePad     = (props.appearance == (static_cast<uint16_t>(bluetooth::Appearance::Category::HumanInterfaceDevice)
+                        | static_cast<uint16_t>(bluetooth::Appearance::SubCategory::Gamepad)));
     props.rssi          = sdkProps.rssi.value_or(0);
     props.batteryLevel  = sdkProps.batteryLevel.value_or(0);
     props.modalias      = sdkProps.modalias.value_or("");

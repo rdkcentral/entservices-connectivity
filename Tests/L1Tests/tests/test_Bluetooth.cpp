@@ -1592,6 +1592,72 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, write_DeviceTypeMissingInFi
     EXPECT_TRUE(filesystemPayload.find("\"deviceType\":\"UNKNOWN\"") == string::npos);
 }
 
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, write_HidGamePad_PersistedToFilesystem)
+{
+    // Only true HID devices are excluded from the filesystem persistence file;
+    // gamepads must be kept even though both are classified as HID.
+    IBtAdapter::BtDeviceInfo gamePadDevice;
+    gamePadDevice.handleStr = "123";
+    gamePadDevice.mac = "123";
+    gamePadDevice.name = "GamePad";
+    gamePadDevice.deviceType = "HUMAN INTERFACE DEVICE";
+    gamePadDevice.isGamePad = true;
+
+    ON_CALL(*p_btSdkMock, getPairedDevices())
+        .WillByDefault(::testing::Return(
+            std::vector<IBtAdapter::BtDeviceInfo>{gamePadDevice}));
+
+    const std::string payload =
+        "{\"pairedDevices\":[{\"deviceAddr\":\"123\","
+        "\"autoConnectStatus\":true,\"lastConnectionTimeUTC\":0}]}";
+
+    if (!initializeFromFilesystemPersistencePayload(payload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
+        _T("{\"deviceID\":\"123\",\"enable\":true}"), response));
+
+    std::string filesystemPayload;
+    ASSERT_TRUE(readFilesystemPersistencePayload(filesystemPayload));
+    EXPECT_TRUE(filesystemPayload.find("\"deviceAddr\":\"123\"") != string::npos);
+    EXPECT_TRUE(filesystemPayload.find("\"deviceType\":\"HUMAN INTERFACE DEVICE\"") != string::npos);
+}
+
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, write_HidNonGamePad_ExcludedFromFilesystem)
+{
+    // Remote controls / keyboards / mice remain excluded from the filesystem persistence file.
+    IBtAdapter::BtDeviceInfo hidDevice;
+    hidDevice.handleStr = "123";
+    hidDevice.mac = "123";
+    hidDevice.name = "RemoteControl";
+    hidDevice.deviceType = "HUMAN INTERFACE DEVICE";
+    hidDevice.isGamePad = false;
+
+    ON_CALL(*p_btSdkMock, getPairedDevices())
+        .WillByDefault(::testing::Return(
+            std::vector<IBtAdapter::BtDeviceInfo>{hidDevice}));
+
+    const std::string payload =
+        "{\"pairedDevices\":[{\"deviceAddr\":\"123\","
+        "\"autoConnectStatus\":true,\"lastConnectionTimeUTC\":0}]}";
+
+    if (!initializeFromFilesystemPersistencePayload(payload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
+        _T("{\"deviceID\":\"123\",\"enable\":true}"), response));
+
+    std::string filesystemPayload;
+    ASSERT_TRUE(readFilesystemPersistencePayload(filesystemPayload));
+    EXPECT_TRUE(filesystemPayload.find("\"deviceAddr\":\"123\"") == string::npos);
+}
+
 TEST_F(BluetoothLegacyPersistenceMigrationParseTest, write_LastVolumeSettingFromFilesystemMigration_PersistedToFilesystem)
 {
     // lastVolumeSetting parsed from the file must be written back to the filesystem

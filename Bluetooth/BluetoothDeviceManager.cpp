@@ -103,8 +103,9 @@ namespace WPEFramework {
             std::unordered_map<std::string, BluetoothDeviceInfo> cacheSnapshot = snapshot;
 
             // Filter out Human Interface Devices — The legacy behavior doesn't persist them to the filesystem.
+            // Gamepads share the "HUMAN INTERFACE DEVICE" type string but must be persisted.
             for (auto it = cacheSnapshot.begin(); it != cacheSnapshot.end(); ) {
-                if (it->second.deviceType == "HUMAN INTERFACE DEVICE") {
+                if ((it->second.deviceType == "HUMAN INTERFACE DEVICE") && !it->second.isGamePad) {
                     it = cacheSnapshot.erase(it);
                 } else {
                     ++it;
@@ -335,6 +336,7 @@ namespace WPEFramework {
                     deviceInfo.autoConnectStatus = autoConnectStatus;
                     deviceInfo.lastConnectTimeUtc = std::move(lastConnectTimeUtc);
                     deviceInfo.lastVolumeSetting = lastVolumeSetting;
+                    deviceInfo.isGamePad = deviceInfoObj.HasLabel("isGamePad") ? deviceInfoObj["isGamePad"].Boolean() : false;
 
                     _pairedDeviceCache[deviceID] = std::move(deviceInfo);
 
@@ -370,6 +372,7 @@ namespace WPEFramework {
                 string deviceType = info.deviceType;
                 string deviceAddr = info.mac;
                 string name       = info.name;
+                const bool isGamePad = info.isGamePad;
                 if (name.empty()) name = deviceId;
 
                 if (_pairedDeviceCache.find(deviceId) != _pairedDeviceCache.end()) {
@@ -386,12 +389,15 @@ namespace WPEFramework {
                         existing.deviceType = deviceType;
                         LOGINFO("Backfilled deviceType for deviceID=%s: %s\n", deviceId.c_str(), deviceType.c_str());
                     }
+                    // BTRMGR is authoritative for the gamepad classification.
+                    existing.isGamePad = isGamePad;
                 } else if (!backfillOnly) {
                     LOGINFO("Adding device to cache: deviceID=%s, deviceType=%s\n", deviceId.c_str(), deviceType.c_str());
                     BluetoothDeviceInfo deviceInfo;
                     deviceInfo.deviceAddr   = deviceAddr;
                     deviceInfo.deviceType   = std::move(deviceType);
                     deviceInfo.friendlyName = std::move(name);
+                    deviceInfo.isGamePad = isGamePad;
                     _pairedDeviceCache[deviceId] = std::move(deviceInfo);
                 } else {
                     LOGINFO("Skipping device not in imported cache (backfill-only mode): deviceID=%s\n", deviceId.c_str());
@@ -448,6 +454,7 @@ namespace WPEFramework {
                 deviceInfoObj["deviceID"] = deviceID;
                 deviceInfoObj["deviceAddr"] = deviceInfo.deviceAddr;
                 deviceInfoObj["deviceType"] = deviceInfo.deviceType;
+                deviceInfoObj["isGamePad"] = deviceInfo.isGamePad;
                 deviceInfoObj["autoconnect"] = static_cast<int>(deviceInfo.autoConnectStatus);
                 deviceInfoObj["lastConnectTimeUtc"] = deviceInfo.lastConnectTimeUtc;
                 deviceInfoObj["lastVolumeSetting"] = deviceInfo.lastVolumeSetting;
@@ -757,6 +764,7 @@ namespace WPEFramework {
             deviceInfo.deviceAddr   = props.mac;
             deviceInfo.deviceType   = props.deviceType;
             deviceInfo.friendlyName = props.name.empty() ? deviceID : props.name;
+            deviceInfo.isGamePad     = props.isGamePad;
 
             // Evict any MAC-keyed entry left from migration import for the same physical device.
             if (!deviceInfo.deviceAddr.empty()) {
