@@ -1,8 +1,9 @@
-name: Coverity Incremental Analysis Scan
+name: Coverity Incremental Analysis Scan 3
 
 on:
   pull_request:
     branches: [ develop ]
+    paths: ['**/*.c', '**/*.cpp', '**/*.cc', '**/*.cxx', '**/*.h', '**/*.hpp']
 
   workflow_dispatch:
     inputs:
@@ -10,14 +11,23 @@ on:
         description: 'Coverity Run: Pull Request Number'
         required: true
         type: string
-
+        
 jobs:
   call_coverity_incremental_scan:
-    uses: rdk-common/build_tools_workflows/.github/workflows/coverity_component_incremental_scan.yml@develop
+    uses: rdk-e/rdkservices-cpc/.github/workflows/coverity_component_incremental_scan.yml@develop
     with:
       pullRequestNumber: ${{ github.event.inputs.pullRequestNumber || github.event.pull_request.number }}
-      branchName: ${{ github.event.pull_request.base.ref || github.ref_name }}
+      branchName: ${{ github.event.pull_request.base.ref }}
+      # Specify your actual build command here
       buildCommand: |
         bash build_dependencies.sh
         bash cov_build.sh
-      customSetup: apt-get update -y && apt-get install -y libjsonrpccpp-dev autoconf automake libtool
+      customSetup: |
+        apt-get update -y
+        apt-get install -y -y libsqlite3-dev libcurl4-openssl-dev valgrind lcov clang libsystemd-dev libboost-all-dev libwebsocketpp-dev meson libcunit1 libcunit1-dev curl protobuf-compiler-grpc libgrpc-dev libgrpc++-dev libjsoncpp-dev libunwind-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev tree
+        pip install jsonref
+    secrets: 
+      RDKE_ARTIFACTORY_USER_APIKEY: ${{ secrets.RDKE_ARTIFACTORY_USER_APIKEY }}
+      RDKE_COVERITY_APIKEY: ${{ secrets.RDKE_COVERITY_APIKEY }}
+      RDKE_GITHUB_TOKEN: ${{ secrets.RDKE_GITHUB_TOKEN }}
+      RDKE_GITHUB_TOKENCM: ${{ secrets.RDKCM_RDKE }}
