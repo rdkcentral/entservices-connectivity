@@ -6,7 +6,7 @@ set(MODULE_NAME ${NAMESPACE}${PLUGIN_NAME})
 set(PLUGIN_TOP_STARTUPORDER "" CACHE STRING "To configure startup order of TOP plugin")
 
 find_package(${NAMESPACE}Plugins     REQUIRED)
-# find_package(${NAMESPACE}Definitions REQUIRED)
+find_package(${NAMESPACE}Definitions REQUIRED)
 
 add_library(${MODULE_NAME} SHARED
         ResourceManagerTop.cpp
@@ -24,7 +24,7 @@ target_include_directories(${MODULE_NAME} PRIVATE
 target_link_libraries(${MODULE_NAME}
         PRIVATE
         ${NAMESPACE}Plugins::${NAMESPACE}Plugins
-        # ${NAMESPACE}Definitions::${NAMESPACE}Definitions
+        ${NAMESPACE}Definitions::${NAMESPACE}Definitions
 )
 
 install(TARGETS ${MODULE_NAME}
