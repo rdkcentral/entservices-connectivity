@@ -1858,6 +1858,83 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, write_DeviceTypeMissingInFi
     EXPECT_TRUE(filesystemPayload.find("\"deviceType\":\"UNKNOWN\"") == string::npos);
 }
 
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, write_HidGamePad_PersistedToFilesystem)
+{
+    // BTRMGR reports both remote controls (BTRMGR_DEVICE_TYPE_HID) and gamepads
+    // (BTRMGR_DEVICE_TYPE_HID_GAMEPAD) as "HUMAN INTERFACE DEVICE". Only true HID
+    // devices are excluded from the filesystem persistence file; gamepads must be kept.
+    BTRMGR_PairedDevicesList_t gamePadDevices;
+    memset(&gamePadDevices, 0, sizeof(gamePadDevices));
+    gamePadDevices.m_numOfDevices = 1;
+    gamePadDevices.m_deviceProperty[0].m_deviceHandle = 123;
+    gamePadDevices.m_deviceProperty[0].m_deviceType = BTRMGR_DEVICE_TYPE_HID_GAMEPAD;
+    strcpy(gamePadDevices.m_deviceProperty[0].m_name, "GamePad");
+    strcpy(gamePadDevices.m_deviceProperty[0].m_deviceAddress, "123");
+
+    ON_CALL(*p_btmgrMock, BTRMGR_GetPairedDevices(::testing::_, ::testing::_))
+        .WillByDefault(::testing::DoAll(
+            ::testing::SetArgPointee<1>(gamePadDevices),
+            ::testing::Return(BTRMGR_RESULT_SUCCESS)));
+
+    ON_CALL(*p_btmgrMock, BTRMGR_GetDeviceTypeAsString(::testing::_))
+        .WillByDefault(::testing::Return("HUMAN INTERFACE DEVICE"));
+
+    const std::string payload =
+        "{\"pairedDevices\":[{\"deviceAddr\":\"123\","
+        "\"autoConnectStatus\":true,\"lastConnectionTimeUTC\":0}]}";
+
+    if (!initializeFromFilesystemPersistencePayload(payload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
+        _T("{\"deviceID\":\"123\",\"enable\":true}"), response));
+
+    std::string filesystemPayload;
+    ASSERT_TRUE(readFilesystemPersistencePayload(filesystemPayload));
+    EXPECT_TRUE(filesystemPayload.find("\"deviceAddr\":\"123\"") != string::npos);
+    EXPECT_TRUE(filesystemPayload.find("\"deviceType\":\"HUMAN INTERFACE DEVICE\"") != string::npos);
+}
+
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, write_HidNonGamePad_ExcludedFromFilesystem)
+{
+    // Remote controls / keyboards / mice remain excluded from the filesystem persistence file.
+    BTRMGR_PairedDevicesList_t hidDevices;
+    memset(&hidDevices, 0, sizeof(hidDevices));
+    hidDevices.m_numOfDevices = 1;
+    hidDevices.m_deviceProperty[0].m_deviceHandle = 123;
+    hidDevices.m_deviceProperty[0].m_deviceType = BTRMGR_DEVICE_TYPE_HID;
+    strcpy(hidDevices.m_deviceProperty[0].m_name, "RemoteControl");
+    strcpy(hidDevices.m_deviceProperty[0].m_deviceAddress, "123");
+
+    ON_CALL(*p_btmgrMock, BTRMGR_GetPairedDevices(::testing::_, ::testing::_))
+        .WillByDefault(::testing::DoAll(
+            ::testing::SetArgPointee<1>(hidDevices),
+            ::testing::Return(BTRMGR_RESULT_SUCCESS)));
+
+    ON_CALL(*p_btmgrMock, BTRMGR_GetDeviceTypeAsString(::testing::_))
+        .WillByDefault(::testing::Return("HUMAN INTERFACE DEVICE"));
+
+    const std::string payload =
+        "{\"pairedDevices\":[{\"deviceAddr\":\"123\","
+        "\"autoConnectStatus\":true,\"lastConnectionTimeUTC\":0}]}";
+
+    if (!initializeFromFilesystemPersistencePayload(payload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"),
+        _T("{\"deviceID\":\"123\",\"enable\":true}"), response));
+
+    std::string filesystemPayload;
+    ASSERT_TRUE(readFilesystemPersistencePayload(filesystemPayload));
+    EXPECT_TRUE(filesystemPayload.find("\"deviceAddr\":\"123\"") == string::npos);
+}
+
 TEST_F(BluetoothLegacyPersistenceMigrationParseTest, write_LastVolumeSettingFromFilesystemMigration_PersistedToFilesystem)
 {
     // lastVolumeSetting parsed from the file must be written back to the filesystem
