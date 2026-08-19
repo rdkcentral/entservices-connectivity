@@ -192,5 +192,5 @@ curl -d '{"jsonrpc":"2.0","id":14,"method":"org.rdk.ResourceManagerTop.1.killPro
 ## CallKill via ResourceMonitor
 
 ```bash
-curl -X POST http://localhost:9998/jsonrpc -d '{"jsonrpc":"2.0","id":1,"method":"ResourceManagerTop.1 killProcessViaResourceMonitor","params":{"pid":1234}}'
+curl -d '{"jsonrpc":"2.0","id":15,"method":"org.rdk.ResourceManagerTop.1.killProcessViaResourceMonitor","params":{"pid":1234}}' http://127.0.0.1:9998/jsonrpc
 ```
