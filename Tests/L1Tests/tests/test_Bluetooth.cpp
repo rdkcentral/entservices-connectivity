@@ -1605,7 +1605,7 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, write_HidGamePad_PersistedT
 
     ON_CALL(*p_btSdkMock, getPairedDevices())
         .WillByDefault(::testing::Return(
-            std::vector<IBtAdapter::BtDeviceInfo>{gamePadDevice}));
+            std::vector<IBtAdapter::BtDeviceInfo>{std::move(gamePadDevice)}));
 
     const std::string payload =
         "{\"pairedDevices\":[{\"deviceAddr\":\"123\","
@@ -1638,7 +1638,7 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, write_HidNonGamePad_Exclude
 
     ON_CALL(*p_btSdkMock, getPairedDevices())
         .WillByDefault(::testing::Return(
-            std::vector<IBtAdapter::BtDeviceInfo>{hidDevice}));
+            std::vector<IBtAdapter::BtDeviceInfo>{std::move(hidDevice)}));
 
     const std::string payload =
         "{\"pairedDevices\":[{\"deviceAddr\":\"123\","
