@@ -225,6 +225,12 @@ namespace WPEFramework {
                     return Core::ERROR_GENERAL;
                 }
             }
+            else
+            {
+                response["success"] = false;
+                response["message"] = "Missing required parameter: pid or processName";
+                return Core::ERROR_BAD_REQUEST;
+            }
         } // killProcess
 
         uint32_t ResourceManagerTop::killProcessViaResourceMonitor(const JsonObject& parameters, JsonObject& response)
