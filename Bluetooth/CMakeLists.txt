@@ -116,10 +116,12 @@ endif (RDK_SERVICE_L2_TEST)
 
 # Per-backend link and include configuration.
 if ((RDK_SERVICES_L1_TEST OR RDK_SERVICE_L2_TEST) AND BLUETOOTH_TEST_BACKEND STREQUAL "SDK")
-    target_compile_definitions(${MODULE_NAME} PRIVATE BLUETOOTH_USE_SDK=1)
+    target_compile_definitions(${MODULE_NAME} PRIVATE BLUETOOTH_HAS_SDK=1)
     # Shadow the real bluetooth-sdk headers with test stubs.
     target_include_directories(${MODULE_NAME} BEFORE PRIVATE
         ${CMAKE_SOURCE_DIR}/../entservices-connectivity/Tests/mocks)
+elseif ((RDK_SERVICES_L1_TEST OR RDK_SERVICE_L2_TEST) AND BLUETOOTH_TEST_BACKEND STREQUAL "BTMGR")
+    target_compile_definitions(${MODULE_NAME} PRIVATE BLUETOOTH_HAS_BTMGR=1)
 elseif (NOT RDK_SERVICES_L1_TEST AND NOT RDK_SERVICE_L2_TEST)
     if (BLUETOOTH_SDK_FOUND)
         target_compile_definitions(${MODULE_NAME} PRIVATE BLUETOOTH_HAS_SDK=1)
