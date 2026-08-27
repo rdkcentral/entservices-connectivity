@@ -65,26 +65,27 @@ if (RDK_SERVICES_L1_TEST OR RDK_SERVICE_L2_TEST)
         list(APPEND BLUETOOTH_PLUGIN_SOURCES BtMgrAdapterImpl.cpp)
     endif()
 elseif (NOT RDK_SERVICES_L1_TEST)
-    find_package(BLUETOOTH_SDK)
+    find_package(BLUETOOTH_SDK QUIET)
+    find_package(BTMGR QUIET)
 
     if (BLUETOOTH_SDK_FOUND)
-        message(STATUS "Bluetooth plugin: using bluetooth-sdk backend")
+        message(STATUS "Bluetooth plugin: SDK backend available at runtime")
         list(APPEND BLUETOOTH_PLUGIN_SOURCES
             BtSdkAdapterImpl.cpp
             DeviceTypeClassifier.cpp
             EventBridge.cpp
             AuthBridge.cpp
         )
-    else()
-        find_package(BTMGR)
+    endif()
 
-        if (BTMGR_FOUND)
-            message(STATUS "Bluetooth plugin: using BTMgr fallback backend")
-            list(APPEND BLUETOOTH_PLUGIN_SOURCES BtMgrAdapterImpl.cpp)
-        else()
-            message(FATAL_ERROR "Bluetooth plugin: neither BLUETOOTH_SDK nor BTMGR found")
-        endif(BTMGR_FOUND)
-    endif(BLUETOOTH_SDK_FOUND)
+    if (BTMGR_FOUND)
+        message(STATUS "Bluetooth plugin: BTMgr backend available at runtime")
+        list(APPEND BLUETOOTH_PLUGIN_SOURCES BtMgrAdapterImpl.cpp)
+    endif()
+
+    if (NOT BLUETOOTH_SDK_FOUND AND NOT BTMGR_FOUND)
+        message(FATAL_ERROR "Bluetooth plugin: neither BLUETOOTH_SDK nor BTMGR found")
+    endif()
 endif()
 
 
@@ -121,16 +122,23 @@ if ((RDK_SERVICES_L1_TEST OR RDK_SERVICE_L2_TEST) AND BLUETOOTH_TEST_BACKEND STR
         ${CMAKE_SOURCE_DIR}/../entservices-connectivity/Tests/mocks)
 elseif (NOT RDK_SERVICES_L1_TEST AND NOT RDK_SERVICE_L2_TEST)
     if (BLUETOOTH_SDK_FOUND)
-        target_compile_definitions(${MODULE_NAME} PRIVATE BLUETOOTH_USE_SDK=1)
+        target_compile_definitions(${MODULE_NAME} PRIVATE BLUETOOTH_HAS_SDK=1)
         if (BLUETOOTH_SDK_INCLUDE_DIRS)
             target_include_directories(${MODULE_NAME} PRIVATE ${BLUETOOTH_SDK_INCLUDE_DIRS})
         endif()
         if (BLUETOOTH_SDK_LIBRARIES)
             target_link_libraries(${MODULE_NAME} PRIVATE ${BLUETOOTH_SDK_LIBRARIES})
         endif()
-    elseif (BTMGR_FOUND)
-        target_include_directories(${MODULE_NAME} PRIVATE ${BTMGR_INCLUDE_DIRS})
-        target_link_libraries(${MODULE_NAME} PRIVATE ${BTMGR_LIBRARIES})
+    endif()
+
+    if (BTMGR_FOUND)
+        target_compile_definitions(${MODULE_NAME} PRIVATE BLUETOOTH_HAS_BTMGR=1)
+        if (BTMGR_INCLUDE_DIRS)
+            target_include_directories(${MODULE_NAME} PRIVATE ${BTMGR_INCLUDE_DIRS})
+        endif()
+        if (BTMGR_LIBRARIES)
+            target_link_libraries(${MODULE_NAME} PRIVATE ${BTMGR_LIBRARIES})
+        endif()
     endif()
 endif()
 

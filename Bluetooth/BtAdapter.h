@@ -23,7 +23,8 @@
 //
 // Follows the same pattern as entservices-testframework's Btmgr class:
 //   - setImpl(mock) in test fixture setup → all methods dispatch to mock
-//   - Production builds auto-construct BtSdkAdapterImpl on first init() if impl is null
+//   - Production builds choose the active backend implementation at runtime on
+//     first init() when impl is null
 //
 // This header has NO bluetooth-sdk dependencies so it is safe to include in
 // test builds where bluetooth-sdk is not available.

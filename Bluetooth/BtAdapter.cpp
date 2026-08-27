@@ -20,18 +20,29 @@
 #include "BtAdapter.h"
 #include "DeviceRegistry.h"
 
-// In production builds, auto-construct the right backend impl.
-// BLUETOOTH_USE_SDK is set by CMakeLists when BluetoothSDK is found.
-// Guard prevents inclusion of backend headers in test builds.
+// In production builds, include whichever backend implementations were built for
+// this binary and select the active instance at runtime.
 #ifndef RDK_SERVICES_L1_TEST
-#ifdef BLUETOOTH_USE_SDK
+#if defined(BLUETOOTH_HAS_SDK)
 #include "BtSdkAdapterImpl.h"
-#else
+#endif
+#if defined(BLUETOOTH_HAS_BTMGR)
 #include "BtMgrAdapterImpl.h"
 #endif
 #endif
 
 #include <cassert>
+#include <filesystem>
+#include <system_error>
+
+namespace {
+constexpr const char* kBluetoothSdkLibraryPath = "/usr/lib/bluetoothsdk/librdk_bluetooth.so";
+
+bool bluetoothSdkLibraryExists() {
+    std::error_code ec;
+    return std::filesystem::exists(kBluetoothSdkLibraryPath, ec) && !ec;
+}
+} // namespace
 
 namespace WPEFramework {
 namespace Plugin {
@@ -45,16 +56,27 @@ void BtAdapter::setImpl(IBtAdapter* newImpl) {
 }
 
 #ifndef RDK_SERVICES_L1_TEST
-#ifdef BLUETOOTH_USE_SDK
-static BtSdkAdapterImpl g_btAdapterImpl;
-#else
-static BtMgrAdapterImpl g_btAdapterImpl;
+#if defined(BLUETOOTH_HAS_SDK)
+static BtSdkAdapterImpl g_btSdkAdapterImpl;
+#endif
+#if defined(BLUETOOTH_HAS_BTMGR)
+static BtMgrAdapterImpl g_btMgrAdapterImpl;
 #endif
 #endif
 
 IBtAdapter& BtAdapter::getImpl() {
 #ifndef RDK_SERVICES_L1_TEST
-    if (!impl) impl = &g_btAdapterImpl;
+    if (!impl) {
+#if defined(BLUETOOTH_HAS_SDK) && defined(BLUETOOTH_HAS_BTMGR)
+        impl = bluetoothSdkLibraryExists() ? &g_btSdkAdapterImpl : &g_btMgrAdapterImpl;
+#elif defined(BLUETOOTH_HAS_SDK)
+        impl = &g_btSdkAdapterImpl;
+#elif defined(BLUETOOTH_HAS_BTMGR)
+        impl = &g_btMgrAdapterImpl;
+#else
+        assert(false && "No Bluetooth backend implementation available");
+#endif
+    }
 #endif
     assert(impl != nullptr);
     return *impl;
