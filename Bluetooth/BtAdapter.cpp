@@ -36,12 +36,14 @@
 #include <system_error>
 
 namespace {
+#ifndef RDK_SERVICES_L1_TEST
 constexpr const char* kBluetoothSdkLibraryPath = "/usr/lib/bluetoothsdk/librdk_bluetooth.so";
 
 bool bluetoothSdkLibraryExists() {
     std::error_code ec;
     return std::filesystem::exists(kBluetoothSdkLibraryPath, ec) && !ec;
 }
+#endif
 } // namespace
 
 namespace WPEFramework {
