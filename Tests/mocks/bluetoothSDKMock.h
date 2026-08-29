@@ -68,12 +68,6 @@ public:
     MOCK_METHOD(Status, getPowered,  (bool&),        (override));
     MOCK_METHOD(Status, setPowered,  (bool),         (override));
 
-    MOCK_METHOD(std::string, Alias,  (),                        (override));
-    MOCK_METHOD(void,        Alias,  (const std::string&),      (override));
-    MOCK_METHOD(bool,        Discoverable,  (),                 (override));
-    MOCK_METHOD(void,        Discoverable,  (bool),             (override));
-    MOCK_METHOD(void,        DiscoverableTimeout, (uint32_t),   (override));
-
     MOCK_METHOD(void, registerForEvents,
         (std::function<void(bluetooth::AdapterEvent, bluetooth::AdapterEventData)>),
         (override));
@@ -88,7 +82,7 @@ public:
     MOCK_METHOD(Status, name,           (std::string&), (override));
     MOCK_METHOD(bluetooth::DeviceState, state, (),      (override));
     MOCK_METHOD(void, state, (bluetooth::DeviceState),  (override));
-    MOCK_METHOD(bool, getAllProperties,
+    MOCK_METHOD(Status, getAllProperties,
         (bluetooth::DeviceProperties&), (override));
 
     MOCK_METHOD(void, registerForEvents,

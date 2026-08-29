@@ -97,6 +97,7 @@ private:
 
     BtDeviceInfo deviceToInfo(std::shared_ptr<bluetooth::Device> device) const;
 
+    // Keep SDK objects unset until init(); this type is constructed at plugin load.
     std::unique_ptr<bluetooth::Manager> m_manager;
     std::shared_ptr<bluetooth::Adapter> m_adapter;
 

@@ -150,42 +150,35 @@ TEST_F(Bluetooth_Sdk_L2Test, BluetoothEnableDisable)
     EXPECT_TRUE(result["success"].Boolean());
 }
 
-TEST_F(Bluetooth_Sdk_L2Test, BluetoothGetSetName)
+TEST_F(Bluetooth_Sdk_L2Test, BluetoothGetSetNameUnsupported)
 {
     JsonObject params;
     JsonObject result;
 
-    EXPECT_CALL(*g_adapter, Alias())
-        .WillOnce(::testing::Return("SdkAdapter"));
     EXPECT_EQ(Core::ERROR_NONE,
               InvokeServiceMethod("org.rdk.Bluetooth.1", "getName", result));
-    EXPECT_STREQ("SdkAdapter", result["name"].String().c_str());
+    EXPECT_FALSE(result["success"].Boolean());
 
-    EXPECT_CALL(*g_adapter, Alias("NewSdkAdapter"));
     params["name"] = "NewSdkAdapter";
     EXPECT_EQ(Core::ERROR_NONE,
               InvokeServiceMethod("org.rdk.Bluetooth.1", "setName", params, result));
-    EXPECT_TRUE(result["success"].Boolean());
+    EXPECT_FALSE(result["success"].Boolean());
 }
 
-TEST_F(Bluetooth_Sdk_L2Test, BluetoothDiscoverableAndScan)
+TEST_F(Bluetooth_Sdk_L2Test, BluetoothDiscoverableUnsupportedAndScan)
 {
     JsonObject params;
     JsonObject result;
 
-    EXPECT_CALL(*g_adapter, Discoverable())
-        .WillOnce(::testing::Return(true));
     EXPECT_EQ(Core::ERROR_NONE,
               InvokeServiceMethod("org.rdk.Bluetooth.1", "isDiscoverable", result));
-    EXPECT_TRUE(result["discoverable"].Boolean());
+    EXPECT_FALSE(result["discoverable"].Boolean());
 
-    EXPECT_CALL(*g_adapter, Discoverable(true));
-    EXPECT_CALL(*g_adapter, DiscoverableTimeout(30));
     params["discoverable"] = true;
     params["timeout"] = 30;
     EXPECT_EQ(Core::ERROR_NONE,
               InvokeServiceMethod("org.rdk.Bluetooth.1", "setDiscoverable", params, result));
-    EXPECT_TRUE(result["success"].Boolean());
+    EXPECT_FALSE(result["success"].Boolean());
 
     EXPECT_CALL(*g_adapter, startScan(::testing::_))
         .WillOnce(::testing::Return(Status{}));

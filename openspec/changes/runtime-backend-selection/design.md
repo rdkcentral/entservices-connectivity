@@ -6,6 +6,8 @@ This is workable for a single deployment image, but it ties the runtime backend 
 
 The runtime selection rule is intentionally simple for the initial implementation: if `/usr/lib/bluetoothsdk/librdk_bluetooth.so` exists, choose the bluetooth-sdk implementation; otherwise choose the BTMgr implementation.
 
+**Related:** this change covers the runtime half only. The build and packaging half — how a single prebuilt middleware artifact can link the SDK and load on products that do not have it — is covered by `bluetooth-sdk-stub-packaging`, which also preserves the truthfulness of the path tested here. The two compose; neither supersedes the other.
+
 ## Goals / Non-Goals
 
 **Goals:**

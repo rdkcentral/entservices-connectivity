@@ -80,14 +80,6 @@ public:
     virtual Status getPowered(bool& powered) = 0;
     virtual Status setPowered(bool powered) = 0;
 
-    // Property accessors — real ones come from org::bluez::Adapter1_proxy.
-    // BtSdkAdapterImpl wraps all of these in try/catch blocks.
-    virtual std::string Alias() = 0;
-    virtual void        Alias(const std::string& value) = 0;
-    virtual bool        Discoverable() = 0;
-    virtual void        Discoverable(bool value) = 0;
-    virtual void        DiscoverableTimeout(uint32_t seconds) = 0;
-
     // EventEmitter<AdapterEvent, AdapterEventData> interface
     virtual void registerForEvents(
         std::function<void(AdapterEvent, AdapterEventData)> cb) = 0;

@@ -96,24 +96,21 @@ bool BtSdkAdapterImpl::setAdapterPowered(bool powered) {
     return static_cast<bool>(m_adapter->setPowered(powered));
 }
 bool BtSdkAdapterImpl::getAdapterName(std::string& name) const {
-    if (!m_adapter) return false;
-    try { name = m_adapter->Alias(); return true; } catch (...) { return false; }
+    (void)name;
+    return false;
 }
 bool BtSdkAdapterImpl::setAdapterName(const std::string& name) {
-    if (!m_adapter) return false;
-    try { m_adapter->Alias(name); return true; } catch (...) { return false; }
+    (void)name;
+    return false;
 }
 bool BtSdkAdapterImpl::isAdapterDiscoverable(bool& discoverable) const {
-    if (!m_adapter) return false;
-    try { discoverable = m_adapter->Discoverable(); return true; } catch (...) { return false; }
+    (void)discoverable;
+    return false;
 }
 bool BtSdkAdapterImpl::setAdapterDiscoverable(bool discoverable, int timeoutSeconds) {
-    if (!m_adapter) return false;
-    try {
-        m_adapter->Discoverable(discoverable);
-        m_adapter->DiscoverableTimeout(static_cast<uint32_t>(timeoutSeconds > 0 ? timeoutSeconds : 0));
-        return true;
-    } catch (...) { return false; }
+    (void)discoverable;
+    (void)timeoutSeconds;
+    return false;
 }
 
 // ── Discovery ────────────────────────────────────────────────────────────────
@@ -309,10 +306,11 @@ bluetooth::ScanFilter BtSdkAdapterImpl::buildScanFilter(const std::string& profi
     }
     if (profile.find("SMARTPHONE") != std::string::npos || profile.find("TABLET") != std::string::npos) {
         filter.type = bluetooth::ScanType::ClassicOnly;
-        filter.uuids = { bluetooth::Uuid::ServiceClasses::AudioSource }; return filter;
+        filter.uuids = { bluetooth::Uuid(0x110a) };
+        return filter;
     }
     filter.type = bluetooth::ScanType::AllDevices;
-    if (hasAudio) filter.uuids.push_back(bluetooth::Uuid::ServiceClasses::AudioSink);
+    if (hasAudio) filter.uuids.push_back(bluetooth::Uuid(0x110b));
     if (hasHid)   filter.uuids.push_back(bluetooth::Uuid(0x1124));
     return filter;
 }

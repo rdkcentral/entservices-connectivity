@@ -79,10 +79,10 @@ enum class DeviceEvent {
 };
 
 enum class DeviceState {
-    Discovered,
+    Invalid,
     Paired,
+    Discovered,
     Connected,
-    Disconnected
 };
 
 class Device {
@@ -93,7 +93,7 @@ public:
     virtual Status name(std::string& str) = 0;
     virtual DeviceState state() = 0;
     virtual void state(DeviceState s) = 0;
-    virtual bool getAllProperties(DeviceProperties& properties) = 0;
+    virtual Status getAllProperties(DeviceProperties& properties) = 0;
 
     // EventEmitter<DeviceEvent, shared_ptr<Device>> interface
     virtual void registerForEvents(

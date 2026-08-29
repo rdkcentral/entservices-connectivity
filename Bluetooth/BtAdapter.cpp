@@ -37,12 +37,14 @@
 
 namespace {
 #ifndef RDK_SERVICES_L1_TEST
+#if defined(BLUETOOTH_HAS_SDK) && defined(BLUETOOTH_HAS_BTMGR)
 constexpr const char* kBluetoothSdkLibraryPath = "/usr/lib/bluetoothsdk/librdk_bluetooth.so";
 
 bool bluetoothSdkLibraryExists() {
     std::error_code ec;
     return std::filesystem::exists(kBluetoothSdkLibraryPath, ec) && !ec;
 }
+#endif
 #endif
 } // namespace
 
