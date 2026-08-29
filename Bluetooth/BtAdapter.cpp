@@ -20,31 +20,48 @@
 #include "BtAdapter.h"
 #include "DeviceRegistry.h"
 
-// In production builds, include whichever backend implementations were built for
-// this binary and select the active instance at runtime.
-#ifndef RDK_SERVICES_L1_TEST
+// Test builds link their selected backend directly. Production loads the SDK
+// backend module only after finding the real SDK marker.
+#if defined(RDK_SERVICES_L1_TEST) || defined(RDK_SERVICE_L2_TEST)
 #if defined(BLUETOOTH_HAS_SDK)
 #include "BtSdkAdapterImpl.h"
+#endif
 #endif
 #if defined(BLUETOOTH_HAS_BTMGR)
 #include "BtMgrAdapterImpl.h"
 #endif
-#endif
 
 #include <cassert>
+#include <dlfcn.h>
 #include <filesystem>
 #include <system_error>
 
 namespace {
-#ifndef RDK_SERVICES_L1_TEST
-#if defined(BLUETOOTH_HAS_SDK) && defined(BLUETOOTH_HAS_BTMGR)
-constexpr const char* kBluetoothSdkLibraryPath = "/usr/lib/bluetoothsdk/librdk_bluetooth.so";
+#if !defined(RDK_SERVICES_L1_TEST) && !defined(RDK_SERVICE_L2_TEST)
+constexpr const char* kBluetoothSdkLibraryPaths[] = {
+    "/usr/lib/bluetoothsdk/librdk_bluetooth.so",
+    "/usr/lib64/bluetoothsdk/librdk_bluetooth.so"
+};
 
-bool bluetoothSdkLibraryExists() {
+const char* bluetoothSdkLibraryPath() {
     std::error_code ec;
-    return std::filesystem::exists(kBluetoothSdkLibraryPath, ec) && !ec;
+    for (const char* path : kBluetoothSdkLibraryPaths) {
+        if (std::filesystem::exists(path, ec) && !ec) {
+            return path;
+        }
+        ec.clear();
+    }
+    return nullptr;
 }
-#endif
+
+std::string sdkBackendPath() {
+    Dl_info pluginInfo{};
+    if (dladdr(reinterpret_cast<const void*>(&WPEFramework::Plugin::BtAdapter::setImpl), &pluginInfo) == 0
+        || !pluginInfo.dli_fname) {
+        return {};
+    }
+    return (std::filesystem::path(pluginInfo.dli_fname).parent_path() / BLUETOOTH_SDK_BACKEND_FILENAME).string();
+}
 #endif
 } // namespace
 
@@ -52,6 +69,15 @@ namespace WPEFramework {
 namespace Plugin {
 
 IBtAdapter* BtAdapter::impl = nullptr;
+namespace {
+using CreateBluetoothSdkAdapter = IBtAdapter* (*)();
+using DestroyBluetoothSdkAdapter = void (*)(IBtAdapter*);
+
+void* g_sdkHandle = nullptr;
+void* g_sdkBackendHandle = nullptr;
+DestroyBluetoothSdkAdapter g_destroyBluetoothSdkAdapter = nullptr;
+bool g_sdkModuleImpl = false;
+}
 
 void BtAdapter::setImpl(IBtAdapter* newImpl) {
     // Matches the pattern used by Btmgr::setImpl in entservices-testframework.
@@ -59,7 +85,7 @@ void BtAdapter::setImpl(IBtAdapter* newImpl) {
     impl = newImpl;
 }
 
-#ifndef RDK_SERVICES_L1_TEST
+#if defined(RDK_SERVICES_L1_TEST) || defined(RDK_SERVICE_L2_TEST)
 #if defined(BLUETOOTH_HAS_SDK)
 static BtSdkAdapterImpl g_btSdkAdapterImpl;
 #endif
@@ -68,30 +94,77 @@ static BtMgrAdapterImpl g_btMgrAdapterImpl;
 #endif
 #endif
 
-IBtAdapter& BtAdapter::getImpl() {
-#ifndef RDK_SERVICES_L1_TEST
-    if (!impl) {
-#if defined(BLUETOOTH_HAS_SDK) && defined(BLUETOOTH_HAS_BTMGR)
-        impl = bluetoothSdkLibraryExists() ? &g_btSdkAdapterImpl : &g_btMgrAdapterImpl;
-#elif defined(BLUETOOTH_HAS_SDK)
-        impl = &g_btSdkAdapterImpl;
-#elif defined(BLUETOOTH_HAS_BTMGR)
-        impl = &g_btMgrAdapterImpl;
-#else
-        assert(false && "No Bluetooth backend implementation available");
-#endif
+std::string BtAdapter::ensureImpl() {
+    if (impl) {
+        return {};
     }
+
+#if defined(RDK_SERVICES_L1_TEST) || defined(RDK_SERVICE_L2_TEST)
+#if defined(BLUETOOTH_HAS_SDK)
+    impl = &g_btSdkAdapterImpl;
+#else
+    impl = &g_btMgrAdapterImpl;
 #endif
-    assert(impl != nullptr);
+#else
+    const char* sdkPath = bluetoothSdkLibraryPath();
+    if (!sdkPath) {
+        impl = &g_btMgrAdapterImpl;
+        return {};
+    }
+
+    g_sdkHandle = dlopen(sdkPath, RTLD_NOW | RTLD_GLOBAL);
+    if (!g_sdkHandle) {
+        return std::string("Failed to load Bluetooth SDK: ") + dlerror();
+    }
+
+    const std::string backendPath = sdkBackendPath();
+    g_sdkBackendHandle = dlopen(backendPath.c_str(), RTLD_NOW | RTLD_LOCAL);
+    if (!g_sdkBackendHandle) {
+        return std::string("Failed to load Bluetooth SDK backend: ") + dlerror();
+    }
+
+    auto create = reinterpret_cast<CreateBluetoothSdkAdapter>(dlsym(g_sdkBackendHandle, "CreateBluetoothSdkAdapter"));
+    g_destroyBluetoothSdkAdapter = reinterpret_cast<DestroyBluetoothSdkAdapter>(dlsym(g_sdkBackendHandle, "DestroyBluetoothSdkAdapter"));
+    if (!create || !g_destroyBluetoothSdkAdapter) {
+        return "Failed to resolve Bluetooth SDK backend factory";
+    }
+
+    impl = create();
+    if (!impl) {
+        return "Failed to create Bluetooth SDK adapter";
+    }
+    g_sdkModuleImpl = true;
+#endif
+    return {};
+}
+
+IBtAdapter& BtAdapter::getImpl() {
+    const std::string error = ensureImpl();
+    assert(error.empty() && impl != nullptr);
     return *impl;
 }
 
 std::string BtAdapter::init(PluginHost::IShell* service,
-                                BtEventCallbacks&& evtCbs,
-                                BtAuthCallbacks&& authCbs) {
-    return getImpl().init(service, std::move(evtCbs), std::move(authCbs));
+                            BtEventCallbacks&& evtCbs,
+                            BtAuthCallbacks&& authCbs) {
+    const std::string error = ensureImpl();
+    if (!error.empty()) {
+        return error;
+    }
+    return impl->init(service, std::move(evtCbs), std::move(authCbs));
 }
-void BtAdapter::deinit() { getImpl().deinit(); }
+
+void BtAdapter::deinit() {
+    if (!impl) {
+        return;
+    }
+    impl->deinit();
+    if (g_sdkModuleImpl) {
+        g_destroyBluetoothSdkAdapter(impl);
+        impl = nullptr;
+        g_sdkModuleImpl = false;
+    }
+}
 
 bool BtAdapter::getAdapterPowered(bool& p) const  { return getImpl().getAdapterPowered(p); }
 bool BtAdapter::setAdapterPowered(bool p)          { return getImpl().setAdapterPowered(p); }

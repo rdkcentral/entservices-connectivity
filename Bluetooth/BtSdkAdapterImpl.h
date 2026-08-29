@@ -19,10 +19,9 @@
 
 #pragma once
 
-// Real bluetooth-sdk implementation of IBtAdapter.
-// This header includes SDK headers and must NOT be compiled in test builds.
-// BtSdkAdapterImpl.cpp is excluded from BLUETOOTH_PLUGIN_SOURCES when
-// RDK_SERVICES_L1_TEST is defined.
+// Real bluetooth-sdk implementation of IBtAdapter. Production builds compile
+// this implementation into the dynamically loaded SDK backend module; SDK test
+// builds compile it against the repository-provided SDK mocks.
 
 #include <memory>
 #include <string>

@@ -92,6 +92,7 @@ public:
 
 private:
     static IBtAdapter* impl;
+    static std::string ensureImpl();
     static IBtAdapter& getImpl();
 };
 

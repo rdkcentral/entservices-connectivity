@@ -40,10 +40,9 @@ set(BLUETOOTH_PLUGIN_SOURCES
 # before any find_package() call below.
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/")
 
-# Production builds always include both backends. The selected bluetooth-sdk
-# provider supplies either the real library or the build-only no-op stub.
-# Test builds select their backend explicitly and only compile against
-# repository-provided mocks.
+# Production builds retain BTMgr in the main plugin and load the SDK backend
+# module only when the real SDK is installed. Test builds select their backend
+# explicitly and compile against repository-provided mocks.
 set(BLUETOOTH_TEST_BACKEND "BTMGR" CACHE STRING "Bluetooth adapter backend for L1/L2 test builds (BTMGR or SDK)")
 set_property(CACHE BLUETOOTH_TEST_BACKEND PROPERTY STRINGS BTMGR SDK)
 
@@ -70,13 +69,7 @@ else()
     find_package(BLUETOOTH_SDK REQUIRED)
     find_package(BTMGR REQUIRED)
 
-    list(APPEND BLUETOOTH_PLUGIN_SOURCES
-        BtSdkAdapterImpl.cpp
-        DeviceTypeClassifier.cpp
-        EventBridge.cpp
-        AuthBridge.cpp
-        BtMgrAdapterImpl.cpp
-    )
+    list(APPEND BLUETOOTH_PLUGIN_SOURCES BtMgrAdapterImpl.cpp)
 endif()
 
 
@@ -85,6 +78,26 @@ if (BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION)
 endif ()
 
 add_library(${MODULE_NAME} SHARED ${BLUETOOTH_PLUGIN_SOURCES})
+
+if (NOT RDK_SERVICES_L1_TEST AND NOT RDK_SERVICE_L2_TEST)
+    set(BLUETOOTH_SDK_BACKEND_TARGET ${MODULE_NAME}SdkBackend)
+    add_library(${BLUETOOTH_SDK_BACKEND_TARGET} SHARED
+        BtSdkBackend.cpp
+        BtSdkAdapterImpl.cpp
+        DeviceTypeClassifier.cpp
+        EventBridge.cpp
+        AuthBridge.cpp
+    )
+    target_include_directories(${BLUETOOTH_SDK_BACKEND_TARGET} PRIVATE ${BLUETOOTH_SDK_INCLUDE_DIRS})
+    target_link_libraries(${BLUETOOTH_SDK_BACKEND_TARGET} PRIVATE
+        ${BLUETOOTH_SDK_LIBRARIES}
+        ${NAMESPACE}Plugins::${NAMESPACE}Plugins
+        ${NAMESPACE}::${NAMESPACE}Helpers
+    )
+    target_compile_definitions(${MODULE_NAME} PRIVATE
+        BLUETOOTH_SDK_BACKEND_FILENAME="$<TARGET_FILE_NAME:${BLUETOOTH_SDK_BACKEND_TARGET}>"
+    )
+endif()
 
 target_compile_definitions(${MODULE_NAME} PRIVATE MODULE_NAME=Plugin_${PLUGIN_NAME})
 
@@ -114,18 +127,9 @@ if ((RDK_SERVICES_L1_TEST OR RDK_SERVICE_L2_TEST) AND BLUETOOTH_TEST_BACKEND STR
 elseif ((RDK_SERVICES_L1_TEST OR RDK_SERVICE_L2_TEST) AND BLUETOOTH_TEST_BACKEND STREQUAL "BTMGR")
     target_compile_definitions(${MODULE_NAME} PRIVATE BLUETOOTH_HAS_BTMGR=1)
 elseif (NOT RDK_SERVICES_L1_TEST AND NOT RDK_SERVICE_L2_TEST)
-    target_compile_definitions(${MODULE_NAME} PRIVATE
-        BLUETOOTH_HAS_SDK=1
-        BLUETOOTH_HAS_BTMGR=1
-    )
-    target_include_directories(${MODULE_NAME} PRIVATE
-        ${BLUETOOTH_SDK_INCLUDE_DIRS}
-        ${BTMGR_INCLUDE_DIRS}
-    )
-    target_link_libraries(${MODULE_NAME} PRIVATE
-        ${BLUETOOTH_SDK_LIBRARIES}
-        ${BTMGR_LIBRARIES}
-    )
+    target_compile_definitions(${MODULE_NAME} PRIVATE BLUETOOTH_HAS_BTMGR=1)
+    target_include_directories(${MODULE_NAME} PRIVATE ${BTMGR_INCLUDE_DIRS})
+    target_link_libraries(${MODULE_NAME} PRIVATE ${BTMGR_LIBRARIES} dl)
 endif()
 
 find_package(IARMBus)
@@ -150,5 +154,10 @@ endif ()
 
 install(TARGETS ${MODULE_NAME}
         DESTINATION lib/${STORAGE_DIRECTORY}/plugins)
+
+if (BLUETOOTH_SDK_BACKEND_TARGET)
+    install(TARGETS ${BLUETOOTH_SDK_BACKEND_TARGET}
+        DESTINATION lib/${STORAGE_DIRECTORY}/plugins)
+endif()
 
 write_config(PLUGINS ${PLUGIN_NAME})
