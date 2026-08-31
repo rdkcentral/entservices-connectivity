@@ -86,6 +86,12 @@ if(SRC_FILES)
         ${CMAKE_INSTALL_PREFIX}/include
         )
 
+    if(BLUETOOTH_L2_TEST_BACKEND STREQUAL "SDK")
+        # So the test can #include "BtAdapter.h" / "BtSdkAdapterImpl.h" to
+        # inject the real bluetooth-sdk-backed adapter via BtAdapter::setImpl().
+        target_include_directories(${MODULE_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/Bluetooth)
+    endif()
+
     install(TARGETS ${MODULE_NAME} DESTINATION lib)
 else()
     message(STATUS "No L2 test sources enabled for ${PLUGIN_NAME}; skipping ${MODULE_NAME}")

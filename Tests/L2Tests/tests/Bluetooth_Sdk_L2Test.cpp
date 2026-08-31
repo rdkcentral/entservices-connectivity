@@ -20,6 +20,8 @@
 #include "L2Tests.h"
 #include "L2TestsMock.h"
 #include "bluetoothSDKMock.h"
+#include "BtAdapter.h"
+#include "BtSdkAdapterImpl.h"
 
 #include <chrono>
 #include <memory>
@@ -48,6 +50,11 @@ public:
 
 std::unique_ptr<::testing::NiceMock<MockManagerStub>> g_manager;
 std::shared_ptr<::testing::NiceMock<MockAdapter>> g_adapter;
+
+// BtAdapter::ensureImpl() has no way to find a real bluetooth-sdk library in
+// a test environment, so this test injects the real bluetooth::Manager/Adapter
+// -based adapter directly, the same way the L1 tests inject their mock.
+Plugin::BtSdkAdapterImpl g_sdkAdapterImpl;
 bool g_persistentStoreActive = false;
 bool g_bluetoothActive = false;
 
@@ -80,6 +87,7 @@ protected:
 void Bluetooth_Sdk_L2Test::SetUpTestSuite()
 {
     ConfigureSdkMocks();
+    Plugin::BtAdapter::setImpl(&g_sdkAdapterImpl);
     BluetoothSdkSuiteHarness suiteHarness;
 
     uint32_t status = suiteHarness.Activate("org.rdk.PersistentStore");
@@ -114,6 +122,7 @@ void Bluetooth_Sdk_L2Test::TearDownTestSuite()
     }
 
     bluetooth::g_managerStub = nullptr;
+    Plugin::BtAdapter::setImpl(nullptr);
     g_adapter.reset();
     g_manager.reset();
     g_bluetoothActive = false;

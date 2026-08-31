@@ -18,6 +18,35 @@ conflicts with the "one build, no SDK dependency" constraint above. A pure
 stand-ins don't reproduce the exact base classes and vtable layout of the real
 classes, virtual calls on objects returned by the real SDK are undefined behavior.
 
+## Why This Requires a C Facade (Not SDK Public Headers)
+
+Using the SDK's public C++ headers directly is not viable for the following reasons:
+
+### 1. **Build-Time SDK Dependency Breaks the "No Dependency" Design**
+   - Today, `entservices-connectivity` builds as one artifact shipped to every product.
+   - Products without Bluetooth support should not require the Bluetooth SDK at build time.
+   - If the plugin's build requires `bluetooth-sdk` headers (even if they're "public"), the build system cannot produce a single universal binary — it must either assume the SDK is always present, or create per-product variants, both of which violate the single-image-for-all-products constraint.
+
+### 2. **C++ ABI Instability Across Compiler Versions and Configurations**
+   - The SDK's C++ classes (`bluetooth::Adapter`, `bluetooth::Device`) are concrete types with vtables, inheritance hierarchies, and standard library types (`std::string`, `std::vector`, etc.).
+   - C++ ABI is **not standardized across compiler versions, optimization flags, or C++ standard versions**. If the SDK was compiled with one compiler/flags and the plugin with another, the memory layout and vtable ordering can differ silently.
+   - Example: A base class's size changes if a virtual function is added or removed; derived class member offsets shift. Calling virtual methods on an object with the wrong vtable layout is undefined behavior.
+   - Even if both are recompiled, if the SDK publishes a new version with a different internal structure (e.g., adding a private field to an internal base class), the plugin must be recompiled to remain safe — but the plugin is shipped independently and cannot be recompiled for every SDK update.
+
+### 3. **Transitive Dependency Explosion and Maintenance Burden**
+   - Declaring `bluetooth-sdk` as a build-time dependency pulls in its own dependencies: `sdbus-c++`, DBus headers, potentially other RDK or system libraries.
+   - These dependencies must be available and binary-compatible at build time.
+   - Future SDK changes to internal dependencies (e.g., upgrading `sdbus-c++` version) could cascade into plugin rebuild requirements, invalidating the promise of a stable universal binary.
+
+### 4. **Runtime Activation Incompatible with Header Inclusion**
+   - The plugin's design is to detect Bluetooth support at runtime (`dlopen()` if the marker file exists, otherwise disable).
+   - Including the real SDK headers at build time couples the plugin to the SDK at the source level, making it awkward to conditionally use `dlopen()` for the same symbols.
+   - The plugin would need to compile both a "SDK present" path (using real headers) and a "SDK absent" path (using stubs), or maintain separate build configurations — negating simplicity.
+
+### 5. **C ABI is Stable; C++ ABI is Not**
+   - Plain C functions with `extern "C"` linkage have **stable, unmangled symbol names** and a **fixed calling convention** regardless of compiler, version, or settings.
+   - The C facade avoids the entire ABI compatibility problem by drawing a hard line at the C boundary: everything on both sides is decoupled from C++ implementation details (vtables, name mangling, exception models, etc.).
+
 ## Ask
 
 Export a small, stable, `extern "C"` API from `librdk_bluetooth.so` that the
