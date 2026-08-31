@@ -164,6 +164,8 @@ void BtAdapter::deinit() {
         impl = nullptr;
         g_sdkModuleImpl = false;
     }
+    g_sdkHandle = nullptr;
+    g_sdkBackendHandle = nullptr;
 }
 
 bool BtAdapter::getAdapterPowered(bool& p) const  { return getImpl().getAdapterPowered(p); }
