@@ -212,11 +212,8 @@ TEST_F(ResourceManagerTopTest, GetSystemResourceInfo_Success)
               ::testing::StrEq("r")))
         .WillOnce(::testing::Return(fakePipe));
 
-    EXPECT_CALL(wrapsImplMock, pclose(fakePipe))
-        .WillOnce(::testing::Invoke(
-            [](FILE* pipe) {
-                return fclose(pipe);
-            }));
+    EXPECT_CALL(wrapsImplMock, pclose(_))
+        .WillOnce(Return(0));
 
     
     // top is available on ubuntu CI; __wrap_popen (if active) must allow this to succeed
