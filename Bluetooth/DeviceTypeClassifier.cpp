@@ -26,26 +26,27 @@ namespace WPEFramework {
 namespace Plugin {
 
 // static
-std::string DeviceTypeClassifier::classify(const bluetooth::DeviceProperties& props) {
+std::string DeviceTypeClassifier::classify(uint16_t appearance, uint32_t classOfDevice,
+                                            const std::vector<std::string>& uuids) {
     // 1. BLE Appearance — most reliable for LE-only devices.
-    if (props.appearance.has_value() && props.appearance.value() != 0) {
-        std::string result = classifyByAppearance(props.appearance.value());
+    if (appearance != 0) {
+        std::string result = classifyByAppearance(appearance);
         if (result != "UNKNOWN DEVICE") {
             return result;
         }
     }
 
     // 2. Classic BT Class of Device.
-    if (props.classOfDevice.has_value() && props.classOfDevice.value() != 0) {
-        std::string result = classifyByCoD(props.classOfDevice.value());
+    if (classOfDevice != 0) {
+        std::string result = classifyByCoD(classOfDevice);
         if (result != "UNKNOWN DEVICE") {
             return result;
         }
     }
 
     // 3. Service UUID fallback.
-    if (props.uuids.has_value() && !props.uuids.value().empty()) {
-        std::string result = classifyByUuids(props.uuids.value());
+    if (!uuids.empty()) {
+        std::string result = classifyByUuids(uuids);
         if (result != "UNKNOWN DEVICE") {
             return result;
         }
@@ -57,24 +58,24 @@ std::string DeviceTypeClassifier::classify(const bluetooth::DeviceProperties& pr
 // static
 std::string DeviceTypeClassifier::classifyByAppearance(uint16_t appearance) {
     // Category occupies the upper 10 bits per Bluetooth spec.
-    const uint16_t category = appearance & BLUETOOTH_APPEARANCE_CATEGORY_MASK;
+    const uint16_t category = appearance & BleAppearanceCategory::kMask;
 
-    switch (static_cast<bluetooth::Appearance::Category>(category)) {
-        case bluetooth::Appearance::Category::HumanInterfaceDevice:
+    switch (category) {
+        case BleAppearanceCategory::kHumanInterfaceDevice:
             return "HUMAN INTERFACE DEVICE";
 
-        case bluetooth::Appearance::Category::Phone:
+        case BleAppearanceCategory::kPhone:
             return "SMARTPHONE";
 
-        case bluetooth::Appearance::Category::Computer:
+        case BleAppearanceCategory::kComputer:
             return "TABLET";
 
-        case bluetooth::Appearance::Category::Tag:
-        case bluetooth::Appearance::Category::Keyring:
+        case BleAppearanceCategory::kTag:
+        case BleAppearanceCategory::kKeyring:
             return "LE TILE";
 
-        case bluetooth::Appearance::Category::Watch:
-        case bluetooth::Appearance::Category::Uncategorized:
+        case BleAppearanceCategory::kWatch:
+        case BleAppearanceCategory::kUncategorized:
         default:
             return "UNKNOWN DEVICE";
     }

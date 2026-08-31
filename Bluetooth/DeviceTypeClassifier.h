@@ -19,14 +19,26 @@
 
 #pragma once
 
+#include <cstdint>
 #include <string>
-
-#include <bluetooth/Appearance.h>
-#include <bluetooth/Device.h>
-#include <bluetooth/Uuid.h>
+#include <vector>
 
 namespace WPEFramework {
 namespace Plugin {
+
+// BLE GAP Appearance category values (bits 15-6 of the 16-bit appearance),
+// per the Bluetooth Assigned Numbers spec. Defined locally, rather than taken
+// from bluetooth-sdk's Appearance.h, so this classifier has no SDK dependency.
+namespace BleAppearanceCategory {
+constexpr uint16_t kMask                 = 0xffc0;
+constexpr uint16_t kUncategorized        = 0x0000;
+constexpr uint16_t kPhone                = 0x0040;
+constexpr uint16_t kComputer             = 0x0080;
+constexpr uint16_t kWatch                = 0x00c0;
+constexpr uint16_t kTag                  = 0x0200;
+constexpr uint16_t kKeyring              = 0x0240;
+constexpr uint16_t kHumanInterfaceDevice = 0x03c0;
+} // namespace BleAppearanceCategory
 
 /**
  * Infers device type strings from SDK DeviceProperties.
@@ -46,7 +58,10 @@ class DeviceTypeClassifier {
 public:
     DeviceTypeClassifier() = delete;
 
-    static std::string classify(const bluetooth::DeviceProperties& props);
+    // POD inputs only, so this classifier has no dependency on bluetooth-sdk's
+    // Device/Manager/Adapter types and can be shared by any backend.
+    static std::string classify(uint16_t appearance, uint32_t classOfDevice,
+                                const std::vector<std::string>& uuids);
 
 private:
     static std::string classifyByAppearance(uint16_t appearance);

@@ -40,8 +40,11 @@ set(BLUETOOTH_PLUGIN_SOURCES
 # before any find_package() call below.
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/")
 
-# All builds compile both adapters into the main plugin. Test builds explicitly
-# select which one to use; production builds choose at runtime based on SDK presence.
+# Test builds compile the chosen adapter directly into the test binary and
+# select it via BLUETOOTH_TEST_BACKEND (still using the legacy C++-classes
+# adapter against stub headers). Production builds use BtSdkCApiAdapterImpl,
+# which only depends on the pure-C BtSdkCApi.h facade, so it needs neither the
+# real bluetooth-sdk headers/sdbus-c++ nor stub headers to build.
 set(BLUETOOTH_TEST_BACKEND "BTMGR" CACHE STRING "Bluetooth adapter backend for L1/L2 test builds (BTMGR or SDK)")
 set_property(CACHE BLUETOOTH_TEST_BACKEND PROPERTY STRINGS BTMGR SDK)
 
@@ -65,18 +68,19 @@ if (RDK_SERVICES_L1_TEST OR RDK_SERVICE_L2_TEST)
         list(APPEND BLUETOOTH_PLUGIN_SOURCES BtMgrAdapterImpl.cpp)
     endif()
 else()
-    # Production builds compile both adapters into the plugin without requiring
-    # the real SDK at build time. Build uses stubs for SDK headers. Runtime selection
-    # decides which adapter to use based on SDK library presence.
+    # Production builds need only BTMGR at build time. The SDK path uses
+    # BtSdkCApiAdapterImpl (pure-C facade, see BtSdkCApi.h) instead of the
+    # legacy C++-classes adapter, so no SDK headers/sdbus-c++ are needed here,
+    # and the plugin has no DT_NEEDED entry for librdk_bluetooth.so. BtAdapter
+    # dlopen()s the real library at runtime and resolves the facade's single
+    # exported symbol only if the SDK marker is present.
     find_package(BTMGR REQUIRED)
 
-    message(STATUS "Bluetooth plugin: production build - compiling both BTMGR and SDK adapters (SDK-blind)")
+    message(STATUS "Bluetooth plugin: production build - compiling BTMGR adapter and SDK C-facade adapter")
     list(APPEND BLUETOOTH_PLUGIN_SOURCES
         BtMgrAdapterImpl.cpp
-        BtSdkAdapterImpl.cpp
+        BtSdkCApiAdapterImpl.cpp
         DeviceTypeClassifier.cpp
-        EventBridge.cpp
-        AuthBridge.cpp
     )
 endif()
 
@@ -117,14 +121,12 @@ if ((RDK_SERVICES_L1_TEST OR RDK_SERVICE_L2_TEST) AND BLUETOOTH_TEST_BACKEND STR
 elseif ((RDK_SERVICES_L1_TEST OR RDK_SERVICE_L2_TEST) AND BLUETOOTH_TEST_BACKEND STREQUAL "BTMGR")
     target_compile_definitions(${MODULE_NAME} PRIVATE BLUETOOTH_HAS_BTMGR=1)
 elseif (NOT RDK_SERVICES_L1_TEST AND NOT RDK_SERVICE_L2_TEST)
-    # Production build: always has BTMGR and SDK (both compiled in).
-    # SDK uses stubs at build time; real library loaded at runtime if present.
+    # Production build: BTMgr linked directly; the SDK C-facade adapter needs
+    # no additional include dirs or libraries (see BtSdkCApi.h). The real SDK
+    # library is not linked here; BtAdapter loads it at runtime if present.
     target_compile_definitions(${MODULE_NAME} PRIVATE BLUETOOTH_HAS_BTMGR=1 BLUETOOTH_HAS_SDK=1)
     target_include_directories(${MODULE_NAME} PRIVATE ${BTMGR_INCLUDE_DIRS})
     target_link_libraries(${MODULE_NAME} PRIVATE ${BTMGR_LIBRARIES} dl)
-    # SDK headers come from stubs; no SDK libraries linked.
-    target_include_directories(${MODULE_NAME} BEFORE PRIVATE
-        ${CMAKE_SOURCE_DIR}/../entservices-connectivity/Tests/mocks)
 endif()
 
 find_package(IARMBus)

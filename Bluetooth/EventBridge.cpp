@@ -41,7 +41,9 @@ void populateDeviceFields(std::shared_ptr<bluetooth::Device> device,
     if (outType.empty()) {
         bluetooth::DeviceProperties props;
         if (device->getAllProperties(props)) {
-            outType = DeviceTypeClassifier::classify(props);
+            outType = DeviceTypeClassifier::classify(props.appearance.value_or(0),
+                                                      props.classOfDevice.value_or(0),
+                                                      props.uuids.value_or(std::vector<std::string>{}));
             const_cast<DeviceRegistry&>(registry).setDeviceType(outId, outType);
             outRaw = props.classOfDevice.value_or(0);
             outBle = props.appearance.value_or(0);

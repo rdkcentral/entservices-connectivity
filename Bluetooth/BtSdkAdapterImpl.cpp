@@ -267,7 +267,10 @@ void BtSdkAdapterImpl::registerDeviceEvents(std::shared_ptr<bluetooth::Device> d
     if (m_registry.getDeviceType(handle).empty()) {
         bluetooth::DeviceProperties props;
         if (device->getAllProperties(props))
-            m_registry.setDeviceType(handle, DeviceTypeClassifier::classify(props));
+            m_registry.setDeviceType(handle,
+                DeviceTypeClassifier::classify(props.appearance.value_or(0),
+                                               props.classOfDevice.value_or(0),
+                                               props.uuids.value_or(std::vector<std::string>{})));
     }
     m_registry.registerDevice(mac);
 
