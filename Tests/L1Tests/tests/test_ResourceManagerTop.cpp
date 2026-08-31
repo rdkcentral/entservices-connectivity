@@ -30,6 +30,11 @@
 #include <string>
 #include "ResourceMonitorMock.h"
 
+#include <Wraps.h>
+#include <WrapsMocks.h>
+#include <cstdio>
+
+
 using namespace WPEFramework;
 using ::WPEFramework::Core::hresult;
 using ::testing::NiceMock;
@@ -48,6 +53,8 @@ protected:
     Core::ProxyType<WorkerPoolImplementation> workerPool;
     NiceMock<FactoriesImplementation> factoriesImplementation;
 
+    NiceMock<WrapsImplMock> wrapsImplMock;
+
     ResourceManagerTopTest()
         : plugin(Core::ProxyType<Plugin::ResourceManagerTop>::Create())
         , handler(*(plugin))
@@ -56,13 +63,16 @@ protected:
     {
         PluginHost::IFactories::Assign(&factoriesImplementation);
         Core::IWorkerPool::Assign(&(*workerPool));
+
+        Wraps::setImpl(&wrapsImplMock);
+
         workerPool->Run();
     }
 
     virtual ~ResourceManagerTopTest() override
     {
         TEST_LOG("ResourceManagerTopTest Destructor");
-
+        Wraps::setImpl(nullptr);
         Core::IWorkerPool::Assign(nullptr);
         workerPool.Release();
         PluginHost::IFactories::Assign(nullptr);
@@ -184,14 +194,41 @@ TEST_F(ResourceManagerTopTest, GetSystemResourceInfo_Success)
 {
     Core::hresult status = createResources();
 
+    const std::string fakeTopOutput =
+        "top - 12:00:00 up 1 day,  2 users,  load average: 0.10, 0.20, 0.30\n"
+        "Tasks: 100 total,   1 running,  99 sleeping,   0 stopped,   0 zombie\n"
+        "%Cpu(s):  5.0 us,  2.0 sy,  0.0 ni, 93.0 id\n"
+        "MiB Mem :  4096.0 total,  1024.0 free\n";
+
+    FILE* fakePipe = tmpfile();
+    ASSERT_NE(fakePipe, nullptr);
+
+    fputs(fakeTopOutput.c_str(), fakePipe);
+    rewind(fakePipe);
+
+        EXPECT_CALL(
+        wrapsImplMock,
+        popen(::testing::StrEq("top -n 1 -b | head -n 20"),
+              ::testing::StrEq("r")))
+        .WillOnce(::testing::Return(fakePipe));
+
+    EXPECT_CALL(wrapsImplMock, pclose(fakePipe))
+        .WillOnce(::testing::Invoke(
+            [](FILE* pipe) {
+                return fclose(pipe);
+            }));
+
+    
     // top is available on ubuntu CI; __wrap_popen (if active) must allow this to succeed
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getSystemResourceInfo"), _T("{}"), response));
 
     JsonObject responseObj;
     responseObj.FromString(response);
     EXPECT_TRUE(responseObj["success"].Boolean());
-    EXPECT_FALSE(responseObj["resourceInfo"].String().empty());
-
+    EXPECT_EQ(
+        responseObj["resourceInfo"].String(),
+        fakeTopOutput);
+    
     if (Core::ERROR_NONE == status)
     {
         releaseResources();
