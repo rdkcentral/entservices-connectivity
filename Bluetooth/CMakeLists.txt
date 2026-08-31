@@ -34,6 +34,12 @@ set(BLUETOOTH_PLUGIN_SOURCES
         BtAdapter.cpp
         DeviceRegistry.cpp
         Module.cpp
+        # BtAdapter.cpp unconditionally instantiates both adapters as static
+        # globals (dlopen()-resolving the SDK one at runtime), so both must
+        # always be compiled in, in every configuration.
+        BtMgrAdapterImpl.cpp
+        BtSdkCApiAdapterImpl.cpp
+        DeviceTypeClassifier.cpp
 )
 
 # FindBTMGR.cmake / FindBLUETOOTH_SDK.cmake live here; must be on the module path
@@ -58,14 +64,12 @@ if (RDK_SERVICES_L1_TEST OR RDK_SERVICE_L2_TEST)
         message(STATUS "Bluetooth plugin: test build - using bluetooth-sdk mock backend")
         list(APPEND BLUETOOTH_PLUGIN_SOURCES
             BtSdkAdapterImpl.cpp
-            DeviceTypeClassifier.cpp
             EventBridge.cpp
             AuthBridge.cpp
             ${CMAKE_SOURCE_DIR}/../entservices-connectivity/Tests/mocks/bluetoothSDK.cpp
         )
     else()
         message(STATUS "Bluetooth plugin: test build - using BTMgr mock backend")
-        list(APPEND BLUETOOTH_PLUGIN_SOURCES BtMgrAdapterImpl.cpp)
     endif()
 else()
     # Production builds need only BTMGR at build time. The SDK path uses
@@ -77,11 +81,6 @@ else()
     find_package(BTMGR REQUIRED)
 
     message(STATUS "Bluetooth plugin: production build - compiling BTMGR adapter and SDK C-facade adapter")
-    list(APPEND BLUETOOTH_PLUGIN_SOURCES
-        BtMgrAdapterImpl.cpp
-        BtSdkCApiAdapterImpl.cpp
-        DeviceTypeClassifier.cpp
-    )
 endif()
 
 
