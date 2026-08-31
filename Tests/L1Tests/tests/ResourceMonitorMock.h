@@ -59,62 +59,62 @@ public:
 // The static map is keyed by "TestSuite#TestName" so each test gets an
 // independent instance and mocks can never bleed across tests.
 // ─────────────────────────────────────────────────────────────────────────────
-class ResourceMonitorMock : public Exchange::IResourceMonitor {
-public:
-    // ── Mocked interface method ───────────────────────────────────────────────
-    MOCK_METHOD(uint32_t, KillProcess, (const int pid, bool& result), (override));
+// class ResourceMonitorMock : public Exchange::IResourceMonitor {
+// public:
+//     // ── Mocked interface method ───────────────────────────────────────────────
+//     MOCK_METHOD(uint32_t, KillProcess, (const int pid, bool& result), (override));
 
-    // ── WPEFramework COM wiring ───────────────────────────────────────────────
-    // Required so Thunder's QueryInterface resolves IResourceMonitor correctly.
-    BEGIN_INTERFACE_MAP(ResourceMonitorMock)
-    INTERFACE_ENTRY(Exchange::IResourceMonitor)
-    END_INTERFACE_MAP
+//     // ── WPEFramework COM wiring ───────────────────────────────────────────────
+//     // Required so Thunder's QueryInterface resolves IResourceMonitor correctly.
+//     BEGIN_INTERFACE_MAP(ResourceMonitorMock)
+//     INTERFACE_ENTRY(Exchange::IResourceMonitor)
+//     END_INTERFACE_MAP
 
-    // ── Registry API ─────────────────────────────────────────────────────────
+//     // ── Registry API ─────────────────────────────────────────────────────────
 
-    // Creates (or retrieves) the mock for the currently-running test.
-    static Exchange::IResourceMonitor* Get()
-    {
-        const std::string id = testId();
-        ASSERT(!id.empty());
+//     // Creates (or retrieves) the mock for the currently-running test.
+//     static Exchange::IResourceMonitor* Get()
+//     {
+//         const std::string id = testId();
+//         ASSERT(!id.empty());
 
-        auto& map = instances();
-        auto  it  = map.find(id);
-        if (it == map.end()) {
-            map.insert({id, Core::ProxyType<ResourceMonitorMock>::Create()});
-            it = map.find(id);
-        }
-        return &(*(it->second));
-    }
+//         auto& map = instances();
+//         auto  it  = map.find(id);
+//         if (it == map.end()) {
+//             map.insert({id, Core::ProxyType<ResourceMonitorMock>::Create()});
+//             it = map.find(id);
+//         }
+//         return &(*(it->second));
+//     }
 
-    // Returns the typed reference so EXPECT_CALL(ResourceMonitorMock::Mock(), ...) compiles.
-    static ResourceMonitorMock& Mock()
-    {
-        return *static_cast<ResourceMonitorMock*>(Get());
-    }
+//     // Returns the typed reference so EXPECT_CALL(ResourceMonitorMock::Mock(), ...) compiles.
+//     static ResourceMonitorMock& Mock()
+//     {
+//         return *static_cast<ResourceMonitorMock*>(Get());
+//     }
 
-    // Removes this test's entry; ProxyType destructor cleans up the object.
-    static void Delete()
-    {
-        const std::string id = testId();
-        if (!id.empty()) {
-            instances().erase(id);
-        }
-    }
+//     // Removes this test's entry; ProxyType destructor cleans up the object.
+//     static void Delete()
+//     {
+//         const std::string id = testId();
+//         if (!id.empty()) {
+//             instances().erase(id);
+//         }
+//     }
 
-private:
-    // Unique key per test: "SuiteName#TestName"
-    static std::string testId()
-    {
-        const auto* info = ::testing::UnitTest::GetInstance()->current_test_info();
-        if (!info) return {};
-        return std::string(info->test_suite_name()) + "#" + info->name();
-    }
+// private:
+//     // Unique key per test: "SuiteName#TestName"
+//     static std::string testId()
+//     {
+//         const auto* info = ::testing::UnitTest::GetInstance()->current_test_info();
+//         if (!info) return {};
+//         return std::string(info->test_suite_name()) + "#" + info->name();
+//     }
 
-    // Singleton map; each test's mock lives here until Delete() is called.
-    static std::map<std::string, Core::ProxyType<Exchange::IResourceMonitor>>& instances()
-    {
-        static std::map<std::string, Core::ProxyType<Exchange::IResourceMonitor>> map;
-        return map;
-    }
-};
+//     // Singleton map; each test's mock lives here until Delete() is called.
+//     static std::map<std::string, Core::ProxyType<Exchange::IResourceMonitor>>& instances()
+//     {
+//         static std::map<std::string, Core::ProxyType<Exchange::IResourceMonitor>> map;
+//         return map;
+//     }
+// };
