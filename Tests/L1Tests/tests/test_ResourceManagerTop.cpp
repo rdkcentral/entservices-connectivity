@@ -31,7 +31,7 @@
 #include "ResourceMonitorMock.h"
 
 #include <Wraps.h>
-#include <WrapsMocks.h>
+#include <WrapsMock.h>
 #include <cstdio>
 
 
