@@ -206,14 +206,11 @@ TEST_F(ResourceManagerTopTest, GetSystemResourceInfo_Success)
     fputs(fakeTopOutput.c_str(), fakePipe);
     rewind(fakePipe);
 
-        EXPECT_CALL(
-        wrapsImplMock,
-        popen(::testing::StrEq("top -n 1 -b | head -n 20"),
-              ::testing::StrEq("r")))
+    EXPECT_CALL(wrapsImplMock,
+        popen(::testing::StrEq("top -n 1 -b | head -n 20"), ::testing::StrEq("r")))
         .WillOnce(::testing::Return(fakePipe));
 
-    EXPECT_CALL(wrapsImplMock, pclose(::testing::_))
-        .WillOnce(::testing::Return(0));
+    // pclose is not wrapped (-Wl,-wrap,pclose absent); real pclose handles cleanup
 
     
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getSystemResourceInfo"), _T("{}"), response));
