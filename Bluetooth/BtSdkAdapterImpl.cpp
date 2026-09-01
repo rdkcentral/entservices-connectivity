@@ -36,7 +36,7 @@ std::string BtSdkAdapterImpl::init(PluginHost::IShell* /* service */,
 
     auto authCb = [this](bluetooth::AuthorisationType type,
                          std::shared_ptr<bluetooth::Device> device) -> bool {
-        return m_authBridge->onAuthRequest(type, device);
+        return m_authBridge->onAuthRequest(type, std::move(device));
     };
 
     // TODO(INV-2): Confirm at integration time whether Thunder supplies a D-Bus event
@@ -208,7 +208,7 @@ bool BtSdkAdapterImpl::getDeviceProperties(const std::string& handleStr,
     std::string mac;
     device->address(mac);
     props.handleStr = handleStr;
-    props.mac = mac;
+    props.mac = std::move(mac);
     device->name(props.name);
     props.deviceType = m_registry.getDeviceType(handleStr);
     bluetooth::DeviceProperties sdkProps;

@@ -27,7 +27,7 @@ namespace Plugin {
 namespace {
 
 void populateDeviceFields(std::shared_ptr<bluetooth::Device> device,
-                          const DeviceRegistry& registry,
+                          DeviceRegistry& registry,
                           std::string& outId, std::string& outName,
                           std::string& outType, uint32_t& outRaw, uint16_t& outBle) {
     std::string mac;
@@ -44,7 +44,7 @@ void populateDeviceFields(std::shared_ptr<bluetooth::Device> device,
             outType = DeviceTypeClassifier::classify(props.appearance.value_or(0),
                                                       props.classOfDevice.value_or(0),
                                                       props.uuids.value_or(std::vector<std::string>{}));
-            const_cast<DeviceRegistry&>(registry).setDeviceType(outId, outType);
+            registry.setDeviceType(outId, outType);
             outRaw = props.classOfDevice.value_or(0);
             outBle = props.appearance.value_or(0);
             return;
@@ -139,19 +139,19 @@ void EventBridge::onDeviceEvent(bluetooth::DeviceEvent event, std::shared_ptr<bl
 
     switch (event) {
         case bluetooth::DeviceEvent::Paired:
-            emitDeviceStatusChanged("PAIRING_CHANGE", device, true, false);
+            emitDeviceStatusChanged("PAIRING_CHANGE", std::move(device), true, false);
             break;
 
         case bluetooth::DeviceEvent::Unpaired:
-            emitDeviceStatusChanged("PAIRING_CHANGE", device, false, false);
+            emitDeviceStatusChanged("PAIRING_CHANGE", std::move(device), false, false);
             break;
 
         case bluetooth::DeviceEvent::Connected:
-            emitDeviceStatusChanged("CONNECTION_CHANGE", device, true, true);
+            emitDeviceStatusChanged("CONNECTION_CHANGE", std::move(device), true, true);
             break;
 
         case bluetooth::DeviceEvent::Disconnected:
-            emitDeviceStatusChanged("CONNECTION_CHANGE", device, true, false);
+            emitDeviceStatusChanged("CONNECTION_CHANGE", std::move(device), true, false);
             break;
 
         default:
@@ -167,7 +167,7 @@ void EventBridge::emitDeviceStatusChanged(const std::string& newStatus,
     std::string deviceId, name, deviceType;
     uint32_t rawType = 0;
     uint16_t bleType = 0;
-    populateDeviceFields(device, m_registry, deviceId, name, deviceType, rawType, bleType);
+    populateDeviceFields(std::move(device), m_registry, deviceId, name, deviceType, rawType, bleType);
 
     bool hasAutoConnect = false;
     bool autoConnect    = false;

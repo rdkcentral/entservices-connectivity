@@ -69,7 +69,7 @@ if (RDK_SERVICES_L1_TEST OR RDK_SERVICE_L2_TEST)
     # symbols always need a definition in test builds too, regardless of which
     # backend a given test harness exercises via BtAdapter::setImpl().
     list(APPEND BLUETOOTH_PLUGIN_SOURCES
-        ${CMAKE_SOURCE_DIR}/../entservices-connectivity/Tests/mocks/bluetoothSDK.cpp
+        ${CMAKE_SOURCE_DIR}/Tests/mocks/bluetoothSDK.cpp
     )
 else()
     # Production builds now always link BTMGR and the real bluetooth-sdk

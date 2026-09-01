@@ -66,7 +66,7 @@ bool AuthBridge::onAuthRequest(bluetooth::AuthorisationType type, std::shared_pt
         }
         std::string deviceAddress;
         device->address(deviceAddress);
-        const std::string devId = handleStr.empty() ? DeviceRegistry::deriveHandle(mac) : handleStr;
+        const std::string devId = handleStr.empty() ? DeviceRegistry::deriveHandle(mac) : std::move(handleStr);
 
         auto pending = std::make_shared<PendingAuth>();
         {
@@ -104,7 +104,7 @@ bool AuthBridge::onAuthRequest(bluetooth::AuthorisationType type, std::shared_pt
     device->name(name);
     std::string deviceAddress;
     device->address(deviceAddress);
-    const std::string devId = handleStr.empty() ? DeviceRegistry::deriveHandle(mac) : handleStr;
+    const std::string devId = handleStr.empty() ? DeviceRegistry::deriveHandle(mac) : move(handleStr);
 
     auto pending = std::make_shared<PendingAuth>();
     {
