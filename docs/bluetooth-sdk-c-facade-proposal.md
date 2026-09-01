@@ -1,5 +1,10 @@
 # Proposal: Stable C ABI facade for librdk_bluetooth.so
 
+> **Superseded (2026-09-01):** the SDK team agreed instead to refactor their
+> real C++ headers to drop the sdbus-c++/D-Bus dependency, so the plugin now
+> links `librdk_bluetooth.so` directly via `BtSdkAdapterImpl` (see
+> `Bluetooth/bluetooth-sdk-mock/`) rather than this C facade. Kept for history.
+
 ## Problem
 
 `entservices-connectivity`'s Bluetooth plugin is one common middleware IPK shipped

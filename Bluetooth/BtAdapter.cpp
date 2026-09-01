@@ -19,34 +19,25 @@
 
 #include "BtAdapter.h"
 #include "DeviceRegistry.h"
-#include "BtSdkCApiAdapterImpl.h"
+#include "BtSdkAdapterImpl.h"
 #include "BtMgrAdapterImpl.h"
 
 #include <cassert>
-#include <dlfcn.h>
-#include <filesystem>
-#include <system_error>
+#include <cstdlib>
+#include <cstring>
 
 namespace {
-constexpr const char* kBluetoothSdkLibraryPaths[] = {
-    "/usr/lib/bluetoothsdk/librdk_bluetooth.so",
-    "/usr/lib64/bluetoothsdk/librdk_bluetooth.so"
-};
 
-const char* bluetoothSdkLibraryPath() {
-    std::error_code ec;
-    for (const char* path : kBluetoothSdkLibraryPaths) {
-        if (std::filesystem::exists(path, ec) && !ec) {
-            return path;
-        }
-        ec.clear();
-    }
-    return nullptr;
+// TODO: Wire up the real runtime config source for this flag once decided
+// (Bluetooth.config / RFC / device property are all candidates). For now,
+// BLUETOOTH_USE_SDK=1 in the environment is a placeholder so the selection
+// path is exercisable before that decision is made. Defaults to BTMgr so
+// existing platform behavior is unchanged until a platform opts in.
+bool useSdkBackend() {
+    const char* flag = std::getenv("BLUETOOTH_USE_SDK");
+    return flag != nullptr && std::strcmp(flag, "1") == 0;
 }
 
-// Retained for the process lifetime; never dlclose()'d since SDK callbacks may
-// still reach into code resolved against it.
-void* g_sdkLibHandle = nullptr;
 } // namespace
 
 namespace WPEFramework {
@@ -54,10 +45,10 @@ namespace Plugin {
 
 IBtAdapter* BtAdapter::impl = nullptr;
 
-// BtSdkCApiAdapterImpl only depends on the pure-C BtSdkCApi.h facade, so it
-// compiles unconditionally here with no bluetooth-sdk/sdbus-c++ dependency.
-static BtMgrAdapterImpl     g_btMgrAdapterImpl;
-static BtSdkCApiAdapterImpl g_btSdkAdapterImpl;
+// Both backends are always linked/compiled in now; only one is ever selected
+// (see ensureImpl()).
+static BtMgrAdapterImpl g_btMgrAdapterImpl;
+static BtSdkAdapterImpl g_btSdkAdapterImpl;
 
 void BtAdapter::setImpl(IBtAdapter* newImpl) {
     // Matches the pattern used by Btmgr::setImpl in entservices-testframework.
@@ -70,34 +61,8 @@ std::string BtAdapter::ensureImpl() {
         return {};
     }
 
-    const char* sdkPath = bluetoothSdkLibraryPath();
-    if (!sdkPath) {
-        impl = &g_btMgrAdapterImpl;
-        return {};
-    }
-
-    // Real SDK marker found: this product must use the SDK. Do not fall back
-    // to BTMgr on failure, or a still-running btmgr.service is assumed.
-    g_sdkLibHandle = dlopen(sdkPath, RTLD_NOW | RTLD_LOCAL);
-    if (!g_sdkLibHandle) {
-        return std::string("Failed to load Bluetooth SDK library: ") + dlerror();
-    }
-
-    dlerror(); // clear any existing error before dlsym per POSIX convention
-    using GetTableFn = const BtSdkCApiTable* (*)();
-    auto getTable = reinterpret_cast<GetTableFn>(dlsym(g_sdkLibHandle, "BtSdkCApi_GetTable"));
-    const char* symErr = dlerror();
-    if (!getTable || symErr) {
-        return "Bluetooth SDK library does not export BtSdkCApi_GetTable";
-    }
-
-    const BtSdkCApiTable* api = getTable();
-    if (!api || api->abiVersion != BTSDK_CAPI_ABI_VERSION) {
-        return "Bluetooth SDK C API table missing or ABI version mismatch";
-    }
-
-    g_btSdkAdapterImpl.setApiTable(api);
-    impl = &g_btSdkAdapterImpl;
+    impl = useSdkBackend() ? static_cast<IBtAdapter*>(&g_btSdkAdapterImpl)
+                           : static_cast<IBtAdapter*>(&g_btMgrAdapterImpl);
     return {};
 }
 
@@ -122,8 +87,7 @@ void BtAdapter::deinit() {
         return;
     }
     impl->deinit();
-    // All instances are static; no dynamic cleanup needed. The SDK library
-    // handle stays loaded for process lifetime (see comment in ensureImpl()).
+    // All instances are static; no dynamic cleanup needed.
     impl = nullptr;
 }
 
