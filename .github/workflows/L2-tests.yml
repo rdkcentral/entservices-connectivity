@@ -162,7 +162,7 @@ jobs:
         with:
           repository: rdkcentral/entservices-apis
           path: entservices-apis
-          ref: ${{env.INTERFACES_REF}}
+          ref: 408df5ca6ecb60f9d7029fdfcd64a722c346bde6
 
       - name: Remove DTV.json from entservices-apis
         run: rm -rf $GITHUB_WORKSPACE/entservices-apis/jsonrpc/DTV.json
