@@ -113,7 +113,7 @@ jobs:
         with:
           repository: rdkcentral/entservices-testframework
           path: entservices-testframework
-          ref: 2.0.0
+          ref: 03f66269040190b623d65109873b127996fc04c6
           token: ${{ secrets.RDKCM_RDKE }}
 
       - name: Checkout googletest
@@ -366,6 +366,33 @@ jobs:
           &&
           cmake --install build/entservices-usersettings
 
+      # TODO: replace owner/repo, path and ref with the real ResourceMonitor
+      # plugin repository. It provides org.rdk.ResourceMonitor, required by
+      # ResourceManagerTop::killProcessViaResourceMonitor.
+      - name: Checkout ResourceMonitor
+        uses: actions/checkout@v3
+        with:
+          repository: rdkcentral/entservices-xcast
+          path: entservices-resourcemonitor
+          ref: 96fbe72cfc4f4b49e1ac7aaf1486cfc7263faa66
+
+      - name: Build ResourceMonitor
+        run: >
+          cmake
+          -S "$GITHUB_WORKSPACE/entservices-resourcemonitor"
+          -B build/entservices-resourcemonitor
+          -DCMAKE_TOOLCHAIN_FILE="${{ env.TOOLCHAIN_FILE }}"
+          -DCMAKE_INSTALL_PREFIX="$GITHUB_WORKSPACE/install/usr"
+          -DCMAKE_MODULE_PATH="$GITHUB_WORKSPACE/install/tools/cmake"
+          -DHIDE_NON_EXTERNAL_SYMBOLS=OFF
+          -DPLUGIN_RESOURCEMONITOR=ON
+          -DUSE_THUNDER_R4=ON
+          -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+          &&
+          cmake --build build/entservices-resourcemonitor -j8
+          &&
+          cmake --install build/entservices-resourcemonitor
+
       - name: Build entservices-connectivity
         run: >
           cmake
@@ -420,6 +447,7 @@ jobs:
           -DCMAKE_DISABLE_FIND_PACKAGE_RBus=ON
           -DCMAKE_DISABLE_FIND_PACKAGE_BTMGR=ON
           -DCMAKE_DISABLE_FIND_PACKAGE_CEC=ON
+          -DPLUGIN_TOP=ON
           -DUSE_THUNDER_R4=ON
           -DPLUGIN_L2Tests=ON
           -DRDK_SERVICE_L2_TEST=ON
@@ -481,7 +509,7 @@ jobs:
           -DCMAKE_DISABLE_FIND_PACKAGE_Udev=ON
           -DCMAKE_DISABLE_FIND_PACKAGE_RFC=ON
           -DCMAKE_DISABLE_FIND_PACKAGE_RBus=ON
-          -DPLUGIN_BLUETOOTH=ON
+          -DPLUGIN_TOP=ON
           -DUSE_THUNDER_R4=ON
           -DPLUGIN_L2Tests=ON
           -DRDK_SERVICE_L2_TEST=ON

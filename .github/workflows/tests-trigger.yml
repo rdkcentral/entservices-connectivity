@@ -9,13 +9,13 @@ on:
     branches: [ main, develop, 'sprint/**', 'release/**', 'topic/top-plugin' ]
 
 jobs:
+  trigger-L2:
+    uses: ./.github/workflows/L2-tests.yml
+    secrets: inherit
+    with:
+      caller_source: local
+      
   trigger-L1:
     uses: ./.github/workflows/L1-tests.yml
     with:
       caller_source: local
-
-  # trigger-L2:
-  #   uses: ./.github/workflows/L2-tests.yml
-  #   secrets: inherit
-  #   with:
-  #     caller_source: local
