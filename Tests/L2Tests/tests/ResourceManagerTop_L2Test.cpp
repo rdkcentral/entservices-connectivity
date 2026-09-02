@@ -41,6 +41,7 @@
 #include "L2Tests.h"
 #include "L2TestsMock.h"
 #include <cstdio>
+#include <functional>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -59,6 +60,19 @@ using namespace WPEFramework;
 namespace {
 bool g_resourceMonitorActive = false;
 bool g_resourceManagerTopActive = false;
+
+/* L2TestMocks::TestBody() is pure virtual (testing::Test), so a bare
+ * L2TestMocks-derived object can't be instantiated outside a TEST_F macro.
+ * This throwaway harness (mirrors Bluetooth_L2Test's BluetoothSuiteHarness)
+ * only exists to expose Activate/Deactivate for suite setup/teardown. */
+class ResourceManagerTopSuiteHarness : public L2TestMocks {
+public:
+    ResourceManagerTopSuiteHarness() : L2TestMocks() {}
+    void TestBody() override {}
+
+    uint32_t Activate(const char* callsign) { return ActivateService(callsign); }
+    uint32_t Deactivate(const char* callsign) { return DeactivateService(callsign); }
+};
 } // namespace
 
 class ResourceManagerTop_L2Test : public L2TestMocks {
@@ -69,27 +83,27 @@ protected:
 
 void ResourceManagerTop_L2Test::SetUpTestSuite()
 {
-    ResourceManagerTop_L2Test harness;
+    ResourceManagerTopSuiteHarness harness;
 
-    uint32_t status = harness.ActivateService(RESOURCEMONITOR_CALLSIGN);
+    uint32_t status = harness.Activate(RESOURCEMONITOR_CALLSIGN);
     g_resourceMonitorActive = (status == Core::ERROR_NONE);
     ASSERT_EQ(Core::ERROR_NONE, status);
 
-    status = harness.ActivateService(RMTOP_ACTIVATE_CALLSIGN);
+    status = harness.Activate(RMTOP_ACTIVATE_CALLSIGN);
     g_resourceManagerTopActive = (status == Core::ERROR_NONE);
     ASSERT_EQ(Core::ERROR_NONE, status);
 }
 
 void ResourceManagerTop_L2Test::TearDownTestSuite()
 {
-    ResourceManagerTop_L2Test harness;
+    ResourceManagerTopSuiteHarness harness;
 
     if (g_resourceManagerTopActive) {
-        EXPECT_EQ(Core::ERROR_NONE, harness.DeactivateService(RMTOP_ACTIVATE_CALLSIGN));
+        EXPECT_EQ(Core::ERROR_NONE, harness.Deactivate(RMTOP_ACTIVATE_CALLSIGN));
         g_resourceManagerTopActive = false;
     }
     if (g_resourceMonitorActive) {
-        EXPECT_EQ(Core::ERROR_NONE, harness.DeactivateService(RESOURCEMONITOR_CALLSIGN));
+        EXPECT_EQ(Core::ERROR_NONE, harness.Deactivate(RESOURCEMONITOR_CALLSIGN));
         g_resourceMonitorActive = false;
     }
 }
@@ -228,13 +242,14 @@ TEST_F(ResourceManagerTop_L2Test, KillViaResourceMonitorNonExistentPid)
  * ====================================================================== */
 TEST_F(ResourceManagerTop_L2Test, KillViaResourceMonitorUnavailable)
 {
-    struct ScopedReactivate {
-        ResourceManagerTop_L2Test* self;
-        ~ScopedReactivate()
-        {
-            EXPECT_EQ(Core::ERROR_NONE, self->ActivateService(RESOURCEMONITOR_CALLSIGN));
-        }
-    } reactivate{ this };
+    /* The lambda runs with the enclosing TestBody()'s access, so it may call
+     * the fixture's protected ActivateService(); a nested struct could not. */
+    struct ScopeExit {
+        std::function<void()> fn;
+        ~ScopeExit() { fn(); }
+    } reactivate{ [this]() {
+        EXPECT_EQ(Core::ERROR_NONE, ActivateService(RESOURCEMONITOR_CALLSIGN));
+    } };
 
     ASSERT_EQ(Core::ERROR_NONE, DeactivateService(RESOURCEMONITOR_CALLSIGN));
 
