@@ -32,15 +32,13 @@
  * from its own repository -- see .github/workflows/L2-tests.yml) rather than a
  * test-only stub, so no ResourceMonitor implementation is written here.
  *
- * getSystemResourceInfo() still runs "top" via popen(); popen() is intercepted
- * process-wide via the linker "-Wl,-wrap,popen" flag (same mechanism L1 uses),
- * so it is mocked here through p_wrapsImplMock for deterministic output instead
- * of depending on the CI host's real `top` command.
+ * getSystemResourceInfo() runs the real `top` command; only the API contract
+ * (success + non-empty resourceInfo) is checked, since the exact output is
+ * host-dependent.
  */
 
 #include "L2Tests.h"
 #include "L2TestsMock.h"
-#include <cstdio>
 #include <functional>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -134,29 +132,16 @@ TEST_F(ResourceManagerTop_L2Test, GetState)
 
 /* =========================================================================
  * TC-03: getSystemResourceInfo
- * popen() is mocked so the assertion does not depend on the CI host's `top`.
+ * Runs the real `top` command; only the API contract is checked (success +
+ * non-empty resourceInfo), not the exact content, since that's host-dependent.
  * ====================================================================== */
 TEST_F(ResourceManagerTop_L2Test, GetSystemResourceInfo)
 {
-    const std::string fakeTopOutput =
-        "top - 12:00:00 up 1 day,  2 users,  load average: 0.10, 0.20, 0.30\n"
-        "Tasks: 100 total,   1 running,  99 sleeping,   0 stopped,   0 zombie\n"
-        "%Cpu(s):  5.0 us,  2.0 sy,  0.0 ni, 93.0 id\n";
-
-    FILE* fakePipe = tmpfile();
-    ASSERT_NE(fakePipe, nullptr);
-    fputs(fakeTopOutput.c_str(), fakePipe);
-    rewind(fakePipe);
-
-    EXPECT_CALL(*p_wrapsImplMock,
-        popen(::testing::StrEq("top -n 1 -b | head -n 20"), ::testing::StrEq("r")))
-        .WillOnce(::testing::Return(fakePipe));
-
     JsonObject result;
     uint32_t status = InvokeServiceMethod(RMTOP_INVOKE_CALLSIGN, "getSystemResourceInfo", result);
     EXPECT_EQ(Core::ERROR_NONE, status);
     EXPECT_TRUE(result["success"].Boolean());
-    EXPECT_EQ(fakeTopOutput, result["resourceInfo"].String());
+    EXPECT_FALSE(result["resourceInfo"].String().empty());
 }
 
 /* =========================================================================

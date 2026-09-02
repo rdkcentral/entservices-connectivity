@@ -113,7 +113,7 @@ jobs:
         with:
           repository: rdkcentral/entservices-testframework
           path: entservices-testframework
-          ref: 8da15e57d3843373d700669502bbb19d96829c94
+          ref: 03f66269040190b623d65109873b127996fc04c6
           token: ${{ secrets.RDKCM_RDKE }}
 
       - name: Checkout googletest
