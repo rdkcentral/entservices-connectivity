@@ -385,6 +385,8 @@ jobs:
           -DCMAKE_INSTALL_PREFIX="$GITHUB_WORKSPACE/install/usr"
           -DCMAKE_MODULE_PATH="$GITHUB_WORKSPACE/install/tools/cmake"
           -DHIDE_NON_EXTERNAL_SYMBOLS=OFF
+          -DCMAKE_CXX_FLAGS="
+          -I $GITHUB_WORKSPACE/install/usr/include"
           -DPLUGIN_RESOURCEMONITOR=ON
           -DUSE_THUNDER_R4=ON
           -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
