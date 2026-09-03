@@ -17,6 +17,8 @@
 
 project(Bluetooth)
 
+message(WARNING "*** _DEBUG: Bluetooth cmake: entry")
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -80,6 +82,8 @@ else()
     # SDK backend isn't expected to resolve/work end-to-end yet.
     find_package(BTMGR REQUIRED)
     find_package(BLUETOOTH_SDK REQUIRED)
+
+    message(WARNING "*** _DEBUG: Bluetooth cmake: Mark 1")
 
     message(STATUS "Bluetooth plugin: production build - compiling BTMGR adapter and SDK adapter, linking both backends")
 endif()
