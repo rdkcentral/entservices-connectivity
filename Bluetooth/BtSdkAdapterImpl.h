@@ -21,8 +21,8 @@
 
 // Real bluetooth-sdk implementation of IBtAdapter, selected at runtime by
 // BtAdapter::ensureImpl() alongside BtMgrAdapterImpl. Compiles against
-// bluetooth-sdk-mock/ (production) or Tests/mocks/ (test builds) until the
-// SDK team ships their sdbus-c++-free header refactor.
+// the external Bluetooth SDK package (production) or Tests/mocks/ (test
+// builds).
 
 #include <memory>
 #include <string>

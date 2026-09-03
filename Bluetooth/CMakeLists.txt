@@ -50,13 +50,10 @@ set(BLUETOOTH_PLUGIN_SOURCES
 # before any find_package() call below.
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/")
 
-# BtSdkAdapterImpl uses the real bluetooth::Adapter/Device/Manager C++ types.
-# The SDK team has agreed to refactor those public headers to drop the
-# sdbus-c++/D-Bus dependency, but hasn't shipped that yet, so
-# bluetooth-sdk-mock/ stands in for them in every configuration (test and
-# production alike) — see bluetooth-sdk-mock/Status.h. Once the real headers
-# ship, delete bluetooth-sdk-mock/ and point this at BLUETOOTH_SDK_INCLUDE_DIRS
-# instead.
+# Every build requires the Bluetooth SDK. Product recipes select whether this
+# resolves to the real SDK or the externally built stub SDK.
+find_package(BLUETOOTH_SDK REQUIRED)
+
 set(BLUETOOTH_TEST_BACKEND "BTMGR" CACHE STRING "Bluetooth adapter backend for L1/L2 test builds (BTMGR or SDK)")
 set_property(CACHE BLUETOOTH_TEST_BACKEND PROPERTY STRINGS BTMGR SDK)
 
@@ -74,14 +71,9 @@ if (RDK_SERVICES_L1_TEST OR RDK_SERVICE_L2_TEST)
         ${CMAKE_SOURCE_DIR}/Tests/mocks/bluetoothSDK.cpp
     )
 else()
-    # Production builds now always link BTMGR and the real bluetooth-sdk
-    # library, regardless of whether a given platform will use the SDK backend
-    # at runtime (see BtAdapter::ensureImpl()/useSdkBackend()). Until the SDK
-    # team ships their sdbus-c++-free header refactor, the library's currently
-    # installed API doesn't match bluetooth-sdk-mock/, so this links but the
-    # SDK backend isn't expected to resolve/work end-to-end yet.
+    # Production builds always link BTMGR and the selected Bluetooth SDK
+    # library, regardless of the backend selected at runtime.
     find_package(BTMGR REQUIRED)
-    find_package(BLUETOOTH_SDK REQUIRED)
 
     message(WARNING "*** _DEBUG: Bluetooth cmake: Mark 1")
 
@@ -127,15 +119,11 @@ if (RDK_SERVICES_L1_TEST OR RDK_SERVICE_L2_TEST)
     target_include_directories(${MODULE_NAME} BEFORE PRIVATE
         ${CMAKE_SOURCE_DIR}/../entservices-connectivity/Tests/mocks)
 else()
-    # Production build: both backends are linked unconditionally now (see
-    # BtAdapter::ensureImpl()). bluetooth-sdk-mock/ shadows the real
-    # (currently sdbus-c++-based) bluetooth-sdk headers until the SDK team's
-    # refactored ones ship; BLUETOOTH_SDK_LIBRARIES is still the real
-    # librdk_bluetooth.so, so this links even though the ABI won't line up
-    # end-to-end until then.
+    # Production builds use the headers and library selected by the SDK
+    # package. The full-stack recipe supplies either the real SDK or its stub.
     target_compile_definitions(${MODULE_NAME} PRIVATE BLUETOOTH_HAS_BTMGR=1 BLUETOOTH_HAS_SDK=1)
     target_include_directories(${MODULE_NAME} BEFORE PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/bluetooth-sdk-mock)
+        ${BLUETOOTH_SDK_INCLUDE_DIRS})
     target_include_directories(${MODULE_NAME} PRIVATE ${BTMGR_INCLUDE_DIRS})
     target_link_libraries(${MODULE_NAME} PRIVATE ${BTMGR_LIBRARIES} ${BLUETOOTH_SDK_LIBRARIES})
 endif()
