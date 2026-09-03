@@ -151,11 +151,9 @@ TEST_F(ResourceManagerTop_L2Test, KillProcessMissingParameter)
 {
     JsonObject params, result;
     uint32_t status = InvokeServiceMethod(RMTOP_INVOKE_CALLSIGN, "killProcess", params, result);
-    // EXPECT_EQ(Core::ERROR_BAD_REQUEST, status);
-    // EXPECT_FALSE(result["success"].Boolean());
-    JsonObject error = result["error"].Object();
-    EXPECT_EQ(-32603, error["code"].Number());
-    EXPECT_EQ( string("Could not access requested service"), error["message"].String() );
+    // On failure the JSON-RPC "error" object isn't copied into results; the
+    // -32603 code comes back as the (unsigned-wrapped) status instead.
+    EXPECT_EQ(static_cast<uint32_t>(-32603), status);
 }
 
 /* =========================================================================
@@ -203,11 +201,9 @@ TEST_F(ResourceManagerTop_L2Test, KillViaResourceMonitorMissingPid)
 {
     JsonObject params, result;
     uint32_t status = InvokeServiceMethod(RMTOP_INVOKE_CALLSIGN, "killProcessViaResourceMonitor", params, result);
-    // EXPECT_EQ(Core::ERROR_BAD_REQUEST, status);
-    // EXPECT_FALSE(result["success"].Boolean());
-    JsonObject error = result["error"].Object();
-    EXPECT_EQ(-32603, error["code"].Number());
-    EXPECT_EQ( string("Could not access requested service"), error["message"].String() );
+    // On failure the JSON-RPC "error" object isn't copied into results; the
+    // -32603 code comes back as the (unsigned-wrapped) status instead.
+    EXPECT_EQ(static_cast<uint32_t>(-32603), status);
 }
 
 /* =========================================================================
