@@ -153,8 +153,9 @@ TEST_F(ResourceManagerTop_L2Test, KillProcessMissingParameter)
     uint32_t status = InvokeServiceMethod(RMTOP_INVOKE_CALLSIGN, "killProcess", params, result);
     // EXPECT_EQ(Core::ERROR_BAD_REQUEST, status);
     // EXPECT_FALSE(result["success"].Boolean());
-    EXPECT_EQ(-32603, result["error"]["code"].Number()); 
-    EXPECT_EQ( string("Could not access requested service"), result["error"]["message"].String() );
+    JsonObject error = result["error"].Object();
+    EXPECT_EQ(-32603, error["code"].Number());
+    EXPECT_EQ( string("Could not access requested service"), error["message"].String() );
 }
 
 /* =========================================================================
@@ -204,8 +205,9 @@ TEST_F(ResourceManagerTop_L2Test, KillViaResourceMonitorMissingPid)
     uint32_t status = InvokeServiceMethod(RMTOP_INVOKE_CALLSIGN, "killProcessViaResourceMonitor", params, result);
     // EXPECT_EQ(Core::ERROR_BAD_REQUEST, status);
     // EXPECT_FALSE(result["success"].Boolean());
-    EXPECT_EQ(-32603, result["error"]["code"].Number()); 
-    EXPECT_EQ( string("Could not access requested service"), result["error"]["message"].String() );
+    JsonObject error = result["error"].Object();
+    EXPECT_EQ(-32603, error["code"].Number());
+    EXPECT_EQ( string("Could not access requested service"), error["message"].String() );
 }
 
 /* =========================================================================
