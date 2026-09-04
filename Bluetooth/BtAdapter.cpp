@@ -28,14 +28,23 @@
 
 namespace {
 
-// TODO: Wire up the real runtime config source for this flag once decided
-// (Bluetooth.config / RFC / device property are all candidates). For now,
-// BLUETOOTH_USE_SDK=1 in the environment is a placeholder so the selection
-// path is exercisable before that decision is made. Defaults to BTMgr so
-// existing platform behavior is unchanged until a platform opts in.
 bool useSdkBackend() {
-    const char* flag = std::getenv("BLUETOOTH_USE_SDK");
-    return flag != nullptr && std::strcmp(flag, "1") == 0;
+    static const char* propFile = "/etc/device-vendor.properties";
+    std::ifstream f(propFile);
+    if (f.is_open())
+    {
+        std::string line;
+        while (std::getline(f, line))
+        {
+            auto eq = line.find('=');
+            if (eq == std::string::npos) continue;
+            std::string key = line.substr(0, eq);
+            std::string val = line.substr(eq + 1);
+            if (key == "BLUETOOTH_SDK_ENABLED")
+                return std::tolower(val) == "true";
+        }
+    }
+    return false;
 }
 
 } // namespace
