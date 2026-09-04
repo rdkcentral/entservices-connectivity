@@ -24,7 +24,9 @@
 #include <unordered_set>
 
 #include "BluetoothDeviceManager.h"
-#include "btmgr.h"
+#include "BtAdapter.h"
+#include "IBtAdapter.h"
+#include "DeviceRegistry.h"
 
 #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
 #include "BluetoothPersistenceAdapter.h"
@@ -59,20 +61,18 @@ namespace WPEFramework {
                 return result;
             }
 
-            // Build a mapping from device address to device handle using BTRMGR.
-            BTRMGR_PairedDevicesList_t pairedDevices{};
-            if (BTRMGR_GetPairedDevices(0, &pairedDevices) != BTRMGR_RESULT_SUCCESS) {
-                LOGERR("Failed to get paired devices from BTRMGR during filesystem persistence import");
+            // Build a mapping from device address to device handle using the SDK.
+            if (!_btAdapter) {
+                LOGERR("BtAdapter not set during filesystem persistence import");
                 return Core::ERROR_GENERAL;
             }
+            auto sdkPairedDevices = _btAdapter->getPairedDevices();
 
             std::unordered_map<std::string, std::string> addrToDeviceId;
-            addrToDeviceId.reserve(static_cast<size_t>(pairedDevices.m_numOfDevices));
-            for (int i = 0; i < pairedDevices.m_numOfDevices; ++i) {
-                if (pairedDevices.m_deviceProperty[i].m_deviceAddress[0] != '\0') {
-                    const std::string deviceAddr(pairedDevices.m_deviceProperty[i].m_deviceAddress);
-                    const std::string deviceId = std::to_string(pairedDevices.m_deviceProperty[i].m_deviceHandle);
-                    addrToDeviceId[deviceAddr] = std::move(deviceId);
+            addrToDeviceId.reserve(sdkPairedDevices.size());
+            for (const auto& info : sdkPairedDevices) {
+                if (!info.mac.empty()) {
+                    addrToDeviceId[info.mac] = info.handleStr;
                 }
             }
 
@@ -358,52 +358,46 @@ namespace WPEFramework {
 
         Core::hresult BluetoothDeviceManager::updateCacheFromDevice(bool backfillOnly)
         {
-            BTRMGR_PairedDevicesList_t pairedDevices{};
-
-            BTRMGR_Result_t result = BTRMGR_GetPairedDevices(0, &pairedDevices);
-            if (BTRMGR_RESULT_SUCCESS != result)
-            {
-                LOGERR("Failed to get the paired devices");
+            if (!_btAdapter) {
+                LOGERR("BtAdapter not set in updateCacheFromDevice");
                 return Core::ERROR_GENERAL;
             }
 
+            auto sdkPairedDevices = _btAdapter->getPairedDevices();
+
             _adminLock.Lock();
 
-            for (int i=0; i<pairedDevices.m_numOfDevices; i++)
-            {
-                string deviceId = std::to_string(pairedDevices.m_deviceProperty[i].m_deviceHandle);
-                const char* deviceTypeStr = BTRMGR_GetDeviceTypeAsString(pairedDevices.m_deviceProperty[i].m_deviceType);
-                string deviceType = string(deviceTypeStr ? deviceTypeStr : "UNKNOWN");
-                const bool isGamePad = (pairedDevices.m_deviceProperty[i].m_deviceType == BTRMGR_DEVICE_TYPE_HID_GAMEPAD);
-                const std::string deviceAddr = (pairedDevices.m_deviceProperty[i].m_deviceAddress[0] != '\0')
-                    ? std::string(pairedDevices.m_deviceProperty[i].m_deviceAddress)
-                    : std::string();
+            for (const auto& info : sdkPairedDevices) {
+                string deviceId   = info.handleStr;
+                string deviceType = info.deviceType;
+                string deviceAddr = info.mac;
+                string name       = info.name;
+                const bool isGamePad = info.isGamePad;
+                if (name.empty()) name = deviceId;
 
                 if (_pairedDeviceCache.find(deviceId) != _pairedDeviceCache.end()) {
-                    // Device already exists in cache; backfill any fields that are missing.
                     BluetoothDeviceInfo& existing = _pairedDeviceCache[deviceId];
                     if (existing.friendlyName.empty()) {
-                        existing.friendlyName = (pairedDevices.m_deviceProperty[i].m_name[0] != '\0') ? std::string(pairedDevices.m_deviceProperty[i].m_name) : deviceId;
+                        existing.friendlyName = name;
                         LOGINFO("Backfilled friendlyName for deviceID=%s\n", deviceId.c_str());
                     }
                     if (existing.deviceAddr.empty()) {
                         existing.deviceAddr = deviceAddr;
-                        LOGINFO("Backfilled deviceAddr for deviceID=%s from BTRMGR: %s\n", deviceId.c_str(), deviceAddr.c_str());
+                        LOGINFO("Backfilled deviceAddr for deviceID=%s: %s\n", deviceId.c_str(), deviceAddr.c_str());
                     }
                     if (existing.deviceType.empty() || existing.deviceType == "UNKNOWN") {
                         existing.deviceType = deviceType;
-                        LOGINFO("Backfilled deviceType for deviceID=%s from BTRMGR: %s\n", deviceId.c_str(), deviceType.c_str());
+                        LOGINFO("Backfilled deviceType for deviceID=%s: %s\n", deviceId.c_str(), deviceType.c_str());
                     }
                     // BTRMGR is authoritative for the gamepad classification.
                     existing.isGamePad = isGamePad;
                 } else if (!backfillOnly) {
-                    // Device found that's not yet cached; add only when not in backfill-only mode.
                     LOGINFO("Adding device to cache: deviceID=%s, deviceType=%s\n", deviceId.c_str(), deviceType.c_str());
                     BluetoothDeviceInfo deviceInfo;
-                    deviceInfo.deviceAddr = std::move(deviceAddr);
-                    deviceInfo.deviceType = std::move(deviceType);
+                    deviceInfo.deviceAddr   = deviceAddr;
+                    deviceInfo.deviceType   = std::move(deviceType);
+                    deviceInfo.friendlyName = std::move(name);
                     deviceInfo.isGamePad = isGamePad;
-                    deviceInfo.friendlyName = (pairedDevices.m_deviceProperty[i].m_name[0] != '\0') ? std::string(pairedDevices.m_deviceProperty[i].m_name) : deviceId;
                     _pairedDeviceCache[deviceId] = std::move(deviceInfo);
                 } else {
                     LOGINFO("Skipping device not in imported cache (backfill-only mode): deviceID=%s\n", deviceId.c_str());
@@ -411,23 +405,19 @@ namespace WPEFramework {
             }
 
             if (!backfillOnly) {
-                // Scrub cache of any devices that are no longer paired with the platform.
-
                 std::unordered_set<std::string> pairedDeviceIds;
-                pairedDeviceIds.reserve(static_cast<size_t>(pairedDevices.m_numOfDevices));
-                for (int i = 0; i < pairedDevices.m_numOfDevices; ++i) {
-                    pairedDeviceIds.emplace(std::to_string(pairedDevices.m_deviceProperty[i].m_deviceHandle));
+                pairedDeviceIds.reserve(sdkPairedDevices.size());
+                for (const auto& info : sdkPairedDevices) {
+                    if (!info.handleStr.empty()) pairedDeviceIds.emplace(info.handleStr);
                 }
 
                 std::vector<std::string> deviceIdsToRemove;
                 for (const auto& entry : _pairedDeviceCache) {
-                    const std::string& cachedDeviceId = entry.first;
-                    if (pairedDeviceIds.find(cachedDeviceId) == pairedDeviceIds.end()) {
-                        LOGINFO("Marking device for removal from cache: deviceID=%s\n", cachedDeviceId.c_str());
-                        deviceIdsToRemove.push_back(cachedDeviceId);
+                    if (pairedDeviceIds.find(entry.first) == pairedDeviceIds.end()) {
+                        LOGINFO("Marking device for removal from cache: deviceID=%s\n", entry.first.c_str());
+                        deviceIdsToRemove.push_back(entry.first);
                     }
                 }
-
                 for (const auto& deviceId : deviceIdsToRemove) {
                     _pairedDeviceCache.erase(deviceId);
                 }
@@ -755,34 +745,26 @@ namespace WPEFramework {
 
         Core::hresult BluetoothDeviceManager::addDevice(const std::string& deviceID)
         {
-            BTRMgrDeviceHandle deviceHandle;
-
             LOGINFO("deviceID=%s\n", deviceID.c_str());
-            
-            try {
-                deviceHandle = (BTRMgrDeviceHandle) stoll(deviceID);
-            } catch (const std::exception& e) {
-                LOGERR("Failed to parse deviceId: %s\n", e.what());
-                return Core::ERROR_INVALID_PARAMETER;
+
+            if (!_btAdapter) {
+                LOGERR("BtAdapter not set in addDevice");
+                return Core::ERROR_GENERAL;
             }
 
-            BTRMGR_DevicesProperty_t deviceProperty{};
-
-            BTRMGR_Result_t result = BTRMGR_GetDeviceProperties(0, deviceHandle, &deviceProperty);
-            if (BTRMGR_RESULT_SUCCESS != result)
-            {
-                LOGERR("Failed to get device properties for deviceID: %s", deviceID.c_str());
+            IBtAdapter::BtDeviceProperties props;
+            if (!_btAdapter->getDeviceProperties(deviceID, props)) {
+                LOGERR("Device not found for deviceID: %s", deviceID.c_str());
                 return Core::ERROR_NOT_EXIST;
             }
 
             _adminLock.Lock();
 
             BluetoothDeviceInfo deviceInfo;
-            deviceInfo.deviceAddr = (deviceProperty.m_deviceAddress[0] != '\0') ? std::string(deviceProperty.m_deviceAddress) : std::string();
-            const char* deviceTypeStr = BTRMGR_GetDeviceTypeAsString(deviceProperty.m_deviceType);
-            deviceInfo.deviceType = (deviceTypeStr != nullptr) ? deviceTypeStr : "UNKNOWN";
-            deviceInfo.isGamePad = (deviceProperty.m_deviceType == BTRMGR_DEVICE_TYPE_HID_GAMEPAD);
-            deviceInfo.friendlyName = (deviceProperty.m_name[0] != '\0') ? std::string(deviceProperty.m_name) : deviceID;
+            deviceInfo.deviceAddr   = props.mac;
+            deviceInfo.deviceType   = props.deviceType;
+            deviceInfo.friendlyName = props.name.empty() ? deviceID : props.name;
+            deviceInfo.isGamePad     = props.isGamePad;
 
             // Evict any MAC-keyed entry left from migration import for the same physical device.
             if (!deviceInfo.deviceAddr.empty()) {

@@ -254,7 +254,7 @@ void Bluetooth_L2Test::SetUpTestSuite()
             g_bluetoothActive = true;
             break;
         }
-        if (status == Core::ERROR_INPROGRESS) {
+        if (status == Core::ERROR_TIMEDOUT || status == Core::ERROR_INPROGRESS) {
             std::this_thread::sleep_for(std::chrono::seconds(2));
         } else {
             break;
@@ -626,15 +626,7 @@ TEST_F(Bluetooth_L2Test, BluetoothStartStopScan)
     JsonObject result;
     uint32_t status = Core::ERROR_GENERAL;
 
-    /* startDeviceDiscovery() calls BTRMGR_GetNumberOfAdapters before starting
-     * discovery; return 1 adapter so the HAL call path is taken. */
-    EXPECT_CALL(*p_btmgrImplMock, BTRMGR_GetNumberOfAdapters(::testing::_))
-        .WillOnce(::testing::Invoke(
-            [](unsigned char* pNum) -> BTRMGR_Result_t {
-                *pNum = 1;
-                return BTRMGR_RESULT_SUCCESS;
-            }));
-
+    /* startDeviceDiscovery() uses hardcoded adapter index 0. */
     EXPECT_CALL(*p_btmgrImplMock, BTRMGR_StartDeviceDiscovery(0, ::testing::_))
         .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
 

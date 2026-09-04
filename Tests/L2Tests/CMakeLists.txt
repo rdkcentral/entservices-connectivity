@@ -23,9 +23,16 @@ set(THUNDER_PORT 9998)
 find_package(${NAMESPACE}Plugins REQUIRED)
 
 if(PLUGIN_BLUETOOTH)
-    set(SRC_FILES ${SRC_FILES} tests/Bluetooth_L2Test.cpp)
+    string(TOUPPER "${BLUETOOTH_TEST_BACKEND}" BLUETOOTH_L2_TEST_BACKEND)
+    if(BLUETOOTH_L2_TEST_BACKEND STREQUAL "SDK")
+        set(BLUETOOTH_L2_TEST_SOURCE tests/Bluetooth_Sdk_L2Test.cpp)
+    else()
+        set(BLUETOOTH_L2_TEST_SOURCE tests/Bluetooth_L2Test.cpp)
+    endif()
+
+    set(SRC_FILES ${SRC_FILES} ${BLUETOOTH_L2_TEST_SOURCE})
     if(BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION)
-        set_property(SOURCE tests/Bluetooth_L2Test.cpp
+        set_property(SOURCE ${BLUETOOTH_L2_TEST_SOURCE}
             APPEND PROPERTY COMPILE_DEFINITIONS BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION=1)
     endif()
 endif()
@@ -34,7 +41,7 @@ if(SRC_FILES)
     add_library(${MODULE_NAME} SHARED ${SRC_FILES})
 
     set_target_properties(${MODULE_NAME} PROPERTIES
-            CXX_STANDARD 14
+            CXX_STANDARD 17
             CXX_STANDARD_REQUIRED YES)
 
     target_compile_definitions(${MODULE_NAME}
@@ -44,6 +51,10 @@ if(SRC_FILES)
 
     target_compile_options(${MODULE_NAME} PRIVATE -Wno-error)
     target_link_libraries(${MODULE_NAME} PRIVATE ${NAMESPACE}Plugins::${NAMESPACE}Plugins)
+
+    if(BLUETOOTH_L2_TEST_BACKEND STREQUAL "SDK" AND TARGET ${NAMESPACE}Bluetooth)
+        target_link_libraries(${MODULE_NAME} PRIVATE ${NAMESPACE}Bluetooth)
+    endif()
 
     if (NOT L2_TEST_OOP_RPC)
         find_library(TESTMOCKLIB_LIBRARIES NAMES TestMocklib)
@@ -71,8 +82,15 @@ if(SRC_FILES)
         ../../../entservices-testframework/Tests/mocks/devicesettings
         ../../../entservices-testframework/Tests/mocks/MockPlugin
         ../../../entservices-testframework/Tests/L2Tests/L2TestsPlugin
+        ${CMAKE_SOURCE_DIR}/Tests/mocks
         ${CMAKE_INSTALL_PREFIX}/include
         )
+
+    if(BLUETOOTH_L2_TEST_BACKEND STREQUAL "SDK")
+        # So the test can #include "BtAdapter.h" / "BtSdkAdapterImpl.h" to
+        # inject the real bluetooth-sdk-backed adapter via BtAdapter::setImpl().
+        target_include_directories(${MODULE_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/Bluetooth)
+    endif()
 
     install(TARGETS ${MODULE_NAME} DESTINATION lib)
 else()
