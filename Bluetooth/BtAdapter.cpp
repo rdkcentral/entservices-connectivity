@@ -23,8 +23,10 @@
 #include "BtMgrAdapterImpl.h"
 
 #include <cassert>
+#include <cctype>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
 
 namespace {
 
@@ -40,8 +42,21 @@ bool useSdkBackend() {
             if (eq == std::string::npos) continue;
             std::string key = line.substr(0, eq);
             std::string val = line.substr(eq + 1);
-            if (key == "BLUETOOTH_SDK_ENABLED")
-                return std::tolower(val) == "true";
+            if (key == "BLUETOOTH_SDK_ENABLED") {
+                std::string normalized;
+                normalized.reserve(val.size());
+                for (unsigned char ch : val) {
+                    normalized.push_back(static_cast<char>(std::tolower(ch)));
+                }
+                // Trim trailing whitespace/newlines while preserving the intended value.
+                while (!normalized.empty() && std::isspace(static_cast<unsigned char>(normalized.back()))) {
+                    normalized.pop_back();
+                }
+                while (!normalized.empty() && std::isspace(static_cast<unsigned char>(normalized.front()))) {
+                    normalized.erase(normalized.begin());
+                }
+                return normalized == "true";
+            }
         }
     }
     return false;
