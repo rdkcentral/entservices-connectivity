@@ -54,6 +54,9 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/")
 # resolves to the real SDK or the externally built stub SDK.
 find_package(BLUETOOTH_SDK REQUIRED)
 
+# Build the bundled Bluetooth SDK stub
+add_subdirectory("${BLUETOOTH_SDK_STUB_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/bluetooth-sdk-stub")
+
 set(BLUETOOTH_TEST_BACKEND "BTMGR" CACHE STRING "Bluetooth adapter backend for L1/L2 test builds (BTMGR or SDK)")
 set_property(CACHE BLUETOOTH_TEST_BACKEND PROPERTY STRINGS BTMGR SDK)
 
@@ -125,7 +128,9 @@ else()
     target_include_directories(${MODULE_NAME} BEFORE PRIVATE
         ${BLUETOOTH_SDK_INCLUDE_DIRS})
     target_include_directories(${MODULE_NAME} PRIVATE ${BTMGR_INCLUDE_DIRS})
-    target_link_libraries(${MODULE_NAME} PRIVATE ${BTMGR_LIBRARIES} ${BLUETOOTH_SDK_LIBRARIES})
+    
+    # Link against the Bluetooth SDK (always the bundled stub)
+    target_link_libraries(${MODULE_NAME} PRIVATE ${BTMGR_LIBRARIES} rdk_bluetooth)
 endif()
 
 find_package(IARMBus)

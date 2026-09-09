@@ -21,15 +21,22 @@
 #  BLUETOOTH_SDK_INCLUDE_DIRS - The Bluetooth SDK include directories
 #  BLUETOOTH_SDK_LIBRARIES - The libraries needed to use the Bluetooth SDK
 #
-# The Bluetooth SDK (bluetoothsdk recipe) installs:
-#  - library: ${libdir}/bluetoothsdk/librdk_bluetooth.so
-#  - headers: ${includedir}/bluetoothsdk/**
+# The Bluetooth SDK is provided by the bundled bluetooth-sdk-stub, which
+# provides a stub implementation with SDK-compatible signatures.
 #
 
-find_package(PkgConfig)
+# The Bluetooth SDK is provided by the bundled bluetooth-sdk-stub at a fixed
+# location. This stub always exists in the source tree and is used unconditionally.
+set(BLUETOOTH_SDK_STUB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../bluetooth-sdk-stub")
 
-find_library(BLUETOOTH_SDK_LIBRARIES NAMES rdk_bluetooth PATH_SUFFIXES bluetoothsdk)
-find_path(BLUETOOTH_SDK_INCLUDE_DIRS NAMES bluetooth/Manager.h PATH_SUFFIXES bluetoothsdk)
+if(NOT EXISTS "${BLUETOOTH_SDK_STUB_DIR}/include/bluetooth/Manager.h")
+    message(FATAL_ERROR "BLUETOOTH_SDK: Could not find bundled stub at ${BLUETOOTH_SDK_STUB_DIR}")
+endif()
+
+message(STATUS "BLUETOOTH_SDK: Found bundled stub at ${BLUETOOTH_SDK_STUB_DIR}")
+
+set(BLUETOOTH_SDK_INCLUDE_DIRS "${BLUETOOTH_SDK_STUB_DIR}/include")
+set(BLUETOOTH_SDK_LIBRARIES "rdk_bluetooth")
 
 set(BLUETOOTH_SDK_LIBRARIES ${BLUETOOTH_SDK_LIBRARIES} CACHE PATH "Path to Bluetooth SDK library")
 set(BLUETOOTH_SDK_INCLUDE_DIRS ${BLUETOOTH_SDK_INCLUDE_DIRS} CACHE PATH "Path to Bluetooth SDK include")
