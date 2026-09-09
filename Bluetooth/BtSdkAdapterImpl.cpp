@@ -230,7 +230,8 @@ std::string BtSdkAdapterImpl::getMacForHandle(const std::string& handleStr) cons
     return m_registry.getMacForHandle(handleStr);
 }
 
-bool BtSdkAdapterImpl::respondToEvent(const std::string& mac, bool accepted) {
+bool BtSdkAdapterImpl::respondToEvent(const std::string& handleStr, const std::string& /*eventType*/, bool accepted) {
+    const std::string mac = m_registry.getMacForHandle(handleStr);
     return m_authBridge && m_authBridge->onRespondToEvent(mac, accepted);
 }
 

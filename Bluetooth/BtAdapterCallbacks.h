@@ -64,6 +64,14 @@ struct BtEventCallbacks {
                        const std::string& title, const std::string& artist,
                        uint32_t duration, uint32_t trackNumber,
                        uint32_t numberOfTracks)> onNewTrack;
+
+    // Playback position updates (BTRMGR_EVENT_MEDIA_TRACK_PLAYING / _POSITION) — distinct from onPlaybackChange.
+    std::function<void(long long int deviceId, uint32_t duration, uint32_t position)> onPlaybackProgress;
+
+    // Device volume/mute/command status (BTRMGR_EVENT_DEVICE_MEDIA_STATUS).
+    std::function<void(long long int deviceId, const std::string& name,
+                       const std::string& deviceType, uint8_t volume, bool mute,
+                       const std::string& command)> onDeviceMediaStatus;
 };
 
 struct BtAuthCallbacks {
@@ -75,6 +83,11 @@ struct BtAuthCallbacks {
     std::function<void(const std::string& deviceId, const std::string& name,
                        const std::string& deviceType, uint32_t vendorId,
                        const std::string& mac, const std::string& supportedProfile)> onConnectionRequest;
+
+    // External playback request (BTRMGR_EVENT_RECEIVED_EXTERNAL_PLAYBACK_REQUEST) — always escalated to client, no auto-accept.
+    std::function<void(const std::string& deviceId, const std::string& name,
+                       const std::string& deviceType, uint32_t vendorId,
+                       const std::string& mac, const std::string& supportedProfile)> onPlaybackRequest;
 
     std::function<bool(const std::string& handleStr)> isPaired;
 };

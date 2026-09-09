@@ -67,7 +67,7 @@ public:
                              BtDeviceProperties& props) const override;
 
     std::string getMacForHandle(const std::string& handleStr) const override;
-    bool respondToEvent(const std::string& mac, bool accepted) override;
+    bool respondToEvent(const std::string& handleStr, const std::string& eventType, bool accepted) override;
 
     bool               setAudioStream(long long int deviceID,
                                        const std::string& streamName) override;
@@ -87,8 +87,6 @@ private:
 
     // Maps BTRMGR device operation type from a profile string.
     static int deviceOpTypeFromProfile(const std::string& profile);
-    static bool isAudioOutputDeviceType(const std::string& deviceType);
-    static bool isAudioInputDeviceType(const std::string& deviceType);
 
     // Static IARM event callback — routes to s_instance.
     static int staticEventCallback(const char* owner, int eventId,
@@ -96,6 +94,8 @@ private:
 
     void onEvent(void* data, size_t len);
 
+    // Used only for the connection-request auto-accept path in onEvent (mac-keyed,
+    // matches how the underlying BTRMGR event carries the device address).
     bool respondToEvent(const std::string& mac, int eventType, bool accepted);
 
     void cacheHandleToMac(const std::string& handleStr, const std::string& mac) const;
@@ -106,11 +106,6 @@ private:
     mutable std::mutex                                       m_mapMutex;
     mutable std::unordered_map<std::string, std::string>    m_handleToMac;  // handle → MAC
     mutable std::unordered_map<std::string, std::string>    m_macToHandle;  // MAC → handle
-
-    // Pending respondToEvent state (one at a time, matches BTMgr semantics).
-    mutable std::mutex  m_pendingMutex;
-    std::string         m_pendingMac;
-    int                 m_pendingEventType{0};  // BTRMGR_Events_t value
 
     static BtMgrAdapterImpl* s_instance;
 };

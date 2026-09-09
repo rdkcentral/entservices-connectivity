@@ -64,6 +64,7 @@ public:
         bool        paired{false};
         uint32_t    classOfDevice{0};
         uint16_t    appearance{0};
+        uint32_t    powerStatus{0};  // BTRMGR_DevicePowerStatus_t value; only meaningful for connected devices
         std::vector<std::string> uuids;
     };
 
@@ -90,6 +91,7 @@ public:
         uint16_t    vendorId{0};
         uint8_t     batteryLevel{0};
         std::string modalias;
+        std::string firmwareRevision;
         std::vector<std::string> uuids;
     };
     virtual bool getDeviceProperties(const std::string& handleStr,
@@ -98,7 +100,9 @@ public:
     // Resolve a handle string to the device's MAC address.
     virtual std::string getMacForHandle(const std::string& handleStr) const = 0;
 
-    virtual bool respondToEvent(const std::string& mac, bool accepted) = 0;
+    // Stateless by design: handleStr + eventType identify the request directly,
+    // matching the legacy BTRMGR_SetEventResponse(deviceHandle, eventType, ...) contract.
+    virtual bool respondToEvent(const std::string& handleStr, const std::string& eventType, bool accepted) = 0;
 
     // ── Audio operations ──────────────────────────────────────────────────────
     // deviceID is vestigial in setAudioStream (adapter-level op, not device-level).

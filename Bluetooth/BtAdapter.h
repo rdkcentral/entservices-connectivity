@@ -74,7 +74,7 @@ public:
 
     std::string getMacForHandle(const std::string& handleStr) const;
 
-    bool respondToEvent(const std::string& mac, bool accepted);
+    bool respondToEvent(const std::string& handleStr, const std::string& eventType, bool accepted);
 
     bool                          setAudioStream(long long int deviceID,
                                                   const std::string& streamName);

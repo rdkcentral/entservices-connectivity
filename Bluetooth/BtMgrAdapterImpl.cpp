@@ -24,6 +24,7 @@
 #include <cstring>
 
 #include "btmgr.h"
+#include <UtilsIarm.h>
 #include <UtilsLogging.h>
 #include <UtilsString.h>
 
@@ -47,6 +48,9 @@ constexpr const char* STATUS_PAIRING_FAILED      = "PAIRING_FAILED";
 constexpr const char* STATUS_CONNECTION_FAILED   = "CONNECTION_FAILED";
 constexpr const char* EVT_STATUS_CHANGED         = "onStatusChanged";
 constexpr const char* EVT_REQUEST_FAILED         = "onRequestFailed";
+constexpr const char* EVT_PAIRING_REQUEST        = "onPairingRequest";
+constexpr const char* EVT_CONNECTION_REQUEST     = "onConnectionRequest";
+constexpr const char* EVT_PLAYBACK_REQUEST       = "onPlaybackRequest";
 
 } // namespace
 
@@ -63,6 +67,8 @@ std::string BtMgrAdapterImpl::init(PluginHost::IShell* /* service */,
     m_evtCbs  = std::move(eventCallbacks);
     m_authCbs = std::move(authCallbacks);
     s_instance = this;
+
+    Utils::IARM::init();
 
     BTRMGR_Result_t rc = BTRMGR_RegisterForCallbacks(kIarmClientName);
     if (rc != BTRMGR_RESULT_SUCCESS) {
@@ -127,9 +133,22 @@ bool BtMgrAdapterImpl::setAdapterDiscoverable(bool discoverable, int timeoutSeco
 // ── Discovery ────────────────────────────────────────────────────────────────
 
 bool BtMgrAdapterImpl::startScan(const std::string& profile) {
+    // Matches legacy startDeviceDiscovery(): success reflects adapter presence,
+    // not the BTRMGR_StartDeviceDiscovery call result (which is only logged).
+    unsigned char numOfAdapters = 0;
+    if (BTRMGR_GetNumberOfAdapters(&numOfAdapters) != BTRMGR_RESULT_SUCCESS) {
+        LOGERR("Failed to get the number of adapters..!");
+    }
+    if (numOfAdapters == 0) {
+        return false;
+    }
+
     BTRMGR_DeviceOperationType_t opType =
         static_cast<BTRMGR_DeviceOperationType_t>(deviceOpTypeFromProfile(profile));
-    return BTRMGR_StartDeviceDiscovery(0, opType) == BTRMGR_RESULT_SUCCESS;
+    if (BTRMGR_StartDeviceDiscovery(0, opType) != BTRMGR_RESULT_SUCCESS) {
+        LOGERR("Failed to start the discovery..!");
+    }
+    return true;
 }
 
 bool BtMgrAdapterImpl::stopScan() {
@@ -187,7 +206,9 @@ std::vector<IBtAdapter::BtDeviceInfo> BtMgrAdapterImpl::getConnectedDevices() co
     memset(&list, 0, sizeof(list));
     if (BTRMGR_GetConnectedDevices(0, &list) != BTRMGR_RESULT_SUCCESS) return result;
     for (int i = 0; i < list.m_numOfDevices; ++i) {
-        auto info = deviceInfoFromBtmgr(list.m_deviceProperty[i], true);
+        const auto& d = list.m_deviceProperty[i];
+        auto info = deviceInfoFromBtmgr(d, true);
+        info.powerStatus = static_cast<uint32_t>(d.m_powerStatus);
         cacheHandleToMac(info.handleStr, info.mac);
         result.push_back(std::move(info));
     }
@@ -208,20 +229,34 @@ bool BtMgrAdapterImpl::unpairDevice(const std::string& handleStr) {
 
 bool BtMgrAdapterImpl::connectDevice(const std::string& handleStr, const std::string& deviceType) {
     BTRMgrDeviceHandle h = static_cast<BTRMgrDeviceHandle>(std::stoll(handleStr));
-    if (isAudioOutputDeviceType(deviceType))
-        return BTRMGR_StartAudioStreamingOut(0, h, BTRMGR_DEVICE_OP_TYPE_AUDIO_OUTPUT) == BTRMGR_RESULT_SUCCESS;
-    if (isAudioInputDeviceType(deviceType))
+    if (Utils::String::equal(deviceType, "LE TILE")) {
+        return BTRMGR_ConnectToDevice(0, h, BTRMGR_DEVICE_OP_TYPE_LE) == BTRMGR_RESULT_SUCCESS;
+    }
+    if (Utils::String::equal(deviceType, "HUMAN INTERFACE DEVICE") ||
+        Utils::String::contains(deviceType, "KEYBOARD") ||
+        Utils::String::contains(deviceType, "MOUSE") ||
+        Utils::String::contains(deviceType, "JOYSTICK")) {
+        return BTRMGR_ConnectToDevice(0, h, BTRMGR_DEVICE_OP_TYPE_HID) == BTRMGR_RESULT_SUCCESS;
+    }
+    if (Utils::String::equal(deviceType, "SMARTPHONE") || Utils::String::equal(deviceType, "TABLET")) {
         return BTRMGR_StartAudioStreamingIn(0, h, BTRMGR_DEVICE_OP_TYPE_AUDIO_INPUT) == BTRMGR_RESULT_SUCCESS;
-    return BTRMGR_ConnectToDevice(0, h, BTRMGR_DEVICE_OP_TYPE_UNKNOWN) == BTRMGR_RESULT_SUCCESS;
+    }
+    return BTRMGR_StartAudioStreamingOut(0, h, BTRMGR_DEVICE_OP_TYPE_AUDIO_OUTPUT) == BTRMGR_RESULT_SUCCESS;
 }
 
 bool BtMgrAdapterImpl::disconnectDevice(const std::string& handleStr, const std::string& deviceType) {
     BTRMgrDeviceHandle h = static_cast<BTRMgrDeviceHandle>(std::stoll(handleStr));
-    if (isAudioOutputDeviceType(deviceType))
-        return BTRMGR_StopAudioStreamingOut(0, h) == BTRMGR_RESULT_SUCCESS;
-    if (isAudioInputDeviceType(deviceType))
+    if (Utils::String::equal(deviceType, "LE TILE") ||
+        Utils::String::equal(deviceType, "HUMAN INTERFACE DEVICE") ||
+        Utils::String::contains(deviceType, "KEYBOARD") ||
+        Utils::String::contains(deviceType, "MOUSE") ||
+        Utils::String::contains(deviceType, "JOYSTICK")) {
+        return BTRMGR_DisconnectFromDevice(0, h) == BTRMGR_RESULT_SUCCESS;
+    }
+    if (Utils::String::equal(deviceType, "SMARTPHONE") || Utils::String::equal(deviceType, "TABLET")) {
         return BTRMGR_StopAudioStreamingIn(0, h) == BTRMGR_RESULT_SUCCESS;
-    return BTRMGR_DisconnectFromDevice(0, h) == BTRMGR_RESULT_SUCCESS;
+    }
+    return BTRMGR_StopAudioStreamingOut(0, h) == BTRMGR_RESULT_SUCCESS;
 }
 
 bool BtMgrAdapterImpl::getDeviceProperties(const std::string& handleStr,
@@ -242,6 +277,7 @@ bool BtMgrAdapterImpl::getDeviceProperties(const std::string& handleStr,
     props.batteryLevel = p.m_batteryLevel;
     props.vendorId     = static_cast<uint16_t>(p.m_vendorID);
     props.modalias     = p.m_modalias;
+    props.firmwareRevision = p.m_firmwareRevision;
 
     for (int i = 0; i < p.m_serviceInfo.m_numOfService; ++i) {
         props.uuids.push_back(p.m_serviceInfo.m_profileInfo[i].m_profile);
@@ -257,17 +293,26 @@ std::string BtMgrAdapterImpl::getMacForHandle(const std::string& handleStr) cons
     return (it != m_handleToMac.end()) ? it->second : "";
 }
 
-bool BtMgrAdapterImpl::respondToEvent(const std::string& mac, bool accepted) {
-    int eventType = 0;
-    {
-        std::lock_guard<std::mutex> lk(m_pendingMutex);
-        if (m_pendingMac != mac || m_pendingEventType == 0) return false;
-        eventType = m_pendingEventType;
-        m_pendingMac.clear();
-        m_pendingEventType = 0;
-    }
+bool BtMgrAdapterImpl::respondToEvent(const std::string& handleStr, const std::string& eventType, bool accepted) {
+    // Stateless by design (matches legacy setEventResponse): handleStr + eventType
+    // identify the BTRMGR event directly, no server-side "pending" bookkeeping.
+    BTRMGR_EventResponse_t rsp;
+    memset(&rsp, 0, sizeof(rsp));
 
-    return respondToEvent(mac, eventType, accepted);
+    rsp.m_deviceHandle = static_cast<BTRMgrDeviceHandle>(std::stoll(handleStr));
+
+    if (eventType == EVT_PAIRING_REQUEST) {
+        rsp.m_eventType = BTRMGR_EVENT_RECEIVED_EXTERNAL_PAIR_REQUEST;
+    } else if (eventType == EVT_CONNECTION_REQUEST) {
+        rsp.m_eventType = BTRMGR_EVENT_RECEIVED_EXTERNAL_CONNECT_REQUEST;
+    } else if (eventType == EVT_PLAYBACK_REQUEST) {
+        rsp.m_eventType = BTRMGR_EVENT_RECEIVED_EXTERNAL_PLAYBACK_REQUEST;
+    } else {
+        rsp.m_eventType = BTRMGR_EVENT_MAX;
+    }
+    rsp.m_eventResp = accepted ? 1 : 0;
+
+    return BTRMGR_SetEventResponse(0, &rsp) == BTRMGR_RESULT_SUCCESS;
 }
 
 bool BtMgrAdapterImpl::respondToEvent(const std::string& mac,
@@ -312,12 +357,14 @@ bool BtMgrAdapterImpl::setAudioControlCommand(long long int deviceID,
     if (cmd == "STOP")          return BTRMGR_MediaControl(0, h, BTRMGR_MEDIA_CTRL_STOP)      == BTRMGR_RESULT_SUCCESS;
     if (cmd == "SKIP_NEXT")     return BTRMGR_MediaControl(0, h, BTRMGR_MEDIA_CTRL_NEXT)      == BTRMGR_RESULT_SUCCESS;
     if (cmd == "SKIP_PREV")     return BTRMGR_MediaControl(0, h, BTRMGR_MEDIA_CTRL_PREVIOUS)  == BTRMGR_RESULT_SUCCESS;
-    if (cmd == "MUTE")          return BTRMGR_MediaControl(0, h, BTRMGR_MEDIA_CTRL_MUTE)      == BTRMGR_RESULT_SUCCESS;
-    if (cmd == "UNMUTE")        return BTRMGR_MediaControl(0, h, BTRMGR_MEDIA_CTRL_UNMUTE)    == BTRMGR_RESULT_SUCCESS;
+    if (cmd == "RESTART") {
+        LOGERR("setAudioControlCommand: RESTART is not implemented");
+        return false;
+    }
+    if (cmd == "AUDIO_MUTE")    return BTRMGR_MediaControl(0, h, BTRMGR_MEDIA_CTRL_MUTE)      == BTRMGR_RESULT_SUCCESS;
+    if (cmd == "AUDIO_UNMUTE")  return BTRMGR_MediaControl(0, h, BTRMGR_MEDIA_CTRL_UNMUTE)    == BTRMGR_RESULT_SUCCESS;
     if (cmd == "VOLUME_UP")     return BTRMGR_MediaControl(0, h, BTRMGR_MEDIA_CTRL_VOLUMEUP)  == BTRMGR_RESULT_SUCCESS;
     if (cmd == "VOLUME_DOWN")   return BTRMGR_MediaControl(0, h, BTRMGR_MEDIA_CTRL_VOLUMEDOWN) == BTRMGR_RESULT_SUCCESS;
-    if (cmd == "AUDIO_IN")      return BTRMGR_StartAudioStreamingIn(0, h,
-                                           BTRMGR_DEVICE_OP_TYPE_AUDIO_INPUT) == BTRMGR_RESULT_SUCCESS;
     LOGERR("setAudioControlCommand: unknown command '%s'", cmd.c_str());
     return false;
 }
@@ -508,11 +555,6 @@ void BtMgrAdapterImpl::onEvent(void* data, size_t /*len*/) {
             profiles += d.m_serviceInfo.m_profileInfo[i].m_profile;
         }
         cacheHandleToMac(handleStr, d.m_deviceAddress);
-        {
-            std::lock_guard<std::mutex> lk(m_pendingMutex);
-            m_pendingMac       = d.m_deviceAddress;
-            m_pendingEventType = static_cast<int>(BTRMGR_EVENT_RECEIVED_EXTERNAL_PAIR_REQUEST);
-        }
         if (m_authCbs.onPairingRequest)
             m_authCbs.onPairingRequest(handleStr, d.m_name, dt ? dt : "UNKNOWN",
                                        d.m_vendorID, d.m_deviceAddress, profiles,
@@ -548,19 +590,29 @@ void BtMgrAdapterImpl::onEvent(void* data, size_t /*len*/) {
             return;
         }
 
-        {
-            std::lock_guard<std::mutex> lk(m_pendingMutex);
-            m_pendingMac       = d.m_deviceAddress;
-            m_pendingEventType = static_cast<int>(BTRMGR_EVENT_RECEIVED_EXTERNAL_CONNECT_REQUEST);
-        }
         if (m_authCbs.onConnectionRequest)
             m_authCbs.onConnectionRequest(handleStr, d.m_name, dt ? dt : "UNKNOWN",
                                           d.m_vendorID, d.m_deviceAddress, profiles);
         break;
     }
 
-    case BTRMGR_EVENT_MEDIA_TRACK_STARTED:
-    case BTRMGR_EVENT_MEDIA_TRACK_PLAYING: {
+    case BTRMGR_EVENT_RECEIVED_EXTERNAL_PLAYBACK_REQUEST: {
+        const auto& d = msg.m_externalDevice;
+        std::string handleStr = std::to_string(d.m_deviceHandle);
+        const char* dt = BTRMGR_GetDeviceTypeAsString(d.m_deviceType);
+        std::string profiles;
+        for (int i = 0; i < d.m_serviceInfo.m_numOfService; ++i) {
+            if (!profiles.empty()) profiles += ";";
+            profiles += d.m_serviceInfo.m_profileInfo[i].m_profile;
+        }
+        cacheHandleToMac(handleStr, d.m_deviceAddress);
+        if (m_authCbs.onPlaybackRequest)
+            m_authCbs.onPlaybackRequest(handleStr, d.m_name, dt ? dt : "UNKNOWN",
+                                        d.m_vendorID, d.m_deviceAddress, profiles);
+        break;
+    }
+
+    case BTRMGR_EVENT_MEDIA_TRACK_STARTED: {
         const auto& m = msg.m_mediaInfo;
         if (m_evtCbs.onPlaybackChange)
             m_evtCbs.onPlaybackChange("started", static_cast<long long int>(m.m_deviceHandle),
@@ -569,8 +621,7 @@ void BtMgrAdapterImpl::onEvent(void* data, size_t /*len*/) {
         break;
     }
 
-    case BTRMGR_EVENT_MEDIA_TRACK_PAUSED:
-    case BTRMGR_EVENT_MEDIA_PLAYBACK_ENDED: {
+    case BTRMGR_EVENT_MEDIA_TRACK_PAUSED: {
         const auto& m = msg.m_mediaInfo;
         if (m_evtCbs.onPlaybackChange)
             m_evtCbs.onPlaybackChange("paused", static_cast<long long int>(m.m_deviceHandle),
@@ -588,6 +639,23 @@ void BtMgrAdapterImpl::onEvent(void* data, size_t /*len*/) {
         break;
     }
 
+    case BTRMGR_EVENT_MEDIA_PLAYBACK_ENDED: {
+        const auto& m = msg.m_mediaInfo;
+        if (m_evtCbs.onPlaybackChange)
+            m_evtCbs.onPlaybackChange("ended", static_cast<long long int>(m.m_deviceHandle), 0, 0);
+        break;
+    }
+
+    case BTRMGR_EVENT_MEDIA_TRACK_PLAYING:
+    case BTRMGR_EVENT_MEDIA_TRACK_POSITION: {
+        const auto& m = msg.m_mediaInfo;
+        if (m_evtCbs.onPlaybackProgress)
+            m_evtCbs.onPlaybackProgress(static_cast<long long int>(m.m_deviceHandle),
+                                        m.m_mediaPositionInfo.m_mediaDuration,
+                                        m.m_mediaPositionInfo.m_mediaPosition);
+        break;
+    }
+
     case BTRMGR_EVENT_MEDIA_TRACK_CHANGED: {
         const auto& m = msg.m_mediaInfo;
         if (m_evtCbs.onNewTrack)
@@ -602,10 +670,31 @@ void BtMgrAdapterImpl::onEvent(void* data, size_t /*len*/) {
         break;
     }
 
+    case BTRMGR_EVENT_DEVICE_MEDIA_STATUS: {
+        const auto& m = msg.m_mediaInfo;
+        const char* dt = BTRMGR_GetDeviceTypeAsString(m.m_deviceType);
+        std::string command;
+        switch (m.m_mediaDevStatus.m_enmediaCtrlCmd) {
+            case BTRMGR_MEDIA_CTRL_VOLUMEUP:   command = "VOLUME_UP";    break;
+            case BTRMGR_MEDIA_CTRL_VOLUMEDOWN: command = "VOLUME_DOWN";  break;
+            case BTRMGR_MEDIA_CTRL_MUTE:       command = "AUDIO_MUTE";   break;
+            case BTRMGR_MEDIA_CTRL_UNMUTE:     command = "AUDIO_UNMUTE"; break;
+            default:                           command = "CMD_UNKNOWN"; break;
+        }
+        if (m_evtCbs.onDeviceMediaStatus)
+            m_evtCbs.onDeviceMediaStatus(static_cast<long long int>(m.m_deviceHandle), m.m_name,
+                                         dt ? dt : "UNKNOWN",
+                                         m.m_mediaDevStatus.m_ui8mediaDevVolume,
+                                         m.m_mediaDevStatus.m_ui8mediaDevMute != 0,
+                                         command);
+        break;
+    }
+
     default:
         break;
     }
 }
+
 
 // ── Private helpers ────────────────────────────────────────────────────────────
 
@@ -621,31 +710,25 @@ std::string BtMgrAdapterImpl::deriveHandle(const std::string& mac) {
 
 // static
 int BtMgrAdapterImpl::deviceOpTypeFromProfile(const std::string& p) {
-    if (Utils::String::contains(p, "LOUDSPEAKER") ||
-        Utils::String::contains(p, "HEADPHONES") ||
-        Utils::String::contains(p, "WEARABLE HEADSET") ||
-        Utils::String::contains(p, "HIFI AUDIO DEVICE"))
+    const bool hasAudio = Utils::String::contains(p, "LOUDSPEAKER") ||
+                          Utils::String::contains(p, "HEADPHONES") ||
+                          Utils::String::contains(p, "WEARABLE HEADSET") ||
+                          Utils::String::contains(p, "HIFI AUDIO DEVICE");
+    const bool hasHid = Utils::String::contains(p, "KEYBOARD") ||
+                        Utils::String::contains(p, "MOUSE") ||
+                        Utils::String::contains(p, "JOYSTICK");
+
+    if (hasAudio && hasHid)
+        return static_cast<int>(BTRMGR_DEVICE_OP_TYPE_AUDIO_AND_HID);
+    if (hasAudio)
         return static_cast<int>(BTRMGR_DEVICE_OP_TYPE_AUDIO_OUTPUT);
     if (Utils::String::contains(p, "SMARTPHONE") || Utils::String::contains(p, "TABLET"))
         return static_cast<int>(BTRMGR_DEVICE_OP_TYPE_AUDIO_INPUT);
-    if (Utils::String::contains(p, "KEYBOARD") ||
-        Utils::String::contains(p, "MOUSE") ||
-        Utils::String::contains(p, "JOYSTICK"))
+    if (hasHid)
         return static_cast<int>(BTRMGR_DEVICE_OP_TYPE_HID);
     if (Utils::String::contains(p, "LE TILE") || Utils::String::contains(p, "LE"))
         return static_cast<int>(BTRMGR_DEVICE_OP_TYPE_LE);
-    return static_cast<int>(BTRMGR_DEVICE_OP_TYPE_AUDIO_OUTPUT);
-}
-
-// static
-bool BtMgrAdapterImpl::isAudioOutputDeviceType(const std::string& t) {
-    return t == "LOUDSPEAKER" || t == "HEADPHONES"
-        || t == "WEARABLE HEADSET" || t == "HIFI AUDIO DEVICE" || t == "HANDSFREE";
-}
-
-// static
-bool BtMgrAdapterImpl::isAudioInputDeviceType(const std::string& t) {
-    return t == "SMARTPHONE" || t == "TABLET";
+    return static_cast<int>(BTRMGR_DEVICE_OP_TYPE_UNKNOWN);
 }
 
 void BtMgrAdapterImpl::cacheHandleToMac(const std::string& handleStr,

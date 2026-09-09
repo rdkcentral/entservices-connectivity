@@ -312,9 +312,31 @@ namespace WPEFramework
                 JsonObject params;
                 params["action"]      = action;
                 params["deviceID"]    = std::to_string(deviceId);
-                params["position"]    = std::to_string(position);
-                params["Duration"]    = std::to_string(duration);
+                // Legacy contract omits position/Duration for the "ended" action.
+                if (action != "ended") {
+                    params["position"] = std::to_string(position);
+                    params["Duration"] = std::to_string(duration);
+                }
                 sendNotify(C_STR(EVT_PLAYBACK_STARTED), params);
+            };
+            evtCbs.onPlaybackProgress = [this](long long int deviceId, uint32_t duration, uint32_t position) {
+                JsonObject params;
+                params["deviceID"] = std::to_string(deviceId);
+                params["position"] = std::to_string(position);
+                params["Duration"] = std::to_string(duration);
+                sendNotify(C_STR(EVT_PLAYBACK_POSITION), params);
+            };
+            evtCbs.onDeviceMediaStatus = [this](long long int deviceId, const std::string& name,
+                                                const std::string& deviceType, uint8_t volume,
+                                                bool mute, const std::string& command) {
+                JsonObject params;
+                params["deviceID"]   = std::to_string(deviceId);
+                params["name"]       = name;
+                params["deviceType"] = deviceType;
+                params["volume"]     = std::to_string(volume);
+                params["mute"]       = mute;
+                params["command"]    = command;
+                sendNotify(C_STR(EVT_DEVICE_MEDIA_STATUS), params);
             };
             evtCbs.onNewTrack = [this](long long int deviceId,
                                        const std::string& album, const std::string& genre,
@@ -361,6 +383,18 @@ namespace WPEFramework
                 params["MAC"]              = mac;
                 params["supportedProfile"] = profile;
                 sendNotify(C_STR(EVT_CONNECTION_REQUEST), params);
+            };
+            authCbs.onPlaybackRequest = [this](const std::string& deviceId, const std::string& name,
+                                               const std::string& deviceType, uint32_t vendorId,
+                                               const std::string& mac, const std::string& profile) {
+                JsonObject params;
+                params["deviceID"]         = deviceId;
+                params["name"]             = name;
+                params["deviceType"]       = deviceType;
+                params["manufacturer"]     = std::to_string(vendorId);
+                params["MAC"]              = mac;
+                params["supportedProfile"] = profile;
+                sendNotify(C_STR(EVT_PLAYBACK_REQUEST), params);
             };
             authCbs.isPaired = [this](const std::string& handleStr) -> bool {
                 AutoConnectStatus status;
@@ -549,7 +583,7 @@ namespace WPEFramework
                 deviceDetails["deviceID"]         = info.handleStr;
                 deviceDetails["name"]             = info.name;
                 deviceDetails["deviceType"]       = info.deviceType;
-                deviceDetails["activeState"]      = "1";
+                deviceDetails["activeState"]      = std::to_string(info.powerStatus);
                 deviceDetails["rawDeviceType"]    = std::to_string(info.classOfDevice);
                 deviceDetails["rawBleDeviceType"] = std::to_string(info.appearance);
 
@@ -672,25 +706,15 @@ namespace WPEFramework
         bool Bluetooth::setEventResponse(long long int deviceID, const string &eventType, const string &respValue)
         {
             const string deviceIdStr = std::to_string(deviceID);
-            const std::string mac = m_btAdapter.getMacForHandle(deviceIdStr);
-
             bool accepted = Utils::String::equal(respValue, "ACCEPTED");
 
-            if (!mac.empty() &&
-                (eventType == EVT_PAIRING_REQUEST ||
-                 eventType == EVT_CONNECTION_REQUEST ||
-                 eventType == EVT_PLAYBACK_REQUEST)) {
-                if (!m_btAdapter.respondToEvent(mac, accepted)) {
-                    LOGERR("setEventResponse: failed for deviceID=%lld", deviceID);
-                    return false;
-                }
-                LOGINFO("Successfully done setEventResponse for deviceID=%lld, accepted=%d",
-                        deviceID, static_cast<int>(accepted));
-                return true;
+            if (!m_btAdapter.respondToEvent(deviceIdStr, eventType, accepted)) {
+                LOGERR("Failed to do setEventResponse");
+                return false;
             }
 
-            LOGERR("setEventResponse: unknown event type or device not found for deviceID=%lld", deviceID);
-            return false;
+            LOGINFO("Successfully done setEventResponse");
+            return true;
         }
 
         JsonObject Bluetooth::getDeviceInfo(long long int deviceID)
@@ -713,7 +737,7 @@ namespace WPEFramework
             deviceDetails["rssi"]             = std::to_string(props.rssi);
             deviceDetails["batteryLevel"]     = std::to_string(props.batteryLevel);
             deviceDetails["modalias"]         = props.modalias;
-            deviceDetails["firmwareRevision"] = "";
+            deviceDetails["firmwareRevision"] = props.firmwareRevision;
 
             std::string profileInfo;
             for (const auto& uuid : props.uuids) {
