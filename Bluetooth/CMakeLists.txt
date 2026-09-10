@@ -36,9 +36,6 @@ set(BLUETOOTH_PLUGIN_SOURCES
         BtAdapter.cpp
         DeviceRegistry.cpp
         Module.cpp
-        # BtAdapter.cpp unconditionally instantiates both adapters as static
-        # globals and picks one at runtime (see BtAdapter::ensureImpl()), so
-        # both must always be compiled in, in every configuration.
         BtMgrAdapterImpl.cpp
         BtSdkAdapterImpl.cpp
         EventBridge.cpp
@@ -51,10 +48,9 @@ set(BLUETOOTH_PLUGIN_SOURCES
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/")
 
 # Every build requires the Bluetooth SDK. Product recipes select whether this
-# resolves to the real SDK or the externally built stub SDK.
+# resolves to the real SDK or the stub SDK.
 find_package(BLUETOOTH_SDK REQUIRED)
 
-# Build the bundled Bluetooth SDK stub
 add_subdirectory("${BLUETOOTH_SDK_STUB_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/bluetooth-sdk-stub")
 
 set(BLUETOOTH_TEST_BACKEND "BTMGR" CACHE STRING "Bluetooth adapter backend for L1/L2 test builds (BTMGR or SDK)")
@@ -115,12 +111,18 @@ endif (RDK_SERVICE_L2_TEST)
 if (RDK_SERVICES_L1_TEST OR RDK_SERVICE_L2_TEST)
     target_compile_definitions(${MODULE_NAME} PRIVATE BLUETOOTH_HAS_SDK=1 BLUETOOTH_HAS_BTMGR=1)
     # BtSdkAdapterImpl.cpp is always compiled (see above), so its Manager
-    # symbols always need Tests/mocks/bluetoothSDK.cpp's definitions, and its
-    # bluetooth/*.h includes always need shadowing with GMock-friendly stubs,
+    # symbols always need Tests/mocks/bluetoothSDK.cpp's definitions, and
+    # bluetooth::Adapter/Device/Manager always need shadowing with
+    # GMock-friendly stubs (Tests/mocks/bluetooth/{Adapter,Device,Manager}.h),
     # regardless of which backend BLUETOOTH_TEST_BACKEND selects for the L2
-    # test harness.
+    # test harness. Every other bluetooth-sdk header (Events.h, Status.h,
+    # Uuid.h, Appearance.h, ...) is resolved from the bundled
+    # bluetooth-sdk-stub, since only Adapter/Device/Manager's shape needs to
+    # diverge for GMock.
     target_include_directories(${MODULE_NAME} BEFORE PRIVATE
         ${CMAKE_SOURCE_DIR}/../entservices-connectivity/Tests/mocks)
+    target_include_directories(${MODULE_NAME} PRIVATE
+        ${BLUETOOTH_SDK_INCLUDE_DIRS})
 else()
     # Production builds use the headers and library selected by the SDK
     # package. The full-stack recipe supplies either the real SDK or its stub.

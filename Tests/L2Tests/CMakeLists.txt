@@ -89,7 +89,12 @@ if(SRC_FILES)
     if(BLUETOOTH_L2_TEST_BACKEND STREQUAL "SDK")
         # So the test can #include "BtAdapter.h" / "BtSdkAdapterImpl.h" to
         # inject the real bluetooth-sdk-backed adapter via BtAdapter::setImpl().
-        target_include_directories(${MODULE_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/Bluetooth)
+        # bluetoothSDKMock.h pulls in bluetooth/{Adapter,Device,Manager}.h from
+        # Tests/mocks (GMock-friendly stubs); every other bluetooth-sdk header
+        # falls back to the bundled bluetooth-sdk-stub.
+        target_include_directories(${MODULE_NAME} PRIVATE
+            ${CMAKE_SOURCE_DIR}/Bluetooth
+            ${CMAKE_SOURCE_DIR}/Bluetooth/bluetooth-sdk-stub/include)
     endif()
 
     install(TARGETS ${MODULE_NAME} DESTINATION lib)
