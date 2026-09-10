@@ -17,6 +17,7 @@ add_library(rdk_bluetooth SHARED
     stub/Advertisement.cpp
     stub/GattClient.cpp
     stub/GattServer.cpp
+    stub/Uuid.cpp
 )
 
 target_compile_options(rdk_bluetooth PRIVATE -Wall -Wextra -Werror -Wno-unused-parameter -Wno-error=type-limits)
