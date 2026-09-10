@@ -626,6 +626,14 @@ TEST_F(Bluetooth_L2Test, BluetoothStartStopScan)
     JsonObject result;
     uint32_t status = Core::ERROR_GENERAL;
 
+    /* startScan() checks adapter presence via GetNumberOfAdapters before starting discovery. */
+    EXPECT_CALL(*p_btmgrImplMock, BTRMGR_GetNumberOfAdapters(::testing::_))
+        .WillRepeatedly(::testing::Invoke(
+            [](unsigned char* pNum) -> BTRMGR_Result_t {
+                *pNum = 1;
+                return BTRMGR_RESULT_SUCCESS;
+            }));
+
     /* startDeviceDiscovery() uses hardcoded adapter index 0. */
     EXPECT_CALL(*p_btmgrImplMock, BTRMGR_StartDeviceDiscovery(0, ::testing::_))
         .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));

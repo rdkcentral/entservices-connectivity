@@ -106,8 +106,12 @@ protected:
                     return "";
                 }));
         WPEFramework::Plugin::BtAdapter::setImpl(p_btSdkMock);
+        // Mirror BtSdkAdapterImpl::respondToEvent: fails when the handle can't be resolved to a mac.
         ON_CALL(*p_btSdkMock, respondToEvent(::testing::_, ::testing::_, ::testing::_))
-            .WillByDefault(::testing::Return(true));
+            .WillByDefault(::testing::Invoke(
+                [this](const std::string& handleStr, const std::string&, bool) -> bool {
+                    return !p_btSdkMock->getMacForHandle(handleStr).empty();
+                }));
 
         ON_CALL(service, COMLink())
             .WillByDefault(::testing::Invoke(
