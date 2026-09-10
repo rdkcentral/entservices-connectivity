@@ -218,7 +218,15 @@ std::vector<IBtAdapter::BtDeviceInfo> BtMgrAdapterImpl::getConnectedDevices() co
 // ── Device operations ─────────────────────────────────────────────────────────
 
 bool BtMgrAdapterImpl::pairDevice(const std::string& handleStr) {
-    BTRMgrDeviceHandle h = static_cast<BTRMgrDeviceHandle>(std::stoll(handleStr));
+    TRMgrDeviceHandle h = 0;
+
+    try {
+        h = static_cast<BTRMgrDeviceHandle>(std::stoll(handleStr));
+    }
+    catch (...) {
+        return false;
+    }
+    
     return BTRMGR_PairDevice(0, h) == BTRMGR_RESULT_SUCCESS;
 }
 
