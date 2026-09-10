@@ -22,11 +22,33 @@
 // bluetooth::Manager delegates all calls through g_managerStub (set by the
 // test fixture).  bluetooth::Uuid provides the static ServiceClasses constants.
 // This file is compiled into WPEFrameworkBluetooth in place of the real SDK.
+//
+// Note: WPEFrameworkBluetooth does NOT link librdk_bluetooth in test builds
+// (see Bluetooth/CMakeLists.txt), so any bluetooth-sdk-stub symbol used by
+// plugin code (e.g. BtSdkAdapterImpl.cpp's bluetooth::Uuid(uint16_t) calls)
+// must be defined here too, or it is left undefined until runtime dlopen.
+
+#include <algorithm>
+#include <array>
 
 #include <bluetooth/Manager.h>
 #include <bluetooth/Uuid.h>
 
 namespace bluetooth {
+
+// Base UUID all 16-bit "well-known" Bluetooth UUIDs are derived from
+// (mirrors bluetooth-sdk-stub/stub/Uuid.cpp).
+namespace {
+constexpr std::array<uint8_t, 16> kBluetoothBaseUuidBytes = {
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00,
+    0x80, 0x00, 0x00, 0x80, 0x5F, 0x9B, 0x34, 0xFB};
+}  // namespace
+
+Uuid::Uuid(uint16_t id) {
+    std::copy(kBluetoothBaseUuidBytes.begin(), kBluetoothBaseUuidBytes.end(), m_uuid);
+    m_uuid[2] = static_cast<uint8_t>((id >> 8) & 0xff);
+    m_uuid[3] = static_cast<uint8_t>(id & 0xff);
+}
 
 // ── Manager stub ─────────────────────────────────────────────────────────────
 
