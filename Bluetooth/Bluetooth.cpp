@@ -440,6 +440,12 @@ namespace WPEFramework
 
         void Bluetooth::Deinitialize(PluginHost::IShell* service)
         {
+            // Revoke unconditionally: m_discoveryTimer is scheduled on the shared,
+            // process-wide static _discoveryTimer and outlives this instance otherwise,
+            // firing into a destroyed Bluetooth object.
+            stopDiscoveryTimer();
+            m_discoveryRunning = false;
+
             m_bluetoothDeviceManager.deinit();
 
             if (m_powerManagerPlugin) {
