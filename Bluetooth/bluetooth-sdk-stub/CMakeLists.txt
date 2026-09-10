@@ -20,7 +20,7 @@ add_library(rdk_bluetooth SHARED
     stub/Uuid.cpp
 )
 
-target_compile_options(rdk_bluetooth PRIVATE -Wall -Wextra -Werror -Wno-unused-parameter -Wno-error=type-limits)
+target_compile_options(rdk_bluetooth PRIVATE -Wall -Wextra -Werror -Wno-unused-parameter -Wno-error=type-limits -Wno-error=extra)
 
 # AppleClang-specific: suppress unused private field warnings in stub
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
