@@ -39,8 +39,6 @@ std::string BtSdkAdapterImpl::init(PluginHost::IShell* /* service */,
         return m_authBridge->onAuthRequest(type, std::move(device));
     };
 
-    // TODO(INV-2): Confirm at integration time whether Thunder supplies a D-Bus event
-    // loop that sdbus-c++ can attach to, or whether Manager needs a dedicated thread.
     try {
         m_manager = std::make_unique<bluetooth::Manager>(
             bluetooth::AuthorisationMode::ExternalAuthorisation,

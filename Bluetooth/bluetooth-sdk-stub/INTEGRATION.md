@@ -7,7 +7,7 @@ This document shows how to integrate the Bluetooth SDK stub into your Bluetooth 
 In your plugin's CMakeLists.txt:
 
 ```cmake
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.5)
 project(BluetoothPlugin)
 
 set(CMAKE_CXX_STANDARD 17)

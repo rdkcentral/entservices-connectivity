@@ -20,8 +20,6 @@
 #pragma once
 
 // BTMgr implementation of IBtAdapter.
-// Compiled only when BTMGR is found at CMake configure time (BTMgr fallback path).
-// No bluetooth-sdk headers here; no SDK types in this translation unit.
 
 #include <mutex>
 #include <string>

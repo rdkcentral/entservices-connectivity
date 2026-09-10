@@ -49,7 +49,6 @@ include/
     ├── Utils.h              # Utility functions
     ├── Appearance.h         # Bluetooth appearance codes
     ├── GattServices.h       # Standard GATT services
-    ├── Connection.h         # Connection management
     └── (all headers are dependency-free)
 
 stub/
