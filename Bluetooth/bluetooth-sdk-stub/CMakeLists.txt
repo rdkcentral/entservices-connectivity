@@ -46,9 +46,19 @@ set_target_properties(rdk_bluetooth PROPERTIES
     SOVERSION 1
 )
 
-# Installation target (optional)
-install(TARGETS rdk_bluetooth
-    LIBRARY DESTINATION lib
-    RUNTIME DESTINATION bin)
+# Installation target: only install when this CMakeLists.txt is configured as
+# its own top-level project (e.g. the standalone bluetooth-sdk-stub recipe).
+# When pulled in via add_subdirectory() from Bluetooth/CMakeLists.txt, the
+# stub is linked into the plugin at build time only and must NOT be installed
+# here — the target rootfs already gets librdk_bluetooth.so.1 from the
+# bluetooth-sdk-stub recipe (or the real SDK recipe), and installing our own
+# copy from entservices-connectivity as well causes bitbake's do_package to
+# see two shlib providers for the same SONAME ("Multiple shlib providers for
+# librdk_bluetooth.so.1: bluetooth-sdk-stub, entservices-connectivity").
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    install(TARGETS rdk_bluetooth
+        LIBRARY DESTINATION lib
+        RUNTIME DESTINATION bin)
 
-install(DIRECTORY include/bluetooth DESTINATION include)
+    install(DIRECTORY include/bluetooth DESTINATION include)
+endif()
