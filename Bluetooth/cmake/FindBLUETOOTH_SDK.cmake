@@ -27,7 +27,7 @@
 
 # The Bluetooth SDK is provided by the bundled bluetooth-sdk-stub at a fixed
 # location. This stub always exists in the source tree and is used unconditionally.
-set(BLUETOOTH_SDK_STUB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../bluetooth-sdk-stub")
+set(BLUETOOTH_SDK_STUB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/bluetooth-sdk-stub")
 
 if(NOT EXISTS "${BLUETOOTH_SDK_STUB_DIR}/include/bluetooth/Manager.h")
     message(FATAL_ERROR "BLUETOOTH_SDK: Could not find bundled stub at ${BLUETOOTH_SDK_STUB_DIR}")
