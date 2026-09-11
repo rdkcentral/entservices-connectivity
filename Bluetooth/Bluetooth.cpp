@@ -396,9 +396,20 @@ namespace WPEFramework
                 params["supportedProfile"] = profile;
                 sendNotify(C_STR(EVT_PLAYBACK_REQUEST), params);
             };
-            authCbs.isPaired = [this](const std::string& handleStr) -> bool {
+            authCbs.getConnectAutoResponse = [this](const std::string& handleStr, bool& accept) -> bool {
+#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+                if (!m_bluetoothDeviceManager.isMigrated()) {
+                    return false;
+                }
                 AutoConnectStatus status;
-                return Core::ERROR_NONE == m_bluetoothDeviceManager.getAutoConnect(handleStr, status);
+                if (Core::ERROR_NONE == m_bluetoothDeviceManager.getAutoConnect(handleStr, status)) {
+                    accept = (AUTO_CONNECT_STATUS_ENABLED == status);
+                    return true;
+                }
+                return false;
+#else
+                return false;
+#endif
             };
 
             message = m_btAdapter.init(service, std::move(evtCbs), std::move(authCbs));

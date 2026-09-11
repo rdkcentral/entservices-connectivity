@@ -89,7 +89,10 @@ struct BtAuthCallbacks {
                        const std::string& deviceType, uint32_t vendorId,
                        const std::string& mac, const std::string& supportedProfile)> onPlaybackRequest;
 
-    std::function<bool(const std::string& handleStr)> isPaired;
+    // Called for RECEIVED_EXTERNAL_CONNECT_REQUEST before escalating to the client. Returns true if the
+    // adapter should respond directly to BTRMGR (accept/reject set via the out-param) and suppress
+    // onConnectionRequest, mirroring the legacy auto-connect policy (only active once migration completed).
+    std::function<bool(const std::string& handleStr, bool& accept)> getConnectAutoResponse;
 };
 
 } // namespace Plugin

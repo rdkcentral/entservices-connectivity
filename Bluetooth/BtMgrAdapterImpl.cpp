@@ -447,12 +447,13 @@ void BtMgrAdapterImpl::onEvent(void* data, size_t /*len*/) {
                                         d.m_ui32DevClassBtSpec,
                                         static_cast<uint16_t>(d.m_ui16DevAppearanceBleSpec),
                                         d.m_isPairedDevice != 0,
-                                        d.m_isLastConnectedDevice != 0, "NEW");
+                                        d.m_isLastConnectedDevice != 0,
+                                        d.m_isDiscovered ? "DISCOVERED" : "LOST");
         break;
     }
 
     case BTRMGR_EVENT_DEVICE_FOUND: {
-        const auto& d = msg.m_discoveredDevice;
+        const auto& d = msg.m_pairedDevice;
         std::string handleStr = std::to_string(d.m_deviceHandle);
         const char* dt = BTRMGR_GetDeviceTypeAsString(d.m_deviceType);
         cacheHandleToMac(handleStr, d.m_deviceAddress);
@@ -465,7 +466,7 @@ void BtMgrAdapterImpl::onEvent(void* data, size_t /*len*/) {
     }
 
     case BTRMGR_EVENT_DEVICE_OUT_OF_RANGE: {
-        const auto& d = msg.m_discoveredDevice;
+        const auto& d = msg.m_pairedDevice;
         std::string handleStr = std::to_string(d.m_deviceHandle);
         const char* dt = BTRMGR_GetDeviceTypeAsString(d.m_deviceType);
         if (m_evtCbs.onDeviceLost)
@@ -526,8 +527,7 @@ void BtMgrAdapterImpl::onEvent(void* data, size_t /*len*/) {
         break;
     }
 
-    case BTRMGR_EVENT_DEVICE_PAIRING_FAILED:
-    case BTRMGR_EVENT_DEVICE_UNPAIRING_FAILED: {
+    case BTRMGR_EVENT_DEVICE_PAIRING_FAILED: {
         const auto& d = msg.m_discoveredDevice;
         std::string handleStr = std::to_string(d.m_deviceHandle);
         const char* dt = BTRMGR_GetDeviceTypeAsString(d.m_deviceType);
@@ -537,6 +537,19 @@ void BtMgrAdapterImpl::onEvent(void* data, size_t /*len*/) {
                                      d.m_ui32DevClassBtSpec,
                                      static_cast<uint16_t>(d.m_ui16DevAppearanceBleSpec),
                                      d.m_isPairedDevice != 0, d.m_isConnected != 0);
+        break;
+    }
+
+    case BTRMGR_EVENT_DEVICE_UNPAIRING_FAILED: {
+        const auto& d = msg.m_pairedDevice;
+        std::string handleStr = std::to_string(d.m_deviceHandle);
+        const char* dt = BTRMGR_GetDeviceTypeAsString(d.m_deviceType);
+        if (m_evtCbs.onRequestFailed)
+            m_evtCbs.onRequestFailed(STATUS_PAIRING_FAILED, handleStr, d.m_name,
+                                     dt ? dt : "UNKNOWN",
+                                     d.m_ui32DevClassBtSpec,
+                                     static_cast<uint16_t>(d.m_ui16DevAppearanceBleSpec),
+                                     true, d.m_isConnected != 0);
         break;
     }
 
@@ -582,18 +595,18 @@ void BtMgrAdapterImpl::onEvent(void* data, size_t /*len*/) {
         }
         cacheHandleToMac(handleStr, d.m_deviceAddress);
 
-        // Check if paired device should auto-accept (mirrors AuthBridge policy).
-        bool autoAccept = false;
-        if (m_authCbs.isPaired && m_authCbs.isPaired(handleStr)) {
-            autoAccept = true;
-        }
-        if (autoAccept) {
+        // Once migrated, respond directly (accept or reject) and suppress the client notification either way.
+        bool accept = false;
+        if (m_authCbs.getConnectAutoResponse && m_authCbs.getConnectAutoResponse(handleStr, accept)) {
             if (!respondToEvent(
                     d.m_deviceAddress,
                     static_cast<int>(BTRMGR_EVENT_RECEIVED_EXTERNAL_CONNECT_REQUEST),
-                    true)) {
-                LOGERR("Failed to auto-accept connection request for %s",
+                    accept)) {
+                LOGERR("Failed to auto-respond to connection request for %s",
                        d.m_deviceAddress);
+            }
+            if (accept) {
+                connectDevice(handleStr, dt ? dt : "UNKNOWN");
             }
             return;
         }
