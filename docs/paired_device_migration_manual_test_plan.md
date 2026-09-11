@@ -12,11 +12,23 @@
 
 Migration is **client-triggered**, not automatic. The plugin does **not** auto-migrate at init. The IUI/AS client is responsible for calling the appropriate API on first boot. Since no client (IUI/AS) currently calls these APIs, the tester simulates client behaviour directly via curl.
 
+### Code-alignment check (source of truth)
+
+This plan was reviewed against the current implementation in `Bluetooth/BluetoothDeviceManager.cpp` and the runtime checks are as follows:
+
+- `performMigration()` reads `migrationVersion` from PersistentStore first. If it is already present and equals `1`, it short-circuits with `migration already completed (migrationVersion=1 present), no sync needed` and sets `_isMigrated=true` without re-importing the AS file.
+- `performMigration()` only imports the AS file when `migrationVersion` is absent or not equal to `1`; the import is followed by BTRMGR enrichment, then `deviceInfo` is written to PersistentStore, then `migrationVersion` is written last.
+- `clearMigration()` deletes both `deviceInfo` and `migrationVersion`, clears the in-memory `_pairedDeviceCache`, and sets `_isMigrated=false`.
+- `init()` re-derives migration state from `migrationVersion` at startup; if the marker is absent, any stale `deviceInfo` is ignored and the cache remains empty until a successful migration occurs.
+- `setAutoConnect()`, `addDevice()`, `removeDevice()`, `setLastConnectTimeUtc()`, and `setLastVolumeSetting()` all skip persistence writes while `_isMigrated` is false; the AS filesystem sync is also gated by `_isMigrated`.
+
+These checks are the authoritative behavior for this manual test plan and supersede any older or inferred migration expectations.
+
 ### API Summary
 
 | API | Method | Description |
 |-----|--------|-------------|
-| `performMigration` | `org.rdk.Bluetooth.1.performMigration` | **First call:** imports AS file → RDK PersistentStore, writes `migrationVersion=1`. **Subsequent calls:** no-op (migrationVersion already present). |
+| `performMigration` | `org.rdk.Bluetooth.1.performMigration` | **First call:** imports AS file → RDK PersistentStore, writes `migrationVersion=1`. **Subsequent calls:** no-op when `migrationVersion` already equals `1`. |
 | `clearMigration` | `org.rdk.Bluetooth.1.clearMigration` | Deletes `deviceInfo` and `migrationVersion` from RDK PersistentStore, clears the plugin's paired device cache, and resets migration state. AS file is **not** touched. |
 
 ### Migration State
@@ -28,6 +40,22 @@ The plugin tracks whether migration has been performed. Migration state becomes 
 - Pairing and unpairing (`addDevice`/`removeDevice`) update the in-memory device cache but do **not** write to PersistentStore when migration has not been performed.
 - The AS file (filesystem persistence) will **not** be updated by any operation external to IUI/AS (e.g. CURL'd plug-in requests) — pairing, unpairing, or `setAutoConnect` — when migration has not been performed.
 - `getAutoConnect` has a migration guard, but instead of rejecting, it returns `autoconnect: false` (success) for any deviceID when migration has not been performed — it bypasses the cache lookup entirely and returns disabled without error.
+
+### Exact code-derived log strings
+
+The implementation emits these runtime markers and the test plan should treat them as the canonical validation strings:
+
+- `migration_attempted`
+- `migration already completed (migrationVersion=1 present), no sync needed`
+- `initial migration succeeded`
+- `PersistentStore cleared and migration state reset`
+- `setAutoConnect rejected: migration has not been performed yet for deviceID=<ID>`
+- `migration not complete, returning disabled for deviceID=<ID>`
+- `migration not complete, skipping persistence write for deviceID=<ID>`
+- `Filesystem persistence sync succeeded: Persistence payload updated from cache, cache_size=N`
+- `imported cache is empty, skipping BTRMGR enrichment`
+
+A missing filesystem-sync success message is also a valid negative check for the pre-migration or rollback scenarios, because the implementation only calls `writeFilesystemPersistenceFromCache()` when `_isMigrated` is true.
 
 ### Curl Reference Commands
 
