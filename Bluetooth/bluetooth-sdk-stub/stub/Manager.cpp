@@ -67,8 +67,4 @@ Status Manager::getDefaultAdapter(std::shared_ptr<bluetooth::Adapter>& adapter) 
 }
 std::vector<std::shared_ptr<bluetooth::Adapter>> Manager::getAdapters() { return m_impl->getAdapters(); }
 
-#ifdef AUDIO_SUPPORT
-WpNode* Manager::findWirePlumberAudioNode(const std::string&) { return nullptr; }
-#endif
-
 }  // namespace bluetooth

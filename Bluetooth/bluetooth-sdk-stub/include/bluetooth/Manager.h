@@ -50,19 +50,6 @@ enum class LogLocation {
   LogRedirect  /**< Log using a custom redirect mechanism. */
 };
 
-#ifdef AUDIO_SUPPORT
-struct _WpCore;
-typedef struct _WpCore WpCore;
-struct _WpNode;
-typedef struct _WpNode WpNode;
-struct _WpObjectManager;
-typedef struct _WpObjectManager WpObjectManager;
-struct _GMainContext;
-typedef struct _GMainContext GMainContext;
-struct _GMainLoop;
-typedef struct _GMainLoop GMainLoop;
-#endif
-
 namespace bluetooth {
 
 class Adapter;

@@ -91,8 +91,4 @@ void Adapter::addDevices(const std::map<std::string, std::vector<std::string>>& 
 void Adapter::newDeviceFound(const std::string& devicePath) { m_impl->newDeviceFound(devicePath); }
 void Adapter::deviceRemoved(const std::string& devicePath) { m_impl->deviceRemoved(devicePath); }
 
-#ifdef AUDIO_SUPPORT
-WpNode* Adapter::findWirePlumberAudioNode(const std::string&) { return nullptr; }
-#endif
-
 }  // namespace bluetooth

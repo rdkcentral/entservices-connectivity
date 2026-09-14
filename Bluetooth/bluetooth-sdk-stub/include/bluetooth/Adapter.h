@@ -206,11 +206,6 @@ class Adapter : public EventEmitter<AdapterEvent, AdapterEventData>,
    */
   std::shared_ptr<gattServer::Server> getGattServerMgr(int connections = -1);
 
-#ifdef AUDIO_SUPPORT
-  // Returns a referenced WpNode (caller must g_object_unref), or nullptr if not found/ready
-  WpNode* findWirePlumberAudioNode(const std::string& deviceMacAddress);
-#endif
-
  private:
   friend class bluetooth::Manager;             ///< Manager class needs access to private members
   friend class bluetooth::gattServer::Server;  ///< GATT Server needs access to private members
@@ -256,16 +251,6 @@ class Adapter : public EventEmitter<AdapterEvent, AdapterEventData>,
    */
   void deviceRemoved(const std::string& devicePath);
 
-#ifdef AUDIO_SUPPORT
-  struct AudioManagerState {
-    explicit AudioManagerState(Manager* manager) : manager(manager) {}
-
-    std::mutex mutex;
-    Manager* manager;
-  };
-
-  std::shared_ptr<AudioManagerState> m_audioManagerState;
-#endif
 };
 
 }  // namespace bluetooth
