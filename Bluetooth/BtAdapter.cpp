@@ -31,7 +31,7 @@
 namespace {
 
 bool useSdkBackend() {
-    static const char* propFile = "/etc/device-vendor.properties";
+    static const char* propFile = "/etc/device.properties";
     std::ifstream f(propFile);
     if (f.is_open())
     {

@@ -1,7 +1,7 @@
 > **Superseded (2026-09-09):** the dlopen/marker-file/private-module design below was
 > abandoned during implementation in favor of build-time static linking against an
 > in-tree `bluetooth-sdk-stub` (SDK-signature-compatible) plus a
-> `/etc/device-vendor.properties` `BLUETOOTH_SDK_ENABLED` runtime flag — see
+> `/etc/device.properties` `BLUETOOTH_SDK_ENABLED` runtime flag — see
 > `Bluetooth/CMakeLists.txt`, `Bluetooth/cmake/FindBLUETOOTH_SDK.cmake`, and
 > `Bluetooth/BtAdapter.cpp` for the current behavior. Kept for historical context only.
 
