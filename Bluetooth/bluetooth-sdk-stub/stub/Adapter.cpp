@@ -38,8 +38,17 @@ class Adapter::Impl {
 
   Status startScan(ScanFilter) { return unavailable(); }
   Status stopScan() { return unavailable(); }
-  std::vector<std::shared_ptr<Device>> getDevices() { return {}; }
-  std::vector<std::shared_ptr<Device>> getDevices(DeviceState) { return {}; }
+
+  std::vector<std::shared_ptr<Device>> getDevices() {
+    printf("*** _DEBUG: bluetooth-sdk-stub::Adapter::getDevices(): entry\n");
+    return {};
+  }
+
+  std::vector<std::shared_ptr<Device>> getDevices(DeviceState) {
+    printf("*** _DEBUG: bluetooth-sdk-stub::Adapter::getDevices(DeviceState): entry\n");
+    return {};
+  }
+
   Status setName(const std::string&) { return unavailable(); }
   std::shared_ptr<Device> getDevice(const std::string&) { return nullptr; }
   void pruneDiscoveredDevices(const std::shared_ptr<Device>&, unsigned int) {}

@@ -163,6 +163,7 @@ std::vector<IBtAdapter::BtDeviceInfo> BtSdkAdapterImpl::getPairedDevices() const
     return result;
 }
 std::vector<IBtAdapter::BtDeviceInfo> BtSdkAdapterImpl::getConnectedDevices() const {
+    printf("*** _DEBUG: BtSdkAdapterImpl::getConnectedDevices(): entry\n");
     std::vector<BtDeviceInfo> result;
     if (!m_adapter) return result;
     for (auto& d : m_adapter->getDevices(bluetooth::DeviceState::Connected))

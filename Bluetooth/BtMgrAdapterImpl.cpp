@@ -201,6 +201,7 @@ std::vector<IBtAdapter::BtDeviceInfo> BtMgrAdapterImpl::getPairedDevices() const
 }
 
 std::vector<IBtAdapter::BtDeviceInfo> BtMgrAdapterImpl::getConnectedDevices() const {
+    printf("*** _DEBUG: BtMgrAdapterImpl::getConnectedDevices(): entry\n");
     std::vector<BtDeviceInfo> result;
     BTRMGR_ConnectedDevicesList_t list;
     memset(&list, 0, sizeof(list));
