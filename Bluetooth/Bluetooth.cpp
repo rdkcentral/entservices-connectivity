@@ -1541,11 +1541,29 @@ namespace WPEFramework
             if (parameters.HasLabel("deviceID"))
             {
                 getStringParameter("deviceID", deviceIDStr);
-                deviceID = stoll(deviceIDStr);
-                deviceIDDefined = true;
-            }
-
-            if (parameters.HasLabel("deviceType"))
+				size_t pos = 0;
+				try {
+					deviceID = stoll(deviceIDStr, &pos);
+					if (pos != deviceIDStr.length()) 
+					{
+						LOGERR("Invalid deviceID: %s", deviceIDStr.c_str());
+						successFlag = false;
+						returnResponse(successFlag);
+					}
+					deviceIDDefined = true;
+				}
+				catch (const std::invalid_argument&) {
+					LOGERR("Invalid deviceID: %s", deviceIDStr.c_str());
+					successFlag = false;
+					returnResponse(successFlag);
+				}
+				catch (const std::out_of_range&) {
+					LOGERR("deviceID out of range: %s", deviceIDStr.c_str());
+					successFlag = false;
+					returnResponse(successFlag);
+				}
+			}
+			if (parameters.HasLabel("deviceType"))
             {
                 getStringParameter("deviceType", deviceType);
                 deviceTypeDefined = true;
@@ -1580,9 +1598,28 @@ namespace WPEFramework
             if (parameters.HasLabel("deviceID"))
             {
                 getStringParameter("deviceID", deviceIDStr);
-                deviceID = stoll(deviceIDStr);
-                deviceIDDefined = true;
-            }
+				size_t pos = 0;
+				try {
+					deviceID = stoll(deviceIDStr, &pos);
+					if (pos != deviceIDStr.length()) 
+					{
+						LOGERR("Invalid deviceID: %s", deviceIDStr.c_str());
+						successFlag = false;
+						returnResponse(successFlag);
+					}
+					deviceIDDefined = true;
+				}
+				catch (const std::invalid_argument&) {
+					LOGERR("Invalid deviceID: %s", deviceIDStr.c_str());
+					successFlag = false;
+					returnResponse(successFlag);
+				}
+				catch (const std::out_of_range&) {
+					LOGERR("deviceID out of range: %s", deviceIDStr.c_str());
+					successFlag = false;
+					returnResponse(successFlag);
+				}
+			}
 
             if (parameters.HasLabel("deviceType"))
             {
@@ -1619,9 +1656,28 @@ namespace WPEFramework
             if (parameters.HasLabel("deviceID"))
             {
                 getStringParameter("deviceID", deviceIDStr);
-                deviceID = stoll(deviceIDStr);
-                deviceIDDefined = true;
-            }
+				size_t pos = 0;
+				try {
+					deviceID = stoll(deviceIDStr, &pos);
+					if (pos != deviceIDStr.length()) 
+					{
+						LOGERR("Invalid deviceID: %s", deviceIDStr.c_str());
+						successFlag = false;
+						returnResponse(successFlag);
+					}
+					deviceIDDefined = true;
+				}
+				catch (const std::invalid_argument&) {
+					LOGERR("Invalid deviceID: %s", deviceIDStr.c_str());
+					successFlag = false;
+					returnResponse(successFlag);
+				}
+				catch (const std::out_of_range&) {
+					LOGERR("deviceID out of range: %s", deviceIDStr.c_str());
+					successFlag = false;
+					returnResponse(successFlag);
+				}
+			}				
 
             if (parameters.HasLabel("audioStreamName"))
             {
@@ -1650,9 +1706,28 @@ namespace WPEFramework
 
             if (parameters.HasLabel("deviceID")) {
                 getStringParameter("deviceID", deviceIDStr);
-                deviceID = stoll(deviceIDStr);
-                deviceIDDefined = true;
-            }
+				size_t pos = 0;
+				try {
+					deviceID = stoll(deviceIDStr, &pos);
+					if (pos != deviceIDStr.length()) 
+					{
+						LOGERR("Invalid deviceID: %s", deviceIDStr.c_str());
+						successFlag = false;
+						returnResponse(successFlag);
+					}
+					deviceIDDefined = true;
+				}
+				catch (const std::invalid_argument&) {
+					LOGERR("Invalid deviceID: %s", deviceIDStr.c_str());
+					successFlag = false;
+					returnResponse(successFlag);
+				}
+				catch (const std::out_of_range&) {
+					LOGERR("deviceID out of range: %s", deviceIDStr.c_str());
+					successFlag = false;
+					returnResponse(successFlag);
+				}
+			}
 
             if(deviceIDDefined)
             {
@@ -1676,9 +1751,28 @@ namespace WPEFramework
 
             if (parameters.HasLabel("deviceID")) {
                 getStringParameter("deviceID", deviceIDStr);
-                deviceID = stoll(deviceIDStr);
-                deviceIDDefined = true;
-            }
+				size_t pos = 0;
+				try {
+					deviceID = stoll(deviceIDStr, &pos);
+					if (pos != deviceIDStr.length()) 
+					{
+						LOGERR("Invalid deviceID: %s", deviceIDStr.c_str());
+						successFlag = false;
+						returnResponse(successFlag);
+					}
+					deviceIDDefined = true;
+				}
+				catch (const std::invalid_argument&) {
+					LOGERR("Invalid deviceID: %s", deviceIDStr.c_str());
+					successFlag = false;
+					returnResponse(successFlag);
+				}
+				catch (const std::out_of_range&) {
+					LOGERR("deviceID out of range: %s", deviceIDStr.c_str());
+					successFlag = false;
+					returnResponse(successFlag);
+				}
+			}
 
             if(deviceIDDefined)
             {
@@ -1738,9 +1832,28 @@ namespace WPEFramework
             if (parameters.HasLabel("deviceID"))
             {
                 getStringParameter("deviceID", deviceIDStr);
-                deviceID = stoll(deviceIDStr);
-                deviceIDDefined = true;
-            }
+				size_t pos = 0;
+				try {
+					deviceID = stoll(deviceIDStr, &pos);
+					if (pos != deviceIDStr.length()) 
+					{
+						LOGERR("Invalid deviceID: %s", deviceIDStr.c_str());
+						successFlag = false;
+						returnResponse(successFlag);
+					}
+					deviceIDDefined = true;
+				}
+				catch (const std::invalid_argument&) {
+					LOGERR("Invalid deviceID: %s", deviceIDStr.c_str());
+					successFlag = false;
+					returnResponse(successFlag);
+				}
+				catch (const std::out_of_range&) {
+					LOGERR("deviceID out of range: %s", deviceIDStr.c_str());
+					successFlag = false;
+					returnResponse(successFlag);
+				}
+			}
 
             if (parameters.HasLabel("command"))
             {
@@ -1773,9 +1886,28 @@ namespace WPEFramework
             if (parameters.HasLabel("deviceID"))
             {
                 getStringParameter("deviceID", deviceIDStr);
-                deviceID = stoll(deviceIDStr);
-                deviceIDDefined = true;
-            }
+				size_t pos = 0;
+				try {
+					deviceID = stoll(deviceIDStr, &pos);
+					if (pos != deviceIDStr.length()) 
+					{
+						LOGERR("Invalid deviceID: %s", deviceIDStr.c_str());
+						successFlag = false;
+						returnResponse(successFlag);
+					}
+					deviceIDDefined = true;
+				}
+				catch (const std::invalid_argument&) {
+					LOGERR("Invalid deviceID: %s", deviceIDStr.c_str());
+					successFlag = false;
+					returnResponse(successFlag);
+				}
+				catch (const std::out_of_range&) {
+					LOGERR("deviceID out of range: %s", deviceIDStr.c_str());
+					successFlag = false;
+					returnResponse(successFlag);
+				}
+			}
             if (parameters.HasLabel("deviceType"))
             {
                 getStringParameter("deviceType", deviceTypeStr);
@@ -1813,9 +1945,28 @@ namespace WPEFramework
             if (parameters.HasLabel("deviceID"))
             {
                 getStringParameter("deviceID", deviceIDStr);
-                deviceID = stoll(deviceIDStr);
-                deviceIDDefined = true;
-            }
+				size_t pos = 0;
+				try {
+					deviceID = stoll(deviceIDStr, &pos);
+					if (pos != deviceIDStr.length()) 
+					{
+						LOGERR("Invalid deviceID: %s", deviceIDStr.c_str());
+						successFlag = false;
+						returnResponse(successFlag);
+					}
+					deviceIDDefined = true;
+				}
+				catch (const std::invalid_argument&) {
+					LOGERR("Invalid deviceID: %s", deviceIDStr.c_str());
+					successFlag = false;
+					returnResponse(successFlag);
+				}
+				catch (const std::out_of_range&) {
+					LOGERR("deviceID out of range: %s", deviceIDStr.c_str());
+					successFlag = false;
+					returnResponse(successFlag);
+				}
+			}
             if (parameters.HasLabel("deviceType"))
             {
                 getStringParameter("deviceType", deviceTypeStr);
@@ -1863,9 +2014,28 @@ namespace WPEFramework
             if (parameters.HasLabel("deviceID"))
             {
                 getStringParameter("deviceID", deviceIDStr);
-                deviceID = stoll(deviceIDStr);
-                deviceIDDefined = true;
-            }
+				size_t pos = 0;
+				try {
+					deviceID = stoll(deviceIDStr, &pos);
+					if (pos != deviceIDStr.length()) 
+					{
+						LOGERR("Invalid deviceID: %s", deviceIDStr.c_str());
+						successFlag = false;
+						returnResponse(successFlag);
+					}
+					deviceIDDefined = true;
+				}
+				catch (const std::invalid_argument&) {
+					LOGERR("Invalid deviceID: %s", deviceIDStr.c_str());
+					successFlag = false;
+					returnResponse(successFlag);
+				}
+				catch (const std::out_of_range&) {
+					LOGERR("deviceID out of range: %s", deviceIDStr.c_str());
+					successFlag = false;
+					returnResponse(successFlag);
+				}
+			}
 
             if (parameters.HasLabel("eventType"))
             {
@@ -1900,9 +2070,28 @@ namespace WPEFramework
             if (parameters.HasLabel("deviceID"))
             {
                 getStringParameter("deviceID", deviceIDStr);
-                deviceID = stoll(deviceIDStr);
-                response["deviceInfo"] = getDeviceInfo(deviceID);
-                successFlag = true;
+                size_t pos = 0;
+				try {
+					deviceID = stoll(deviceIDStr, &pos);
+					if (pos != deviceIDStr.length())
+					{
+						LOGERR("Invalid deviceID: %s", deviceIDStr.c_str());
+						successFlag = false;
+						returnResponse(successFlag);
+					}
+					response["deviceInfo"] = getDeviceInfo(deviceID);
+					successFlag = true;
+				}
+				catch (const std::invalid_argument&) {
+					LOGERR("Invalid deviceID: %s", deviceIDStr.c_str());
+					successFlag = false;
+					returnResponse(successFlag);
+				}
+				catch (const std::out_of_range&) {
+					LOGERR("deviceID out of range: %s", deviceIDStr.c_str());
+					successFlag = false;
+					returnResponse(successFlag);
+				}
             } else {
                 LOGERR("Please specify parameters. Example: \"params\": {\"deviceID\": \"271731989589742\"}");
                 successFlag = false;
@@ -1919,9 +2108,28 @@ namespace WPEFramework
             if (parameters.HasLabel("deviceID"))
             {
                 getStringParameter("deviceID", deviceIDStr);
-                deviceID = stoll(deviceIDStr);
-                response["trackInfo"] = getMediaTrackInfo(deviceID);
-                successFlag = true;
+				size_t pos = 0;
+				try {
+					deviceID = stoll(deviceIDStr, &pos);
+					if (pos != deviceIDStr.length())
+					{
+						LOGERR("Invalid deviceID: %s", deviceIDStr.c_str());
+						successFlag = false;
+						returnResponse(successFlag);
+					}
+				}
+				catch (const std::invalid_argument&) {
+					LOGERR("Invalid deviceID: %s", deviceIDStr.c_str());
+					successFlag = false;
+					returnResponse(successFlag);
+				}
+				catch (const std::out_of_range&) {
+					LOGERR("deviceID out of range: %s", deviceIDStr.c_str());
+					successFlag = false;
+					returnResponse(successFlag);
+				}
+				response["trackInfo"] = getMediaTrackInfo(deviceID);
+				successFlag = true;
             } else {
                 LOGERR("Please specify parameters. Example: \"params\": {\"deviceID\": \"271731989589742\"}");
                 successFlag = false;
