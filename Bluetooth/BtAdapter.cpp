@@ -99,10 +99,28 @@ IBtAdapter& BtAdapter::getImpl() {
 std::string BtAdapter::init(PluginHost::IShell* service,
                             BtEventCallbacks&& evtCbs,
                             BtAuthCallbacks&& authCbs) {
-    const std::string error = ensureImpl();
-    if (!error.empty()) {
-        return error;
+    if (impl) {
+        // setImpl() test injection already fixed the backend; skip probing.
+        return impl->init(service, std::move(evtCbs), std::move(authCbs));
     }
+
+    if (useSdkBackend()) {
+        // librdk_bluetooth.so.1 may resolve to the real vendor SDK or to the
+        // always-unavailable bundled stub, depending on what this product's
+        // build/image actually installed. getDefaultAdapter() succeeding is
+        // the only reliable, runtime signal that the real SDK is behind it;
+        // the stub deliberately fails it so callers fall back correctly.
+        std::string sdkError = g_btSdkAdapterImpl.init(service, BtEventCallbacks(evtCbs), BtAuthCallbacks(authCbs));
+        if (sdkError.empty()) {
+            impl = &g_btSdkAdapterImpl;
+            return {};
+        }
+        // Release whatever the failed init partially constructed (e.g. the
+        // Manager/D-Bus connection) before falling back to BTMgr.
+        g_btSdkAdapterImpl.deinit();
+    }
+
+    impl = &g_btMgrAdapterImpl;
     return impl->init(service, std::move(evtCbs), std::move(authCbs));
 }
 
