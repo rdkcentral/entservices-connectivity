@@ -1982,29 +1982,11 @@ namespace WPEFramework
             if (parameters.HasLabel("deviceID"))
             {
                 getStringParameter("deviceID", deviceIDStr);
-uint32_t Bluetooth::getDeviceInfoWrapper(const JsonObject& parameters, JsonObject& response)
-        {
-            LOGINFOMETHOD();
-            string deviceIDStr;
-            long long int deviceID = 0;
-            bool successFlag;
-            if (parameters.HasLabel("deviceID"))
-            {
-                getStringParameter("deviceID", deviceIDStr);
 				if (!parseDeviceID(deviceIDStr, deviceID))
 				{
 					successFlag = false;
 					returnResponse(successFlag);
 				}
-                response["deviceInfo"] = getDeviceInfo(deviceID);
-                successFlag = true;
-            } else {
-                LOGERR("Please specify parameters. Example: \"params\": {\"deviceID\": \"271731989589742\"}");
-                successFlag = false;
-            }
-            returnResponse(successFlag);
-        }
-
                 response["trackInfo"] = getMediaTrackInfo(deviceID);
                 successFlag = true;
             } else {
