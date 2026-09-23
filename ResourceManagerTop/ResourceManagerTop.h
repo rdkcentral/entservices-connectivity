@@ -70,6 +70,9 @@ namespace WPEFramework {
                 virtual string Information() const override;
 
                 // Exchange::IResourceManagerTop
+                // Unhide PluginHost::JSONRPC::Register/Unregister, which the overrides below would otherwise shadow.
+                using PluginHost::JSONRPC::Register;
+                using PluginHost::JSONRPC::Unregister;
                 Core::hresult Register(Exchange::IResourceManagerTop::IMultiplicationResultNotification* notification) override;
                 Core::hresult Unregister(const Exchange::IResourceManagerTop::IMultiplicationResultNotification* notification) override;
 
