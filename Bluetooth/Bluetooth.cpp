@@ -1528,6 +1528,29 @@ namespace WPEFramework
             returnResponse(true);
         }
 
+        bool Bluetooth::parseDeviceID(const std::string& deviceIDStr,long long int& deviceID)
+        {
+			size_t pos = 0;
+			try
+				{
+					deviceID = std::stoll(deviceIDStr, &pos);
+					if (pos != deviceIDStr.length())
+					{
+						LOGERR("Invalid deviceID: %s", deviceIDStr.c_str());
+						return false;
+					}
+					return true;
+				}
+			catch (const std::invalid_argument&) {
+				LOGERR("Invalid deviceID: %s", deviceIDStr.c_str());
+					return false;
+			}
+			catch (const std::out_of_range&) {
+				LOGERR("deviceID out of range: %s", deviceIDStr.c_str());
+				return false;
+			}
+		}
+
         uint32_t Bluetooth::connectWrapper(const JsonObject& parameters, JsonObject& response)
         {
             LOGINFOMETHOD();
@@ -1541,9 +1564,13 @@ namespace WPEFramework
             if (parameters.HasLabel("deviceID"))
             {
                 getStringParameter("deviceID", deviceIDStr);
-                deviceID = stoll(deviceIDStr);
-                deviceIDDefined = true;
-            }
+				if (!parseDeviceID(deviceIDStr, deviceID))
+				{
+					successFlag = false;
+					returnResponse(successFlag);
+				}
+				deviceIDDefined = true;
+			}
 
             if (parameters.HasLabel("deviceType"))
             {
@@ -1580,7 +1607,11 @@ namespace WPEFramework
             if (parameters.HasLabel("deviceID"))
             {
                 getStringParameter("deviceID", deviceIDStr);
-                deviceID = stoll(deviceIDStr);
+				if (!parseDeviceID(deviceIDStr, deviceID))
+				{
+					successFlag = false;
+					returnResponse(successFlag);
+				}
                 deviceIDDefined = true;
             }
 
@@ -1619,7 +1650,11 @@ namespace WPEFramework
             if (parameters.HasLabel("deviceID"))
             {
                 getStringParameter("deviceID", deviceIDStr);
-                deviceID = stoll(deviceIDStr);
+				if (!parseDeviceID(deviceIDStr, deviceID))
+				{
+					successFlag = false;
+					returnResponse(successFlag);
+				}
                 deviceIDDefined = true;
             }
 
@@ -1650,7 +1685,11 @@ namespace WPEFramework
 
             if (parameters.HasLabel("deviceID")) {
                 getStringParameter("deviceID", deviceIDStr);
-                deviceID = stoll(deviceIDStr);
+				if (!parseDeviceID(deviceIDStr, deviceID))
+				{
+					successFlag = false;
+					returnResponse(successFlag);
+				}
                 deviceIDDefined = true;
             }
 
@@ -1676,7 +1715,11 @@ namespace WPEFramework
 
             if (parameters.HasLabel("deviceID")) {
                 getStringParameter("deviceID", deviceIDStr);
-                deviceID = stoll(deviceIDStr);
+				if (!parseDeviceID(deviceIDStr, deviceID))
+				{
+					successFlag = false;
+					returnResponse(successFlag);
+				}
                 deviceIDDefined = true;
             }
 
@@ -1738,7 +1781,11 @@ namespace WPEFramework
             if (parameters.HasLabel("deviceID"))
             {
                 getStringParameter("deviceID", deviceIDStr);
-                deviceID = stoll(deviceIDStr);
+				if (!parseDeviceID(deviceIDStr, deviceID))
+				{
+					successFlag = false;
+					returnResponse(successFlag);
+				}
                 deviceIDDefined = true;
             }
 
@@ -1773,7 +1820,11 @@ namespace WPEFramework
             if (parameters.HasLabel("deviceID"))
             {
                 getStringParameter("deviceID", deviceIDStr);
-                deviceID = stoll(deviceIDStr);
+				if (!parseDeviceID(deviceIDStr, deviceID))
+				{
+					successFlag = false;
+					returnResponse(successFlag);
+				}
                 deviceIDDefined = true;
             }
             if (parameters.HasLabel("deviceType"))
@@ -1813,7 +1864,11 @@ namespace WPEFramework
             if (parameters.HasLabel("deviceID"))
             {
                 getStringParameter("deviceID", deviceIDStr);
-                deviceID = stoll(deviceIDStr);
+				if (!parseDeviceID(deviceIDStr, deviceID))
+				{
+					successFlag = false;
+					returnResponse(successFlag);
+				}
                 deviceIDDefined = true;
             }
             if (parameters.HasLabel("deviceType"))
@@ -1863,7 +1918,11 @@ namespace WPEFramework
             if (parameters.HasLabel("deviceID"))
             {
                 getStringParameter("deviceID", deviceIDStr);
-                deviceID = stoll(deviceIDStr);
+				if (!parseDeviceID(deviceIDStr, deviceID))
+				{
+					successFlag = false;
+					returnResponse(successFlag);
+				}
                 deviceIDDefined = true;
             }
 
@@ -1900,7 +1959,11 @@ namespace WPEFramework
             if (parameters.HasLabel("deviceID"))
             {
                 getStringParameter("deviceID", deviceIDStr);
-                deviceID = stoll(deviceIDStr);
+				if (!parseDeviceID(deviceIDStr, deviceID))
+				{
+					successFlag = false;
+					returnResponse(successFlag);
+				}
                 response["deviceInfo"] = getDeviceInfo(deviceID);
                 successFlag = true;
             } else {
@@ -1919,7 +1982,29 @@ namespace WPEFramework
             if (parameters.HasLabel("deviceID"))
             {
                 getStringParameter("deviceID", deviceIDStr);
-                deviceID = stoll(deviceIDStr);
+uint32_t Bluetooth::getDeviceInfoWrapper(const JsonObject& parameters, JsonObject& response)
+        {
+            LOGINFOMETHOD();
+            string deviceIDStr;
+            long long int deviceID = 0;
+            bool successFlag;
+            if (parameters.HasLabel("deviceID"))
+            {
+                getStringParameter("deviceID", deviceIDStr);
+				if (!parseDeviceID(deviceIDStr, deviceID))
+				{
+					successFlag = false;
+					returnResponse(successFlag);
+				}
+                response["deviceInfo"] = getDeviceInfo(deviceID);
+                successFlag = true;
+            } else {
+                LOGERR("Please specify parameters. Example: \"params\": {\"deviceID\": \"271731989589742\"}");
+                successFlag = false;
+            }
+            returnResponse(successFlag);
+        }
+
                 response["trackInfo"] = getMediaTrackInfo(deviceID);
                 successFlag = true;
             } else {
