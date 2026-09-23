@@ -34,10 +34,10 @@ std::string BtSdkAdapterImpl::init(PluginHost::IShell* /* service */,
     m_eventBridge = std::make_unique<EventBridge>(m_registry, std::move(eventCallbacks));
     m_authBridge  = std::make_unique<AuthBridge>(m_registry, std::move(authCallbacks));
 
-    auto authCb = [this](bluetooth::AuthorisationType type,
-                         std::shared_ptr<bluetooth::Device> device) -> bool {
-        return m_authBridge->onAuthRequest(type, std::move(device));
-    };
+    // auto authCb = [this](bluetooth::AuthorisationType type,
+    //                      std::shared_ptr<bluetooth::Device> device) -> bool {
+    //     return m_authBridge->onAuthRequest(type, std::move(device));
+    // };
 
     // An empty LogRedirect would leave the SDK's Logger singleton holding a null
     // callback set, which it dereferences unconditionally on the very first log
