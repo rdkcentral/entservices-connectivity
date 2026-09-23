@@ -122,6 +122,8 @@ TEST_F(ResourceManagerTopTest, RegisteredMethods)
     EXPECT_EQ(Core::ERROR_NONE, handler.Exists(_T("getState")));
     EXPECT_EQ(Core::ERROR_NONE, handler.Exists(_T("killProcess")));
     EXPECT_EQ(Core::ERROR_NONE, handler.Exists(_T("killProcessViaResourceMonitor")));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Exists(_T("addNumbers")));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Exists(_T("multiplyNumbers")));
 
     if (Core::ERROR_NONE == status)
     {

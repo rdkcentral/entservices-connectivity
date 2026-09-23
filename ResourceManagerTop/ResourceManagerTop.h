@@ -24,10 +24,12 @@
 #include "UtilsLogging.h"
 #include "UtilsJsonRpc.h"
 #include <interfaces/IResourceMonitor.h>
+#include <interfaces/IResourceManagerTop.h>
+#include <list>
 
 namespace WPEFramework {
     namespace Plugin {
-        class ResourceManagerTop : public PluginHost::IPlugin, public PluginHost::JSONRPC {
+        class ResourceManagerTop : public PluginHost::IPlugin, public PluginHost::JSONRPC, public Exchange::IResourceManagerTop {
             private:
                 // To Prevent Copy
                 ResourceManagerTop(const ResourceManagerTop&) = delete;
@@ -39,11 +41,14 @@ namespace WPEFramework {
                 uint32_t killProcess(const JsonObject& parameters, JsonObject& response);
                 uint32_t killProcessViaResourceMonitor(const JsonObject& parameters, JsonObject& response);
                 uint32_t getState(const JsonObject& parameters, JsonObject& response);
+                uint32_t addNumbers(const JsonObject& parameters, JsonObject& response);
+                uint32_t multiplyNumbers(const JsonObject& parameters, JsonObject& response);
             private:
                 //Internal Logic
                 string exec_top();
                 bool kill_process(const int& pid);
                 bool kill_process_by_name(const string& processName);
+                void NotifyMultiplicationResult(const int64_t result);
             public:
                 //Service Name
                 static const string SERVICE_NAME;
@@ -54,6 +59,8 @@ namespace WPEFramework {
                 static const string METHOD_GET_STATE;
                 static const string METHOD_KILL_PROCESS;
                 static const string METHOD_KILL_PROCESS_VIA_RESOURCE_MONITOR;
+                static const string METHOD_ADD_NUMBERS;
+                static const string METHOD_MULTIPLY_NUMBERS;
 
                 ResourceManagerTop();
                 virtual ~ResourceManagerTop();
@@ -62,13 +69,20 @@ namespace WPEFramework {
                 virtual void Deinitialize(PluginHost::IShell* service) override;
                 virtual string Information() const override;
 
+                // Exchange::IResourceManagerTop
+                Core::hresult Register(Exchange::IResourceManagerTop::IMultiplicationResultNotification* notification) override;
+                Core::hresult Unregister(const Exchange::IResourceManagerTop::IMultiplicationResultNotification* notification) override;
+
                 BEGIN_INTERFACE_MAP(ResourceManagerTop)
                 INTERFACE_ENTRY(PluginHost::IPlugin)
                 INTERFACE_ENTRY(PluginHost::IDispatcher)
+                INTERFACE_ENTRY(Exchange::IResourceManagerTop)
                 END_INTERFACE_MAP
             private:
                 uint32_t m_apiVersionNumber;
                 PluginHost::IShell* _service;
+                mutable Core::CriticalSection _adminLock;
+                std::list<Exchange::IResourceManagerTop::IMultiplicationResultNotification*> _multiplicationResultNotifications;
 
         }; // class ResourceManagerTop
     } // namespace Plugin

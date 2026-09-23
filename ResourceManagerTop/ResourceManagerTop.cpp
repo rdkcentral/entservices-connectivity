@@ -1,4 +1,6 @@
 #include "ResourceManagerTop.h"
+#include <algorithm>
+#include <cinttypes>
 
 #define API_VERSION_NUMBER_MAJOR 1
 #define API_VERSION_NUMBER_MINOR 0  
@@ -13,6 +15,8 @@ const string WPEFramework::Plugin::ResourceManagerTop::METHOD_GET_SYSTEM_RESOURC
 const string WPEFramework::Plugin::ResourceManagerTop::METHOD_GET_STATE = "getState";
 const string WPEFramework::Plugin::ResourceManagerTop::METHOD_KILL_PROCESS = "killProcess";
 const string WPEFramework::Plugin::ResourceManagerTop::METHOD_KILL_PROCESS_VIA_RESOURCE_MONITOR = "killProcessViaResourceMonitor";
+const string WPEFramework::Plugin::ResourceManagerTop::METHOD_ADD_NUMBERS = "addNumbers";
+const string WPEFramework::Plugin::ResourceManagerTop::METHOD_MULTIPLY_NUMBERS = "multiplyNumbers";
 
 
 namespace WPEFramework {
@@ -43,16 +47,28 @@ namespace WPEFramework {
             : PluginHost::JSONRPC()
             , m_apiVersionNumber(API_VERSION_NUMBER_MAJOR)
             , _service(nullptr)
+            , _adminLock()
+            , _multiplicationResultNotifications()
         {
             Register(METHOD_GET_API_VERSION_NUMBER, &ResourceManagerTop::getApiVersionNumber, this);
             Register(METHOD_GET_SYSTEM_RESOURCE_INFO, &ResourceManagerTop::getSystemResourceInfo, this);
             Register(METHOD_GET_STATE, &ResourceManagerTop::getState, this);
             Register(METHOD_KILL_PROCESS, &ResourceManagerTop::killProcess, this);
             Register(METHOD_KILL_PROCESS_VIA_RESOURCE_MONITOR, &ResourceManagerTop::killProcessViaResourceMonitor, this);
+            Register(METHOD_ADD_NUMBERS, &ResourceManagerTop::addNumbers, this);
+            Register(METHOD_MULTIPLY_NUMBERS, &ResourceManagerTop::multiplyNumbers, this);
         }
 
         //Destructor
-        ResourceManagerTop::~ResourceManagerTop() {}
+        ResourceManagerTop::~ResourceManagerTop()
+        {
+            _adminLock.Lock();
+            for (auto* notification : _multiplicationResultNotifications) {
+                notification->Release();
+            }
+            _multiplicationResultNotifications.clear();
+            _adminLock.Unlock();
+        }
 
         /////////////IMPLEMENT LIFECYCLE METHODS//////////////////////
 
@@ -264,6 +280,112 @@ namespace WPEFramework {
             response["success"] = result;
             response["message"] = result ? "Process killed via ResourceMonitor" : "ResourceMonitor failed to kill process";
             return result ? Core::ERROR_NONE : Core::ERROR_GENERAL;
+        }
+
+        uint32_t ResourceManagerTop::addNumbers(const JsonObject& parameters, JsonObject& response)
+        {
+            LOGINFOMETHOD();
+
+            if (!parameters.HasLabel("numbers")) {
+                response["success"] = false;
+                response["message"] = "Missing required parameter: numbers";
+                return Core::ERROR_BAD_REQUEST;
+            }
+
+            JsonArray numbers = parameters["numbers"].Array();
+            int64_t sum = 0;
+            for (int i = 0; i < numbers.Length(); i++) {
+                sum += numbers[i].Number();
+            }
+
+            response["result"] = sum;
+            response["success"] = true;
+
+            JsonObject eventParams;
+            eventParams["result"] = sum;
+            sendNotify("onAdditionResult", eventParams);
+
+            LOGINFO("addNumbers: result=%" PRId64, sum);
+            return Core::ERROR_NONE;
+        }
+
+        uint32_t ResourceManagerTop::multiplyNumbers(const JsonObject& parameters, JsonObject& response)
+        {
+            LOGINFOMETHOD();
+
+            if (!parameters.HasLabel("numbers")) {
+                response["success"] = false;
+                response["message"] = "Missing required parameter: numbers";
+                return Core::ERROR_BAD_REQUEST;
+            }
+
+            JsonArray numbers = parameters["numbers"].Array();
+            int64_t product = 1;
+            for (int i = 0; i < numbers.Length(); i++) {
+                product *= numbers[i].Number();
+            }
+
+            response["result"] = product;
+            response["success"] = true;
+
+            NotifyMultiplicationResult(product);
+
+            LOGINFO("multiplyNumbers: result=%" PRId64, product);
+            return Core::ERROR_NONE;
+        }
+
+        Core::hresult ResourceManagerTop::Register(Exchange::IResourceManagerTop::IMultiplicationResultNotification* notification)
+        {
+            ASSERT(notification != nullptr);
+
+            _adminLock.Lock();
+            auto it = std::find(_multiplicationResultNotifications.begin(),
+                                _multiplicationResultNotifications.end(), notification);
+            if (it == _multiplicationResultNotifications.end()) {
+                _multiplicationResultNotifications.push_back(notification);
+                notification->AddRef();
+                LOGINFO("Registered IMultiplicationResultNotification %p", notification);
+            } else {
+                LOGERR("IMultiplicationResultNotification %p already registered", notification);
+            }
+            _adminLock.Unlock();
+            return Core::ERROR_NONE;
+        }
+
+        Core::hresult ResourceManagerTop::Unregister(const Exchange::IResourceManagerTop::IMultiplicationResultNotification* notification)
+        {
+            ASSERT(notification != nullptr);
+
+            Core::hresult status = Core::ERROR_GENERAL;
+
+            _adminLock.Lock();
+            auto it = std::find(_multiplicationResultNotifications.begin(),
+                                _multiplicationResultNotifications.end(), notification);
+            if (it != _multiplicationResultNotifications.end()) {
+                (*it)->Release();
+                _multiplicationResultNotifications.erase(it);
+                LOGINFO("Unregistered IMultiplicationResultNotification");
+                status = Core::ERROR_NONE;
+            } else {
+                LOGERR("IMultiplicationResultNotification not found");
+            }
+            _adminLock.Unlock();
+            return status;
+        }
+
+        void ResourceManagerTop::NotifyMultiplicationResult(const int64_t result)
+        {
+            _adminLock.Lock();
+            std::list<Exchange::IResourceManagerTop::IMultiplicationResultNotification*> notifications(_multiplicationResultNotifications);
+            for (auto* notification : notifications) {
+                notification->AddRef();
+            }
+            _adminLock.Unlock();
+
+            for (auto* notification : notifications) {
+                notification->OnMultiplicationResult(result);
+                notification->Release();
+            }
         }
 
     } // namespace Plugin
