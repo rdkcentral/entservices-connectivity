@@ -166,6 +166,7 @@ namespace WPEFramework {
             bool setBluetoothProperties(const JsonObject& properties);
             bool setAudioControlCommand(long long int  deviceID, const string &audioCtrlCmd);
             bool setEventResponse(long long int  deviceID, const string &eventType, const string &respValue);
+            bool parseDeviceID(const std::string& deviceIDStr,long long int& deviceID);
             JsonObject getDeviceInfo(long long int deviceID);
             JsonObject getMediaTrackInfo(long long int deviceID);
             bool setDeviceVolumeMuteProperties(long long int  deviceID, const string &deviceProfile, unsigned char ui8volume, unsigned char mute);
