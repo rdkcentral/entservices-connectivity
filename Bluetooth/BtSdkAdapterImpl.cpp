@@ -42,11 +42,11 @@ std::string BtSdkAdapterImpl::init(PluginHost::IShell* /* service */,
     // An empty LogRedirect would leave the SDK's Logger singleton holding a null
     // callback set, which it dereferences unconditionally on the very first log
     // line emitted from inside the Manager constructor.
-    auto logRedirect = std::make_unique<LogRedirect>(
-        [](std::string& msg) { LOGINFO("%s", msg.c_str()); },
-        [](std::string& msg) { LOGINFO("%s", msg.c_str()); },
-        [](std::string& msg) { LOGWARN("%s", msg.c_str()); },
-        [](std::string& msg) { LOGERR("%s", msg.c_str()); });
+    // auto logRedirect = std::make_unique<LogRedirect>(
+    //     [](std::string& msg) { LOGINFO("%s", msg.c_str()); },
+    //     [](std::string& msg) { LOGINFO("%s", msg.c_str()); },
+    //     [](std::string& msg) { LOGWARN("%s", msg.c_str()); },
+    //     [](std::string& msg) { LOGERR("%s", msg.c_str()); });
 
     try {
         // <pca> debug - This is throwing, simplify for now to narrow-down the problem
