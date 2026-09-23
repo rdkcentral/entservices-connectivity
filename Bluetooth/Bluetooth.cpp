@@ -1532,15 +1532,15 @@ namespace WPEFramework
         {
 			size_t pos = 0;
 			try
+		    {
+				deviceID = std::stoll(deviceIDStr, &pos);
+				if (pos != deviceIDStr.length())
 				{
-					deviceID = std::stoll(deviceIDStr, &pos);
-					if (pos != deviceIDStr.length())
-					{
-						LOGERR("Invalid deviceID: %s", deviceIDStr.c_str());
-						return false;
-					}
-					return true;
+					LOGERR("Invalid deviceID: %s", deviceIDStr.c_str());
+					return false;
 				}
+				return true;
+			}
 			catch (const std::invalid_argument&) {
 				LOGERR("Invalid deviceID: %s", deviceIDStr.c_str());
 					return false;
