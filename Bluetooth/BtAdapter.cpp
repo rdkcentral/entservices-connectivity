@@ -99,8 +99,10 @@ IBtAdapter& BtAdapter::getImpl() {
 std::string BtAdapter::init(PluginHost::IShell* service,
                             BtEventCallbacks&& evtCbs,
                             BtAuthCallbacks&& authCbs) {
+    printf("*** _DEBUG: BtAdapter::init: entry\n");
     if (impl) {
         // setImpl() test injection already fixed the backend; skip probing.
+        printf("*** _DEBUG: BtAdapter::init: impl already set\n");
         return impl->init(service, std::move(evtCbs), std::move(authCbs));
     }
 
@@ -111,6 +113,7 @@ std::string BtAdapter::init(PluginHost::IShell* service,
         // the only reliable, runtime signal that the real SDK is behind it;
         // the stub deliberately fails it so callers fall back correctly.
         std::string sdkError = g_btSdkAdapterImpl.init(service, BtEventCallbacks(evtCbs), BtAuthCallbacks(authCbs));
+        printf("*** _DEBUG: BtAdapter::init: sdkError: %s\n", sdkError.c_str());
         if (sdkError.empty()) {
             impl = &g_btSdkAdapterImpl;
             return {};
