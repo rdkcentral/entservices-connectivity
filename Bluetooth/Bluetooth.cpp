@@ -1541,11 +1541,13 @@ namespace WPEFramework
 				}
 				return true;
 			}
-			catch (const std::invalid_argument&) {
+			catch (const std::invalid_argument&)
+			{
 				LOGERR("Invalid deviceID: %s", deviceIDStr.c_str());
 				return false;
 			}
-			catch (const std::out_of_range&) {
+			catch (const std::out_of_range&)
+			{
 				LOGERR("deviceID out of range: %s", deviceIDStr.c_str());
 				return false;
 			}
