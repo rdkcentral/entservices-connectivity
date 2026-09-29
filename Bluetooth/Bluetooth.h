@@ -20,6 +20,7 @@
 #pragma once
 
 #include <thread>
+#include <mutex>
 
 #include "Module.h"
 #include <interfaces/IPowerManager.h>
@@ -110,6 +111,8 @@ namespace WPEFramework {
             // We do not allow this plugin to be copied !!
             Bluetooth(const Bluetooth&) = delete;
             Bluetooth& operator=(const Bluetooth&) = delete;
+
+            void ensureAdapterInitialized(); // TEST-ONLY: lazy BtAdapter init to probe ECHILD/fork timing, remove after test run
 
             // Registered methods begin
             // Note: `JsonObject& parameters` corresponds to `params` in JSON RPC call
@@ -288,6 +291,10 @@ namespace WPEFramework {
             Core::Sink<PowerManagerNotification> m_powerManagerNotification;
             BluetoothDeviceManager m_bluetoothDeviceManager;
             BtAdapter m_btAdapter;
+
+            // TEST-ONLY: lazy-init support, remove after test run
+            PluginHost::IShell* m_service = nullptr;
+            std::once_flag m_adapterInitOnce;
         };
 
     } // Plugin
