@@ -125,16 +125,21 @@ BluetoothPersistenceAdapter::BluetoothPersistenceAdapter()
 
 Core::hresult BluetoothPersistenceAdapter::Parse(const std::string& payload, std::vector<BluetoothDeviceInfo>& devices) const
 {
+    // Missing, empty, or corrupted (invalid JSON) payloads are treated as the
+    // default content {"pairedDevices":[]} rather than a fatal error, so migration
+    // is not blocked by an absent or malformed filesystem persistence source.
     JsonObject root;
-    if (!root.FromString(payload)) {
-        LOGERR("Failed to parse filesystem persistence file payload");
-        return Core::ERROR_GENERAL;
+    if (payload.empty() || !root.FromString(payload)) {
+        if (!payload.empty()) {
+            LOGWARN("filesystem persistence file payload is not valid JSON, treating as default empty content");
+        }
+        return Core::ERROR_NONE;
     }
 
     if (!root.HasLabel("pairedDevices") ||
         root["pairedDevices"].Content() != WPEFramework::Core::JSON::Variant::type::ARRAY) {
-        LOGERR("filesystem persistence file missing pairedDevices array");
-        return Core::ERROR_GENERAL;
+        LOGWARN("filesystem persistence file missing pairedDevices array, treating as default empty content");
+        return Core::ERROR_NONE;
     }
 
     JsonArray pairedDevices = root["pairedDevices"].Array();
