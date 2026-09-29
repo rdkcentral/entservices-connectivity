@@ -59,6 +59,15 @@ namespace WPEFramework {
                 return result;
             }
 
+            // Parse() treats missing/corrupted content as a default empty list; short-circuit
+            // here too so that case is not exposed to a BTRMGR_GetPairedDevices() failure below.
+            if (importedDevices.empty()) {
+                _adminLock.Lock();
+                _pairedDeviceCache.clear();
+                _adminLock.Unlock();
+                return Core::ERROR_NONE;
+            }
+
             // Build a mapping from device address to device handle using BTRMGR.
             BTRMGR_PairedDevicesList_t pairedDevices{};
             if (BTRMGR_GetPairedDevices(0, &pairedDevices) != BTRMGR_RESULT_SUCCESS) {
