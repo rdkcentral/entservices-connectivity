@@ -223,20 +223,8 @@ namespace WPEFramework
             Register(METHOD_CLEAR_MIGRATION, &Bluetooth::clearMigrationWrapper, this);
 #endif
 
-            // TEST-ONLY: defer BtAdapter::init (and adapter/device-manager setup) to the first
-            // JSON-RPC call instead of here, to probe the sd-bus ECHILD/fork timing theory.
-            m_service = service;
-            return message;
-        }
-
-        void Bluetooth::ensureAdapterInitialized()
-        {
-            std::call_once(m_adapterInitOnce, [this]() {
-                PluginHost::IShell* service = m_service;
-                string message;
-
-                // Build EventBridge callbacks — translate SDK events to plugin notifications.
-                BtEventCallbacks evtCbs;
+            // Build EventBridge callbacks — translate SDK events to plugin notifications.
+            BtEventCallbacks evtCbs;
             evtCbs.onStatusChanged = [this](const std::string& eventId, const std::string& newStatus,
                                             const std::string& deviceId, const std::string& name,
                                             const std::string& deviceType, uint32_t rawType,
@@ -424,39 +412,41 @@ namespace WPEFramework
 #endif
             };
 
-                message = m_btAdapter.init(service, std::move(evtCbs), std::move(authCbs));
-                if (!message.empty()) {
-                    LOGERR("%s", message.c_str());
-                    return;
-                }
+            message = m_btAdapter.init(service, std::move(evtCbs), std::move(authCbs));
+            if (!message.empty()) {
+                LOGERR("%s", message.c_str());
+                return message;
+            }
 
-                m_powerManagerPlugin = PowerManagerInterfaceBuilder(_T("org.rdk.PowerManager"))
-                    .withIShell(service)
-                    .withRetryIntervalMS(200)
-                    .withRetryCount(25)
-                    .createInterface();
+            m_powerManagerPlugin = PowerManagerInterfaceBuilder(_T("org.rdk.PowerManager"))
+                .withIShell(service)
+                .withRetryIntervalMS(200)
+                .withRetryCount(25)
+                .createInterface();
 
-                if (m_powerManagerPlugin) {
-                    m_powerManagerPlugin->Register(&m_powerManagerNotification);
+            if (m_powerManagerPlugin) {
+                m_powerManagerPlugin->Register(&m_powerManagerNotification);
 
-                    WPEFramework::Exchange::IPowerManager::PowerState currentState, prevState;
-                    if (Core::ERROR_NONE == m_powerManagerPlugin->GetPowerState(currentState, prevState)) {
-                        onPowerModeChanged(prevState, currentState);
-                    } else {
-                        LOGERR("Failed to get current power state");
-                    }
+                WPEFramework::Exchange::IPowerManager::PowerState currentState, prevState;
+                if (Core::ERROR_NONE == m_powerManagerPlugin->GetPowerState(currentState, prevState)) {
+                    onPowerModeChanged(prevState, currentState);
                 } else {
-                    LOGERR("Failed to get PowerManager interface");
+                    LOGERR("Failed to get current power state");
                 }
+            } else {
+                LOGERR("Failed to get PowerManager interface");
+            }
 
-                m_bluetoothDeviceManager.setBtAdapter(&m_btAdapter);
-                if (Core::ERROR_NONE != m_bluetoothDeviceManager.init(service)) {
-                    LOGERR("Failed to initialize BluetoothDeviceManager");
-                    return;
-                }
+            m_bluetoothDeviceManager.setBtAdapter(&m_btAdapter);
+            if (Core::ERROR_NONE != m_bluetoothDeviceManager.init(service)) {
+                message = "Failed to initialize BluetoothDeviceManager";
+                LOGERR("%s", message.c_str());
+                return message;
+            }
 
-                disconnectExternallyConnectedDevices();
-            });
+            disconnectExternallyConnectedDevices();
+
+            return message;
         }
 
         void Bluetooth::Deinitialize(PluginHost::IShell* service)
@@ -798,7 +788,6 @@ namespace WPEFramework
         uint32_t Bluetooth::getApiVersionNumber(const JsonObject& parameters, JsonObject& response)
         {
             LOGINFOMETHOD();
-            ensureAdapterInitialized(); // TEST-ONLY
             UNUSED(parameters);
             response["version"] = m_apiVersionNumber;
             returnResponse(true);
@@ -807,7 +796,6 @@ namespace WPEFramework
         uint32_t Bluetooth::startScanWrapper(const JsonObject& parameters, JsonObject& response)
         {
             LOGINFOMETHOD();
-            ensureAdapterInitialized(); // TEST-ONLY
             int timeout = -1;
             string profile;
             bool timeoutDefined = false;
@@ -843,7 +831,6 @@ namespace WPEFramework
         uint32_t Bluetooth::stopScanWrapper(const JsonObject& parameters, JsonObject& response)
         {
             LOGINFOMETHOD();
-            ensureAdapterInitialized(); // TEST-ONLY
             UNUSED(parameters);
             stopDeviceDiscovery();
             returnResponse(true);
@@ -852,7 +839,6 @@ namespace WPEFramework
         uint32_t Bluetooth::isDiscoverableWrapper(const JsonObject& parameters, JsonObject& response)
         {
             LOGINFOMETHOD();
-            ensureAdapterInitialized(); // TEST-ONLY
             UNUSED(parameters);
             response["discoverable"] = isAdapterDiscoverable();
             returnResponse(true);
@@ -861,7 +847,6 @@ namespace WPEFramework
         uint32_t Bluetooth::setDiscoverableWrapper(const JsonObject& parameters, JsonObject& response)
         {
             LOGINFOMETHOD();
-            ensureAdapterInitialized(); // TEST-ONLY
             bool successFlag;
             bool discoverable = false;
             int timeout;
@@ -888,7 +873,6 @@ namespace WPEFramework
         uint32_t Bluetooth::getDiscoveredDevicesWrapper(const JsonObject& parameters, JsonObject& response)
         {
             LOGINFOMETHOD();
-            ensureAdapterInitialized(); // TEST-ONLY
             UNUSED(parameters);
             response["discoveredDevices"] = getDiscoveredDevices();
             returnResponse(true);
@@ -897,7 +881,6 @@ namespace WPEFramework
         uint32_t Bluetooth::getPairedDevicesWrapper(const JsonObject& parameters, JsonObject& response)
         {
             LOGINFOMETHOD();
-            ensureAdapterInitialized(); // TEST-ONLY
             UNUSED(parameters);
             response["pairedDevices"] = getPairedDevices();
             returnResponse(true);
@@ -906,7 +889,6 @@ namespace WPEFramework
         uint32_t Bluetooth::getConnectedDevicesWrapper(const JsonObject& parameters, JsonObject& response)
         {
             LOGINFOMETHOD();
-            ensureAdapterInitialized(); // TEST-ONLY
             UNUSED(parameters);
             response["connectedDevices"] = getConnectedDevices();
             returnResponse(true);
@@ -940,7 +922,6 @@ namespace WPEFramework
         uint32_t Bluetooth::connectWrapper(const JsonObject& parameters, JsonObject& response)
         {
             LOGINFOMETHOD();
-            ensureAdapterInitialized(); // TEST-ONLY
             string deviceIDStr;
             long long int deviceID = 0;
             bool deviceIDDefined = false;
@@ -984,7 +965,6 @@ namespace WPEFramework
         uint32_t Bluetooth::disconnectWrapper(const JsonObject& parameters, JsonObject& response)
         {
             LOGINFOMETHOD();
-            ensureAdapterInitialized(); // TEST-ONLY
             string deviceIDStr;
             long long int deviceID = 0;
             bool deviceIDDefined = false;
@@ -1028,7 +1008,6 @@ namespace WPEFramework
         uint32_t Bluetooth::setAudioStreamWrapper(const JsonObject& parameters, JsonObject& response)
         {
             LOGINFOMETHOD();
-            ensureAdapterInitialized(); // TEST-ONLY
             string deviceIDStr;
             long long int deviceID = 0;
             bool deviceIDDefined = false;
@@ -1066,7 +1045,6 @@ namespace WPEFramework
         uint32_t Bluetooth::pairWrapper(const JsonObject& parameters, JsonObject& response)
         {
             LOGINFOMETHOD();
-            ensureAdapterInitialized(); // TEST-ONLY
             bool successFlag;
             string deviceIDStr;
             long long int deviceID = 0;
@@ -1097,7 +1075,6 @@ namespace WPEFramework
         uint32_t Bluetooth::unpairWrapper(const JsonObject& parameters, JsonObject& response)
         {
             LOGINFOMETHOD();
-            ensureAdapterInitialized(); // TEST-ONLY
             bool successFlag;
             string deviceIDStr;
             long long int deviceID = 0;
@@ -1128,7 +1105,6 @@ namespace WPEFramework
         uint32_t Bluetooth::enableWrapper(const JsonObject& parameters, JsonObject& response)
         {
             LOGINFOMETHOD();
-            ensureAdapterInitialized(); // TEST-ONLY
             bool successFlag;
             string enabled = ENABLE_BLUETOOTH_ENABLED;
             successFlag = setBluetoothEnabled(enabled);
@@ -1138,7 +1114,6 @@ namespace WPEFramework
         uint32_t Bluetooth::disableWrapper(const JsonObject& parameters, JsonObject& response)
         {
             LOGINFOMETHOD();
-            ensureAdapterInitialized(); // TEST-ONLY
             bool successFlag;
             string enabled = ENABLE_BLUETOOTH_DISABLED;
             successFlag = setBluetoothEnabled(enabled);
@@ -1148,7 +1123,6 @@ namespace WPEFramework
         uint32_t Bluetooth::getNameWrapper(const JsonObject& parameters, JsonObject& response)
         {
             LOGINFOMETHOD();
-            ensureAdapterInitialized(); // TEST-ONLY
             bool successFlag;
             successFlag = getBluetoothProperties(&response);
             returnResponse(successFlag);
@@ -1157,7 +1131,6 @@ namespace WPEFramework
         uint32_t Bluetooth::setNameWrapper(const JsonObject& parameters, JsonObject& response)
         {
             LOGINFOMETHOD();
-            ensureAdapterInitialized(); // TEST-ONLY
             bool successFlag;
             successFlag = setBluetoothProperties(parameters);
             returnResponse(successFlag);
@@ -1166,7 +1139,6 @@ namespace WPEFramework
         uint32_t Bluetooth::sendAudioPlaybackCommandWrapper(const JsonObject& parameters, JsonObject& response)
         {
             LOGINFOMETHOD();
-            ensureAdapterInitialized(); // TEST-ONLY
             string deviceIDStr;
             long long int deviceID = 0;
             bool deviceIDDefined = false;
@@ -1206,7 +1178,6 @@ namespace WPEFramework
         uint32_t Bluetooth::getDeviceVolumeMuteInfoWrapper(const JsonObject& parameters, JsonObject& response)
         {
             LOGINFOMETHOD();
-            ensureAdapterInitialized(); // TEST-ONLY
             bool successFlag;
             string deviceIDStr;
             long long int deviceID = 0;
@@ -1244,7 +1215,6 @@ namespace WPEFramework
         uint32_t Bluetooth::setDeviceVolumeMuteInfoWrapper(const JsonObject& parameters, JsonObject& response)
         {
             LOGINFOMETHOD();
-            ensureAdapterInitialized(); // TEST-ONLY
             bool successFlag;
             string deviceIDStr;
             long long int deviceID = 0;
@@ -1304,7 +1274,6 @@ namespace WPEFramework
         uint32_t Bluetooth::setEventResponseWrapper(const JsonObject& parameters, JsonObject& response)
         {
             LOGINFOMETHOD();
-            ensureAdapterInitialized(); // TEST-ONLY
             string deviceIDStr;
             long long int deviceID = 0;
             bool deviceIDDefined = false;
@@ -1352,7 +1321,6 @@ namespace WPEFramework
         uint32_t Bluetooth::getDeviceInfoWrapper(const JsonObject& parameters, JsonObject& response)
         {
             LOGINFOMETHOD();
-            ensureAdapterInitialized(); // TEST-ONLY
             string deviceIDStr;
             long long int deviceID = 0;
             bool successFlag;
@@ -1376,7 +1344,6 @@ namespace WPEFramework
         uint32_t Bluetooth::getMediaTrackInfoWrapper(const JsonObject& parameters, JsonObject& response)
         {
             LOGINFOMETHOD();
-            ensureAdapterInitialized(); // TEST-ONLY
             string deviceIDStr;
             long long int deviceID = 0;
             bool successFlag;
@@ -1400,7 +1367,6 @@ namespace WPEFramework
         uint32_t Bluetooth::setAutoConnectWrapper(const JsonObject& parameters, JsonObject& response)
         {
             LOGINFOMETHOD();
-            ensureAdapterInitialized(); // TEST-ONLY
             string deviceID;
             bool enable;
             bool successFlag = true;
@@ -1426,7 +1392,6 @@ namespace WPEFramework
         uint32_t Bluetooth::getAutoConnectWrapper(const JsonObject& parameters, JsonObject& response)
         {
             LOGINFOMETHOD();
-            ensureAdapterInitialized(); // TEST-ONLY
             string deviceID;
             bool successFlag = true;
             if (parameters.HasLabel("deviceID"))
@@ -1455,7 +1420,6 @@ namespace WPEFramework
         uint32_t Bluetooth::performMigrationWrapper(const JsonObject& parameters, JsonObject& response)
         {
             LOGINFOMETHOD();
-            ensureAdapterInitialized(); // TEST-ONLY
             UNUSED(parameters);
             const Core::hresult result = m_bluetoothDeviceManager.performMigration();
             if (Core::ERROR_NONE != result) {
@@ -1467,7 +1431,6 @@ namespace WPEFramework
         uint32_t Bluetooth::clearMigrationWrapper(const JsonObject& parameters, JsonObject& response)
         {
             LOGINFOMETHOD();
-            ensureAdapterInitialized(); // TEST-ONLY
             UNUSED(parameters);
             const Core::hresult result = m_bluetoothDeviceManager.clearMigration();
             if (Core::ERROR_NONE != result) {
