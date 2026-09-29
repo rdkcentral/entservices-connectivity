@@ -1461,6 +1461,11 @@ TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, legacyPersistenceMigra
         GTEST_SKIP() << "Unable to prepare corrupted filesystem persistence migration file on this test host";
     }
 
+    // A parsed-empty import must short-circuit before BTRMGR_GetPairedDevices(); configuring it
+    // to fail proves migration cannot be broken by a BTRMGR error it never reaches.
+    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetPairedDevices(::testing::_, ::testing::_))
+        .Times(0);
+
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
     EXPECT_TRUE(response.find("\"success\":true") != string::npos);
     EXPECT_EQ("[]", persistedJson);
@@ -1485,6 +1490,9 @@ TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, legacyPersistenceMigra
         GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
     }
 
+    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetPairedDevices(::testing::_, ::testing::_))
+        .Times(0);
+
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
     EXPECT_TRUE(response.find("\"success\":true") != string::npos);
     EXPECT_EQ("[]", persistedJson);
@@ -1507,6 +1515,9 @@ TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, legacyPersistenceMigra
     if (!initializeFromFilesystemPersistencePayload(payload)) {
         GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
     }
+
+    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetPairedDevices(::testing::_, ::testing::_))
+        .Times(0);
 
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
     EXPECT_TRUE(response.find("\"success\":true") != string::npos);
