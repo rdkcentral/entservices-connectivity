@@ -155,7 +155,7 @@ namespace WPEFramework {
         Core::hresult BluetoothDeviceManager::writeMigrationVersionToStorage()
         {
             if (_service == nullptr) {
-                LOGERR("Service is null!");
+                LOGERR("Service is null");
                 return Core::ERROR_GENERAL;
             }
 
