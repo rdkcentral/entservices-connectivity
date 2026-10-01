@@ -27,6 +27,7 @@
  */
 
 #pragma once
+#include <sdbus-c++/sdbus-c++.h>
 #include <string>
 
 namespace bluetooth {
@@ -49,21 +50,21 @@ enum class BtObjectType {
  * @param id The adapter ID.
  * @return The DBus object path for the adapter.
  */
-std::string createAdapterPathById(int id);
+sdbus::ObjectPath createAdapterPathById(int id);
 
 /**
  * @brief Extracts the adapter ID from a DBus object path.
  * @param path The DBus object path.
  * @return The adapter ID as an integer.
  */
-int getAdapterIdFromObjectPath(const std::string& path);
+int getAdapterIdFromObjectPath(const sdbus::ObjectPath& path);
 
 /**
  * @brief Retrieves the device path from a given GATT object path.
  * @param path The GATT object path.
  * @return The device path as a string.
  */
-std::string getDevicePathFromGattPath(const std::string& path);
+std::string getDevicePathFromGattPath(const sdbus::ObjectPath& path);
 
 /**
  * @brief Extracts the characteristic path from a descriptor path.
@@ -84,14 +85,14 @@ std::string extractServicePath(const std::string& characteristicPath);
  * @param device The device's DBus object path.
  * @return The MAC address as a string.
  */
-std::string getMacFromObjectPath(const std::string& device);
+std::string getMacFromObjectPath(const sdbus::ObjectPath& device);
 
 /**
  * @brief Determines the Bluetooth object type from a DBus object path.
  * @param path The DBus object path.
  * @return The corresponding BtObjectType.
  */
-BtObjectType getObjectTypeFromObjectPath(const std::string& path);
+BtObjectType getObjectTypeFromObjectPath(const sdbus::ObjectPath& path);
 
 /**
  * @brief Validates whether a string is a well-formed MAC address (XX:XX:XX:XX:XX:XX).

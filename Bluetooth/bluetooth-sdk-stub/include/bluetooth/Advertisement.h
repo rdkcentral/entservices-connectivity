@@ -60,6 +60,8 @@ class Advertisement {
   void ManufacturerData(std::map<uint16_t, std::vector<uint8_t>>& data);
   /** @brief Sets the service data UUIDs. */
   void ServiceData(std::vector<Uuid>& serviceUuids);
+  /** @brief Sets whether the advertisement is discoverable. */
+  void Discoverable(bool discoverable);
   /** @brief Sets the discoverable timeout. */
   void DiscoverableTimeout(std::chrono::seconds value);
   /** @brief Sets the local name. */

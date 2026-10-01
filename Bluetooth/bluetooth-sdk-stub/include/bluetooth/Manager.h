@@ -89,11 +89,13 @@ class Manager {
    * @param authManagerCallback Callback for external authorization (optional).
    * @param logOutput Logging destination.
    * @param output Log output configuration (file path or LogRedirect instance).
+   * @param agentCapability The capability string for the BlueZ agent (defaults to "DisplayYesNo").
    */
   Manager(AuthorisationMode isAuthManager = AuthorisationMode::NoAuthorisation,
           std::function<bool(AuthorisationType authType, std::shared_ptr<Device>)> authManagerCallback = {},
           LogLocation logOutput = LogLocation::Stdout,
-          std::variant<std::string, std::unique_ptr<LogRedirect>> output = {});
+          std::variant<std::string, std::unique_ptr<LogRedirect>> output = {},
+          std::string agentCapability = "DisplayYesNo");
 
   /**
    * @brief Constructs a Manager with a specific agent capability.
@@ -119,16 +121,31 @@ class Manager {
    */
   std::vector<std::shared_ptr<bluetooth::Adapter>> getAdapters();
 
-#ifdef AUDIO_SUPPORT
-  // Returns a referenced WpNode (caller must g_object_unref) or nullptr if not found
-  WpNode* findWirePlumberAudioNode(const std::string& deviceMacAddress);
-#endif
+  /**
+   * @brief Unregisters the BlueZ agent that was registered by this Manager.
+   *
+   * Removes this application's agent from BlueZ. After this call BlueZ will
+   * re-select a default agent from any other registered agents, or run with no
+   * default agent if none remain. Safe to call when no agent is registered.
+   */
+  void unregisterAgent();
 
  private:
   class Impl;
   std::unique_ptr<Impl> m_impl;
+
+  /**
+   * @brief Authorized accessor for Device's protected reconnection-cooldown state.
+   *
+   * Device grants friendship to Manager (only). Since the pimpl-nested
+   * Manager::Impl::Agent is a distinct class and not itself a friend of Device,
+   * it must route protected access through this static helper, which is a member
+   * of the befriended Manager type. Returns false for a null device.
+   */
+  static bool isDeviceInCooldown(const std::shared_ptr<Device>& device);
 };
 
 }  // namespace bluetooth
+
 
 

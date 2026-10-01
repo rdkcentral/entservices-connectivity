@@ -206,7 +206,7 @@ class Service : public std::enable_shared_from_this<Service> {
  * @brief GATT Server implementation for Bluetooth Low Energy services
  * 
  * The Server class manages GATT services, characteristics, and descriptors for a Bluetooth
- * Low Energy peripheral device. It handles service registration with the BlueZ GATT manager
+ * Low Energy peripheral device. It handles service registration with the platform's GATT manager
  * and manages client connections.
  */
 class Server {
@@ -272,14 +272,14 @@ class Server {
   bool removeService(std::shared_ptr<Service> service);
   
   /**
-   * @brief Starts the GATT server and registers it with BlueZ
+   * @brief Starts the GATT server and registers it with the underlying Bluetooth stack
    * 
    * @return Status indicating success or failure of the operation
    */
   Status start();
   
   /**
-   * @brief Stops the GATT server and unregisters it from BlueZ
+   * @brief Stops the GATT server and unregisters it from the underlying Bluetooth stack
    * 
    * @return Status indicating success or failure of the operation
    */
