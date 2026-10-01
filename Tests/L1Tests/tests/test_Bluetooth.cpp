@@ -1214,6 +1214,111 @@ TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, legacyPersistenceMigra
     EXPECT_TRUE(response.find("\"pairedDevices\"") != string::npos);
 }
 
+TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, legacyPersistenceMigrationMissingStore_CorruptedFilesystemPersistencePayloadPerformMigrationSucceeds)
+{
+    std::string persistedJson;
+    EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
+        .WillOnce(::testing::Return(GetParam()))
+        .WillRepeatedly(::testing::Return(Core::ERROR_NOT_EXIST));
+    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, PERSISTENT_STORE_KEY_DEVICE_INFO, ::testing::_))
+        .WillOnce(::testing::DoAll(
+            ::testing::SaveArg<2>(&persistedJson),
+            ::testing::Return(Core::ERROR_NONE)));
+    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, PERSISTENT_STORE_KEY_MIGRATION_VERSION, ::testing::_))
+        .WillOnce(::testing::Return(Core::ERROR_NONE));
+
+    // Truncated JSON — structurally invalid, not merely missing a label.
+    const std::string corruptedPayload = "{\"pairedDevices\":[{\"deviceAddr\":\"123\"";
+    if (!initializeFromFilesystemPersistencePayload(corruptedPayload)) {
+        GTEST_SKIP() << "Unable to prepare corrupted filesystem persistence migration file on this test host";
+    }
+
+    // A parsed-empty import must short-circuit before BTRMGR_GetPairedDevices(); configuring it
+    // to fail proves migration cannot be broken by a BTRMGR error it never reaches.
+    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetPairedDevices(::testing::_, ::testing::_))
+        .Times(0);
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":true") != string::npos);
+    EXPECT_EQ("[]", persistedJson);
+}
+
+TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, legacyPersistenceMigrationMissingStore_MissingPairedDevicesLabelPerformMigrationSucceeds)
+{
+    std::string persistedJson;
+    EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
+        .WillOnce(::testing::Return(GetParam()))
+        .WillRepeatedly(::testing::Return(Core::ERROR_NOT_EXIST));
+    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, PERSISTENT_STORE_KEY_DEVICE_INFO, ::testing::_))
+        .WillOnce(::testing::DoAll(
+            ::testing::SaveArg<2>(&persistedJson),
+            ::testing::Return(Core::ERROR_NONE)));
+    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, PERSISTENT_STORE_KEY_MIGRATION_VERSION, ::testing::_))
+        .WillOnce(::testing::Return(Core::ERROR_NONE));
+
+    // Valid JSON object, but with no pairedDevices label at all.
+    const std::string payloadWithoutLabel = "{\"someOtherField\":true}";
+    if (!initializeFromFilesystemPersistencePayload(payloadWithoutLabel)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetPairedDevices(::testing::_, ::testing::_))
+        .Times(0);
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":true") != string::npos);
+    EXPECT_EQ("[]", persistedJson);
+}
+
+TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, legacyPersistenceMigrationMissingStore_EmptyPairedDevicesArrayPerformMigrationSucceeds)
+{
+    std::string persistedJson;
+    EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
+        .WillOnce(::testing::Return(GetParam()))
+        .WillRepeatedly(::testing::Return(Core::ERROR_NOT_EXIST));
+    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, PERSISTENT_STORE_KEY_DEVICE_INFO, ::testing::_))
+        .WillOnce(::testing::DoAll(
+            ::testing::SaveArg<2>(&persistedJson),
+            ::testing::Return(Core::ERROR_NONE)));
+    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, PERSISTENT_STORE_KEY_MIGRATION_VERSION, ::testing::_))
+        .WillOnce(::testing::Return(Core::ERROR_NONE));
+
+    const std::string payload = "{\"pairedDevices\":[]}";
+    if (!initializeFromFilesystemPersistencePayload(payload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetPairedDevices(::testing::_, ::testing::_))
+        .Times(0);
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":true") != string::npos);
+    EXPECT_EQ("[]", persistedJson);
+}
+
+TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, legacyPersistenceMigrationMissingStore_EmptyFilesystemPersistenceFilePerformMigrationSucceeds)
+{
+    std::string persistedJson;
+    EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
+        .WillOnce(::testing::Return(GetParam()))
+        .WillRepeatedly(::testing::Return(Core::ERROR_NOT_EXIST));
+    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, PERSISTENT_STORE_KEY_DEVICE_INFO, ::testing::_))
+        .WillOnce(::testing::DoAll(
+            ::testing::SaveArg<2>(&persistedJson),
+            ::testing::Return(Core::ERROR_NONE)));
+    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, PERSISTENT_STORE_KEY_MIGRATION_VERSION, ::testing::_))
+        .WillOnce(::testing::Return(Core::ERROR_NONE));
+
+    // File exists on disk but is zero bytes.
+    if (!initializeFromFilesystemPersistencePayload("")) {
+        GTEST_SKIP() << "Unable to prepare empty filesystem persistence migration file on this test host";
+    }
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":true") != string::npos);
+    EXPECT_EQ("[]", persistedJson);
+}
+
 TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, rollbackSyncMutations_WriteFilesystemPersistenceWhenFlagOn)
 {
     const std::string seedPayload =
