@@ -24,6 +24,10 @@ find_package(${NAMESPACE}Plugins REQUIRED)
 
 if(PLUGIN_BLUETOOTH)
     set(SRC_FILES ${SRC_FILES} tests/Bluetooth_L2Test.cpp)
+    if(BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION)
+        set_property(SOURCE tests/Bluetooth_L2Test.cpp
+            APPEND PROPERTY COMPILE_DEFINITIONS BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION=1)
+    endif()
 endif()
 
 if(SRC_FILES)

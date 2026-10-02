@@ -43,14 +43,29 @@ namespace WPEFramework {
 
 #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
 
-        Core::hresult BluetoothDeviceManager::writeCacheFromFilesystemPersistence()
+        Core::hresult BluetoothDeviceManager::writeCacheFromFilesystemPersistence(const std::string& rawContent)
         {
-            BluetoothPersistenceAdapter adapter;
+            if (rawContent.empty()) {
+                _adminLock.Lock();
+                _pairedDeviceCache.clear();
+                _adminLock.Unlock();
+                return Core::ERROR_NONE;
+            }
 
+            BluetoothPersistenceAdapter adapter;
             std::vector<BluetoothDeviceInfo> importedDevices;
-            const Core::hresult result = adapter.Read(importedDevices);
+            const Core::hresult result = adapter.Parse(rawContent, importedDevices);
             if (Core::ERROR_NONE != result) {
                 return result;
+            }
+
+            // Parse() treats missing/corrupted content as a default empty list; short-circuit
+            // here too so that case is not exposed to a BTRMGR_GetPairedDevices() failure below.
+            if (importedDevices.empty()) {
+                _adminLock.Lock();
+                _pairedDeviceCache.clear();
+                _adminLock.Unlock();
+                return Core::ERROR_NONE;
             }
 
             // Build a mapping from device address to device handle using BTRMGR.
@@ -75,8 +90,12 @@ namespace WPEFramework {
                 auto it = addrToDeviceId.find(info.deviceAddr);
                 if (it != addrToDeviceId.end()) {
                     importedCache[it->second] = std::move(info);
+                } else if (!info.deviceAddr.empty()) {
+                    // BTRMGR doesn't know this device; key by MAC so it is preserved in persistence.
+                    LOGWARN("No BTRMGR handle for addr=%s, importing with MAC as key", info.deviceAddr.c_str());
+                    importedCache[info.deviceAddr] = std::move(info);
                 } else {
-                    LOGWARN("No paired device handle found for addr=%s during filesystem persistence import, skipping", info.deviceAddr.c_str());
+                    LOGWARN("Skipping device with empty deviceAddr during filesystem persistence import");
                 }
             }
 
@@ -87,67 +106,193 @@ namespace WPEFramework {
             return Core::ERROR_NONE;
         }
 
-        void BluetoothDeviceManager::writeFilesystemPersistenceFromCache()
+        void BluetoothDeviceManager::writeFilesystemPersistenceFromCache(const std::unordered_map<std::string, BluetoothDeviceInfo>& snapshot)
         {
             BluetoothPersistenceAdapter adapter;
-            std::unordered_map<std::string, BluetoothDeviceInfo> cacheSnapshot = getPairedDeviceInfos();
+            std::unordered_map<std::string, BluetoothDeviceInfo> cacheSnapshot = snapshot;
 
             // Filter out Human Interface Devices — The legacy behavior doesn't persist them to the filesystem.
+            // Gamepads share the "HUMAN INTERFACE DEVICE" type string but must be persisted.
             for (auto it = cacheSnapshot.begin(); it != cacheSnapshot.end(); ) {
-                if (it->second.deviceType == "HUMAN INTERFACE DEVICE") {
+                if ((it->second.deviceType == "HUMAN INTERFACE DEVICE") && !it->second.isGamePad) {
                     it = cacheSnapshot.erase(it);
                 } else {
                     ++it;
                 }
             }
 
-            // Build a deterministic canonical string from the snapshot for change detection.
-            std::vector<std::string> keys;
-            keys.reserve(cacheSnapshot.size());
-            for (const auto& entry : cacheSnapshot) {
-                keys.push_back(entry.first);
-            }
-            std::sort(keys.begin(), keys.end());
-
-            std::string canonical;
-            for (const auto& key : keys) {
-                const BluetoothDeviceInfo& info = cacheSnapshot.at(key);
-                canonical += key;
-                canonical += '|';
-                canonical += info.deviceAddr;
-                canonical += '|';
-                canonical += info.deviceType;
-                canonical += '|';
-                canonical += info.friendlyName;
-                canonical += '|';
-                canonical += std::to_string(info.lastVolumeSetting);
-                canonical += '|';
-                canonical += std::to_string(static_cast<int>(info.autoConnectStatus));
-                canonical += '|';
-                canonical += info.lastConnectTimeUtc;
-                canonical += ';';
-            }
-
-            const std::size_t newHash = std::hash<std::string>{}(canonical);
-
-            _adminLock.Lock();
-            const bool unchanged = (newHash == _lastFilesystemPersistenceHash);
-            _adminLock.Unlock();
-
-            if (unchanged) {
-                LOGINFO("Filesystem persistence sync skipped: cache unchanged since last write, cache_size=%zu", cacheSnapshot.size());
-                return;
-            }
-
             const Core::hresult result = adapter.Write(cacheSnapshot);
             if (Core::ERROR_NONE != result) {
                 LOGERR("Filesystem persistence sync failed: Unable to update persistence payload from cache, hresult=%d cache_size=%zu", result, cacheSnapshot.size());
             } else {
-                _adminLock.Lock();
-                _lastFilesystemPersistenceHash = newHash;
-                _adminLock.Unlock();
                 LOGINFO("Filesystem persistence sync succeeded: Persistence payload updated from cache, cache_size=%zu", cacheSnapshot.size());
             }
+        }
+
+        Core::hresult BluetoothDeviceManager::readMigrationVersionFromStorage(std::string& version) const
+        {
+            if (_service == nullptr) {
+                LOGERR("Service is null");
+                return Core::ERROR_GENERAL;
+            }
+
+            Exchange::IStore* pPersistentStore = _service->QueryInterfaceByCallsign<Exchange::IStore>(PERSISTENT_STORE_CALLSIGN);
+            if (pPersistentStore == nullptr) {
+                LOGERR("Failed to get PersistentStore interface");
+                return Core::ERROR_GENERAL;
+            }
+
+            const Core::hresult result = pPersistentStore->GetValue(PERSISTENT_STORE_NAMESPACE, PERSISTENT_STORE_KEY_MIGRATION_VERSION, version);
+            pPersistentStore->Release();
+
+            if ((Core::ERROR_NONE != result) && !missingFromPersistentStore(result)) {
+                LOGERR("Failed to read migrationVersion from PersistentStore, hresult=%d", result);
+            }
+
+            return result;
+        }
+
+        Core::hresult BluetoothDeviceManager::writeMigrationVersionToStorage()
+        {
+            if (_service == nullptr) {
+                LOGERR("Service is null");
+                return Core::ERROR_GENERAL;
+            }
+
+            Exchange::IStore* pPersistentStore = _service->QueryInterfaceByCallsign<Exchange::IStore>(PERSISTENT_STORE_CALLSIGN);
+            if (pPersistentStore == nullptr) {
+                LOGERR("Failed to get PersistentStore interface");
+                return Core::ERROR_GENERAL;
+            }
+
+            const Core::hresult result = pPersistentStore->SetValue(PERSISTENT_STORE_NAMESPACE, PERSISTENT_STORE_KEY_MIGRATION_VERSION, BLUETOOTH_MIGRATION_VERSION);
+            pPersistentStore->Release();
+
+            if (Core::ERROR_NONE != result) {
+                LOGERR("Failed to write migrationVersion to PersistentStore, hresult=%d", result);
+            }
+
+            return result;
+        }
+
+        Core::hresult BluetoothDeviceManager::performMigration()
+        {
+            Core::SafeSyncType<Core::CriticalSection> lock(_migrationLock);
+
+            LOGINFO("migration_attempted");
+
+            std::string storedVersion;
+            const Core::hresult readVersionResult = readMigrationVersionFromStorage(storedVersion);
+            const bool alreadyMigrated = (Core::ERROR_NONE == readVersionResult) && (storedVersion == BLUETOOTH_MIGRATION_VERSION);
+
+            if (!missingFromPersistentStore(readVersionResult) && (Core::ERROR_NONE != readVersionResult)) {
+                LOGERR("failed to read migrationVersion, hresult=%d", readVersionResult);
+                return readVersionResult;
+            }
+
+            if (alreadyMigrated) {
+                LOGINFO("migration already completed (migrationVersion=%s present), no sync needed", BLUETOOTH_MIGRATION_VERSION);
+                _isMigrated.store(true);
+                return Core::ERROR_NONE;
+            }
+
+            // Step 1: Read the AS file and import devices into the cache.
+            // NOTE: Do NOT delete existing deviceInfo from PersistentStore before this point.
+            // If ReadRaw()/Parse() fails, the existing store data must be preserved to avoid data
+            // loss. Any stale deviceInfo written by a prior partial run is safely overwritten by
+            // writeStorageFromCache() (SetValue) only after all steps below succeed.
+            BluetoothPersistenceAdapter adapter;
+            std::string rawContent;
+            const Core::hresult readRawResult = adapter.ReadRaw(rawContent);
+            if ((Core::ERROR_NONE != readRawResult) && (Core::ERROR_NOT_EXIST != readRawResult)) {
+                LOGERR("failed to read AS filesystem persistence source, hresult=%d", readRawResult);
+                return readRawResult;
+            }
+
+            const Core::hresult importResult = writeCacheFromFilesystemPersistence(rawContent);
+            if (Core::ERROR_NONE != importResult) {
+                LOGERR("failed to import from filesystem persistence, hresult=%d", importResult);
+                return importResult;
+            }
+
+            // Step 2: Mandatory BTRMGR enrichment. AS lacks some fields (e.g. deviceType) required
+            // by the RDK store schema; enrichment is a hard requirement for migration correctness.
+            // Skip when the imported cache is empty — there is nothing to enrich, and an error from
+            // BTRMGR_GetPairedDevices() should not abort migration in that case.
+            _adminLock.Lock();
+            const bool importedCacheEmpty = _pairedDeviceCache.empty();
+            _adminLock.Unlock();
+
+            if (!importedCacheEmpty) {
+                const Core::hresult deviceResult = updateCacheFromDevice(/* backfillOnly= */ true);
+                if (Core::ERROR_NONE != deviceResult) {
+                    LOGERR("mandatory BTRMGR enrichment failed (hresult=%d); aborting migration", deviceResult);
+                    return deviceResult;
+                }
+            } else {
+                LOGINFO("imported cache is empty, skipping BTRMGR enrichment");
+            }
+
+            // Step 3: Write enriched deviceInfo to RDK Persistent Store (before migration marker).
+            const Core::hresult writeResult = writeStorageFromCache();
+            if (Core::ERROR_NONE != writeResult) {
+                LOGERR("failed to persist imported data to PersistentStore, hresult=%d", writeResult);
+                return writeResult;
+            }
+
+            // Step 4: Write migration marker last so it cannot indicate success unless store is written.
+            const Core::hresult writeVersionResult = writeMigrationVersionToStorage();
+            if (Core::ERROR_NONE != writeVersionResult) {
+                LOGERR("failed to persist migrationVersion, hresult=%d", writeVersionResult);
+                return writeVersionResult;
+            }
+
+            // Step 5: Transfer AS ownership, set migrated true.
+            _isMigrated.store(true);
+
+            LOGINFO("initial migration succeeded");
+            return Core::ERROR_NONE;
+        }
+
+        Core::hresult BluetoothDeviceManager::clearMigration()
+        {
+            Core::SafeSyncType<Core::CriticalSection> lock(_migrationLock);
+
+            if (_service == nullptr) {
+                LOGERR("service is null");
+                return Core::ERROR_GENERAL;
+            }
+
+            Exchange::IStore* pPersistentStore = _service->QueryInterfaceByCallsign<Exchange::IStore>(PERSISTENT_STORE_CALLSIGN);
+            if (pPersistentStore == nullptr) {
+                LOGERR("failed to get PersistentStore interface");
+                return Core::ERROR_GENERAL;
+            }
+
+            Core::hresult result = pPersistentStore->DeleteKey(PERSISTENT_STORE_NAMESPACE, PERSISTENT_STORE_KEY_DEVICE_INFO);
+            if ((Core::ERROR_NONE != result) && !missingFromPersistentStore(result)) {
+                LOGERR("failed to delete deviceInfo from PersistentStore, hresult=%d", result);
+                pPersistentStore->Release();
+                return result;
+            }
+
+            result = pPersistentStore->DeleteKey(PERSISTENT_STORE_NAMESPACE, PERSISTENT_STORE_KEY_MIGRATION_VERSION);
+            if ((Core::ERROR_NONE != result) && !missingFromPersistentStore(result)) {
+                LOGERR("failed to delete migrationVersion from PersistentStore, hresult=%d", result);
+                pPersistentStore->Release();
+                return result;
+            }
+
+            pPersistentStore->Release();
+
+            _adminLock.Lock();
+            _pairedDeviceCache.clear();
+            _adminLock.Unlock();
+
+            _isMigrated.store(false);
+
+            LOGINFO("PersistentStore cleared and migration state reset");
+            return Core::ERROR_NONE;
         }
 #endif
 
@@ -195,10 +340,12 @@ namespace WPEFramework {
                     }
 
                     BluetoothDeviceInfo deviceInfo;
+                    deviceInfo.deviceAddr = deviceInfoObj.HasLabel("deviceAddr") ? deviceInfoObj["deviceAddr"].String() : "";
                     deviceInfo.deviceType = std::move(deviceType);
                     deviceInfo.autoConnectStatus = autoConnectStatus;
                     deviceInfo.lastConnectTimeUtc = std::move(lastConnectTimeUtc);
                     deviceInfo.lastVolumeSetting = lastVolumeSetting;
+                    deviceInfo.isGamePad = deviceInfoObj.HasLabel("isGamePad") ? deviceInfoObj["isGamePad"].Boolean() : false;
 
                     _pairedDeviceCache[deviceID] = std::move(deviceInfo);
 
@@ -218,7 +365,7 @@ namespace WPEFramework {
             return result;
         }
 
-        Core::hresult BluetoothDeviceManager::updateCacheFromDevice()
+        Core::hresult BluetoothDeviceManager::updateCacheFromDevice(bool backfillOnly)
         {
             BTRMGR_PairedDevicesList_t pairedDevices{};
 
@@ -230,14 +377,13 @@ namespace WPEFramework {
             }
 
             _adminLock.Lock();
-            
-            // Add any paired devices not already in cache.
 
             for (int i=0; i<pairedDevices.m_numOfDevices; i++)
             {
                 string deviceId = std::to_string(pairedDevices.m_deviceProperty[i].m_deviceHandle);
                 const char* deviceTypeStr = BTRMGR_GetDeviceTypeAsString(pairedDevices.m_deviceProperty[i].m_deviceType);
                 string deviceType = string(deviceTypeStr ? deviceTypeStr : "UNKNOWN");
+                const bool isGamePad = (pairedDevices.m_deviceProperty[i].m_deviceType == BTRMGR_DEVICE_TYPE_HID_GAMEPAD);
                 const std::string deviceAddr = (pairedDevices.m_deviceProperty[i].m_deviceAddress[0] != '\0')
                     ? std::string(pairedDevices.m_deviceProperty[i].m_deviceAddress)
                     : std::string();
@@ -257,36 +403,43 @@ namespace WPEFramework {
                         existing.deviceType = deviceType;
                         LOGINFO("Backfilled deviceType for deviceID=%s from BTRMGR: %s\n", deviceId.c_str(), deviceType.c_str());
                     }
-                } else {
-                    // Device found that's not yet cached, add.
+                    // BTRMGR is authoritative for the gamepad classification.
+                    existing.isGamePad = isGamePad;
+                } else if (!backfillOnly) {
+                    // Device found that's not yet cached; add only when not in backfill-only mode.
                     LOGINFO("Adding device to cache: deviceID=%s, deviceType=%s\n", deviceId.c_str(), deviceType.c_str());
                     BluetoothDeviceInfo deviceInfo;
                     deviceInfo.deviceAddr = std::move(deviceAddr);
                     deviceInfo.deviceType = std::move(deviceType);
+                    deviceInfo.isGamePad = isGamePad;
                     deviceInfo.friendlyName = (pairedDevices.m_deviceProperty[i].m_name[0] != '\0') ? std::string(pairedDevices.m_deviceProperty[i].m_name) : deviceId;
                     _pairedDeviceCache[deviceId] = std::move(deviceInfo);
+                } else {
+                    LOGINFO("Skipping device not in imported cache (backfill-only mode): deviceID=%s\n", deviceId.c_str());
                 }
             }
 
-            // Scrub cache of any devices that are no longer paired with the platform.
+            if (!backfillOnly) {
+                // Scrub cache of any devices that are no longer paired with the platform.
 
-            std::unordered_set<std::string> pairedDeviceIds;
-            pairedDeviceIds.reserve(static_cast<size_t>(pairedDevices.m_numOfDevices));
-            for (int i = 0; i < pairedDevices.m_numOfDevices; ++i) {
-                pairedDeviceIds.emplace(std::to_string(pairedDevices.m_deviceProperty[i].m_deviceHandle));
-            }
-
-            std::vector<std::string> deviceIdsToRemove;
-            for (const auto& entry : _pairedDeviceCache) {
-                const std::string& cachedDeviceId = entry.first;
-                if (pairedDeviceIds.find(cachedDeviceId) == pairedDeviceIds.end()) {
-                    LOGINFO("Marking device for removal from cache: deviceID=%s\n", cachedDeviceId.c_str());
-                    deviceIdsToRemove.push_back(cachedDeviceId);
+                std::unordered_set<std::string> pairedDeviceIds;
+                pairedDeviceIds.reserve(static_cast<size_t>(pairedDevices.m_numOfDevices));
+                for (int i = 0; i < pairedDevices.m_numOfDevices; ++i) {
+                    pairedDeviceIds.emplace(std::to_string(pairedDevices.m_deviceProperty[i].m_deviceHandle));
                 }
-            }
 
-            for (const auto& deviceId : deviceIdsToRemove) {
-                _pairedDeviceCache.erase(deviceId);
+                std::vector<std::string> deviceIdsToRemove;
+                for (const auto& entry : _pairedDeviceCache) {
+                    const std::string& cachedDeviceId = entry.first;
+                    if (pairedDeviceIds.find(cachedDeviceId) == pairedDeviceIds.end()) {
+                        LOGINFO("Marking device for removal from cache: deviceID=%s\n", cachedDeviceId.c_str());
+                        deviceIdsToRemove.push_back(cachedDeviceId);
+                    }
+                }
+
+                for (const auto& deviceId : deviceIdsToRemove) {
+                    _pairedDeviceCache.erase(deviceId);
+                }
             }
 
             _adminLock.Unlock();
@@ -308,6 +461,7 @@ namespace WPEFramework {
             }
 
             JsonArray deviceInfoArray;
+            std::unordered_map<std::string, BluetoothDeviceInfo> cacheSnapshot;
 
             _adminLock.Lock();
 
@@ -317,31 +471,34 @@ namespace WPEFramework {
 
                 JsonObject deviceInfoObj;
                 deviceInfoObj["deviceID"] = deviceID;
+                deviceInfoObj["deviceAddr"] = deviceInfo.deviceAddr;
                 deviceInfoObj["deviceType"] = deviceInfo.deviceType;
+                deviceInfoObj["isGamePad"] = deviceInfo.isGamePad;
                 deviceInfoObj["autoconnect"] = static_cast<int>(deviceInfo.autoConnectStatus);
                 deviceInfoObj["lastConnectTimeUtc"] = deviceInfo.lastConnectTimeUtc;
                 deviceInfoObj["lastVolumeSetting"] = deviceInfo.lastVolumeSetting;
 
                 deviceInfoArray.Add(deviceInfoObj);
+                cacheSnapshot[deviceID] = deviceInfo;
             }
 
             string bluetoothDeviceInfoStr;
             deviceInfoArray.ToString(bluetoothDeviceInfoStr);
 
             _adminLock.Unlock();
-            
-            LOGINFO("Saving device info JSON: %s", bluetoothDeviceInfoStr.c_str());
 
             Core::hresult result = pPersistentStore->SetValue(PERSISTENT_STORE_NAMESPACE, PERSISTENT_STORE_KEY_DEVICE_INFO, bluetoothDeviceInfoStr);
 
             if (Core::ERROR_NONE != result) {
                 LOGERR("Failed to save device info to PersistentStore, hresult=%d", result);
-            }
+            } else {
+                LOGINFO("Saved device info JSON to PersistentStore: %s", bluetoothDeviceInfoStr.c_str());
 #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
-            else {
-                writeFilesystemPersistenceFromCache();
-            }
+                if (_isMigrated.load()) {
+                    writeFilesystemPersistenceFromCache(cacheSnapshot);
+                }
 #endif
+            }
 
             pPersistentStore->Release();
 
@@ -373,31 +530,43 @@ namespace WPEFramework {
             _service = service;
             _service->AddRef();
 
+#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+            {
+                std::string storedVersion;
+                const Core::hresult versionResult = readMigrationVersionFromStorage(storedVersion);
+
+                if(Core::ERROR_NONE != versionResult && !missingFromPersistentStore(versionResult)) {
+                    LOGERR("Migration state at init: failed to read migrationVersion from PersistentStore, hresult=%d", versionResult);
+                }
+
+                const bool isMigrated = (Core::ERROR_NONE == versionResult) && (storedVersion == BLUETOOTH_MIGRATION_VERSION);
+                _isMigrated.store(isMigrated);
+                LOGINFO("Migration state at init: _isMigrated=%s", isMigrated ? "true" : "false");
+
+                if (isMigrated) {
+                    // Valid migration marker present: load the authoritative cache from RDK Persistent Store.
+                    const Core::hresult storageResult = updateCacheFromStorage();
+                    if ((Core::ERROR_NONE != storageResult) && !missingFromPersistentStore(storageResult)) {
+                        LOGERR("PersistentStore read failed (hresult=%d); aborting init to avoid data loss", storageResult);
+                        _service->Release();
+                        _service = nullptr;
+                        return storageResult;
+                    }
+                } else {
+                    // No valid migration marker: any store data is stale/untrusted. Cache stays empty.
+                    LOGINFO("migration not yet complete, ignoring any stale store data");
+                }
+
+                return Core::ERROR_NONE;
+            }
+#else
             const Core::hresult storageResult = updateCacheFromStorage();
             if ((Core::ERROR_NONE != storageResult) && !missingFromPersistentStore(storageResult)) {
                 LOGERR("PersistentStore read failed (hresult=%d); aborting init to avoid data loss", storageResult);
+                _service->Release();
+                _service = nullptr;
                 return storageResult;
             }
-
-#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
-            if (missingFromPersistentStore(storageResult)) {
-                LOGINFO("Migration attempted: PersistentStore device info is missing; trying filesystem persistence import.");
-
-                const Core::hresult migrationResult = writeCacheFromFilesystemPersistence();
-                if (Core::ERROR_NONE == migrationResult) {
-                    const Core::hresult migrationPersistResult = writeStorageFromCache();
-                    if (Core::ERROR_NONE == migrationPersistResult) {
-                        LOGINFO("Migration succeeded: Filesystem persistence data imported and persisted to PersistentStore.");
-                    } else {
-                        LOGWARN("Migration failed: Unable to persist imported filesystem persistence data, hresult=%d", migrationPersistResult);
-                    }
-                } else if (Core::ERROR_NOT_EXIST == migrationResult) {
-                    LOGINFO("Migration skipped: Filesystem persistence source not found.");
-                } else {
-                    LOGWARN("Migration failed: Filesystem persistence source is invalid, hresult=%d", migrationResult);
-                }
-            }
-#endif
 
             const Core::hresult deviceResult = updateCacheFromDevice();
             if (Core::ERROR_NONE != deviceResult) {
@@ -405,16 +574,21 @@ namespace WPEFramework {
                 // will be unavailable for everything else. Fail init so the plugin is not
                 // activated in a broken state.
                 LOGERR("Failed to update cache from device (hresult=%d); aborting init", deviceResult);
+                _service->Release();
+                _service = nullptr;
                 return deviceResult;
             }
 
             const Core::hresult writeResult = writeStorageFromCache();
             if (Core::ERROR_NONE != writeResult) {
                 LOGWARN("Failed to write cache to PersistentStore, hresult=%d", writeResult);
+                _service->Release();
+                _service = nullptr;
                 return writeResult;
             }
 
             return Core::ERROR_NONE;
+#endif
         }
 
         void BluetoothDeviceManager::deinit()
@@ -440,6 +614,13 @@ namespace WPEFramework {
         Core::hresult BluetoothDeviceManager::setAutoConnect(const std::string& deviceID, bool enable)
         {
             LOGINFO("deviceID=%s, enable=%s\n", deviceID.c_str(), enable ? "true" : "false");
+
+#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+            if (!_isMigrated.load()) {
+                LOGWARN("setAutoConnect rejected: migration has not been performed yet for deviceID=%s", deviceID.c_str());
+                return Core::ERROR_GENERAL;
+            }
+#endif
 
             BluetoothDeviceInfo deviceInfo;
 
@@ -468,6 +649,15 @@ namespace WPEFramework {
         Core::hresult BluetoothDeviceManager::getAutoConnect(const std::string& deviceID, AutoConnectStatus& status)
         {
             LOGINFO("deviceID=%s\n", deviceID.c_str());
+
+#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+            if (!_isMigrated.load()) {
+                LOGINFO("migration not complete, returning disabled for deviceID=%s", deviceID.c_str());
+                status = AUTO_CONNECT_STATUS_DISABLED;
+                return Core::ERROR_NONE;
+            }
+#endif
+
             BluetoothDeviceInfo deviceInfo;
 
             _adminLock.Lock();
@@ -477,7 +667,8 @@ namespace WPEFramework {
             _adminLock.Unlock();
 
             if (Core::ERROR_NONE == result) {
-                status = deviceInfo.autoConnectStatus;
+                // Consider AUTO_CONNECT_STATUS_UNSET --> AUTO_CONNECT_STATUS_DISABLED
+                status = (AUTO_CONNECT_STATUS_UNSET == deviceInfo.autoConnectStatus) ? AUTO_CONNECT_STATUS_DISABLED : deviceInfo.autoConnectStatus;
             }
             
             return result;
@@ -507,6 +698,12 @@ namespace WPEFramework {
             _pairedDeviceCache[deviceID] = std::move(deviceInfo);
             _adminLock.Unlock();
 
+#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+            if (!_isMigrated.load()) {
+                LOGINFO("migration not complete, skipping persistence write for deviceID=%s", deviceID.c_str());
+                return;
+            }
+#endif
             result = writeStorageFromCache();
             if (Core::ERROR_NONE != result) {
                 LOGERR("Failed to update storage from cache after setting lastConnectTimeUtc for deviceID=%s", deviceID.c_str());
@@ -533,6 +730,12 @@ namespace WPEFramework {
             _pairedDeviceCache[deviceID] = std::move(deviceInfo);
             _adminLock.Unlock();
 
+#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+            if (!_isMigrated.load()) {
+                LOGINFO("migration not complete, skipping persistence write for deviceID=%s", deviceID.c_str());
+                return Core::ERROR_NONE;
+            }
+#endif
             result = writeStorageFromCache();
             if (Core::ERROR_NONE != result) {
                 LOGERR("Failed to update storage from cache after setting lastVolumeSetting for deviceID=%s", deviceID.c_str());
@@ -587,11 +790,28 @@ namespace WPEFramework {
             deviceInfo.deviceAddr = (deviceProperty.m_deviceAddress[0] != '\0') ? std::string(deviceProperty.m_deviceAddress) : std::string();
             const char* deviceTypeStr = BTRMGR_GetDeviceTypeAsString(deviceProperty.m_deviceType);
             deviceInfo.deviceType = (deviceTypeStr != nullptr) ? deviceTypeStr : "UNKNOWN";
+            deviceInfo.isGamePad = (deviceProperty.m_deviceType == BTRMGR_DEVICE_TYPE_HID_GAMEPAD);
             deviceInfo.friendlyName = (deviceProperty.m_name[0] != '\0') ? std::string(deviceProperty.m_name) : deviceID;
+
+            // Evict any MAC-keyed entry left from migration import for the same physical device.
+            if (!deviceInfo.deviceAddr.empty()) {
+                auto macIt = _pairedDeviceCache.find(deviceInfo.deviceAddr);
+                if (macIt != _pairedDeviceCache.end()) {
+                    LOGINFO("Evicting MAC-keyed cache entry for addr=%s, replacing with handle-keyed entry %s", deviceInfo.deviceAddr.c_str(), deviceID.c_str());
+                    _pairedDeviceCache.erase(macIt);
+                }
+            }
+
             _pairedDeviceCache[deviceID] = std::move(deviceInfo);
 
             _adminLock.Unlock();
 
+#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+            if (!_isMigrated.load()) {
+                LOGINFO("migration not complete, skipping persistence write for deviceID=%s", deviceID.c_str());
+                return Core::ERROR_NONE;
+            }
+#endif
             return writeStorageFromCache();
         }
 
@@ -611,6 +831,13 @@ namespace WPEFramework {
             }
 
             _adminLock.Unlock();
+
+#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+            if (!_isMigrated.load()) {
+                LOGINFO("migration not complete, skipping persistence write for deviceID=%s", deviceID.c_str());
+                return Core::ERROR_NONE;
+            }
+#endif
             return writeStorageFromCache();
         }
 
