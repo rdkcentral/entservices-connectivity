@@ -310,7 +310,7 @@ jobs:
         with:
           repository: rdkcentral/entservices-helpers
           path: entservices-helpers
-          ref: develop
+          ref: support/8.6.3.0
 
       - name: Build entservices-helpers
         run: >
