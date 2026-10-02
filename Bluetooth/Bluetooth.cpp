@@ -253,7 +253,7 @@ namespace WPEFramework
                 if (Core::ERROR_NONE == m_powerManagerPlugin->GetPowerState(currentState, prevState)) {
                     onPowerModeChanged(prevState, currentState);
                 } else {
-                    LOGERR("Failed to get current power state");
+                    LOGERR("Failed to get current power stateZ");
                 }
             } else {
                 LOGERR("Failed to get PowerManager interface");
