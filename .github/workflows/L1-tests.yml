@@ -323,7 +323,10 @@ jobs:
         with:
           repository: rdkcentral/entservices-helpers
           path: entservices-helpers
-          ref: support/8.6.3.0
+          # Pinned to develop (not support/8.6.3.0): support/8.6.3.0's UtilsJsonRpc.h
+          # returnResponse macro still returns ERROR_GENERAL on failure, which this
+          # plugin's tests (shared byte-for-byte with develop) don't expect.
+          ref: develop
 
       - name: Build entservices-helpers
         run: >
