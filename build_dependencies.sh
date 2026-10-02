@@ -31,7 +31,9 @@ git clone --branch  R4.4.3 https://github.com/rdkcentral/ThunderTools.git
 
 git clone --branch R4.4.1 https://github.com/rdkcentral/Thunder.git
 
-git clone --branch develop https://github.com/rdkcentral/entservices-apis.git
+# Pinned to support/8.6.3.0 because entservices-apis@develop currently fails
+# ProxyStubGenerator on apis/DeviceSettings/IDeviceSettings.h (RDKEMW-6078, #911).
+git clone --branch support/8.6.3.0 https://github.com/rdkcentral/entservices-apis.git
 
 cd ..
 git clone --branch develop https://github.com/rdkcentral/entservices-helpers.git
