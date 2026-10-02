@@ -31,7 +31,7 @@ namespace bluetooth {
 class Manager::Impl {
  public:
   Impl(Manager* owner, AuthorisationMode, std::function<bool(AuthorisationType, std::shared_ptr<Device>)>,
-       LogLocation, std::variant<std::string, std::unique_ptr<LogRedirect>>)
+      LogLocation, std::variant<std::string, std::unique_ptr<LogRedirect>>, std::string)
       : m_owner(owner) {
     m_adapters.push_back(std::make_shared<Adapter>(0));
   }
@@ -53,9 +53,10 @@ class Manager::Impl {
 
 Manager::Manager(AuthorisationMode isAuthManager,
                  std::function<bool(AuthorisationType authType, std::shared_ptr<Device>)> authManagerCallback,
-                 LogLocation logOutput, std::variant<std::string, std::unique_ptr<LogRedirect>> output)
+                 LogLocation logOutput, std::variant<std::string, std::unique_ptr<LogRedirect>> output,
+                 std::string agentCapability)
     : m_impl(std::make_unique<Impl>(this, isAuthManager, std::move(authManagerCallback), logOutput,
-                                    std::move(output))) {}
+                                    std::move(output), std::move(agentCapability))) {}
 
 Manager::Manager(std::string /* agentCapability */)
     : Manager(AuthorisationMode::NoAuthorisation, {}, LogLocation::Stdout, {}) {}
@@ -66,5 +67,9 @@ Status Manager::getDefaultAdapter(std::shared_ptr<bluetooth::Adapter>& adapter) 
   return m_impl->getDefaultAdapter(adapter);
 }
 std::vector<std::shared_ptr<bluetooth::Adapter>> Manager::getAdapters() { return m_impl->getAdapters(); }
+
+void Manager::unregisterAgent() {}
+
+bool Manager::isDeviceInCooldown(const std::shared_ptr<Device>&) { return false; }
 
 }  // namespace bluetooth

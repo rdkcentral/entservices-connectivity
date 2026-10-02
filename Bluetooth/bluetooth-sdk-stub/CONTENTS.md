@@ -46,10 +46,12 @@ include/
     ├── GattServer.h         # GATT server (advertise services)
     ├── Advertisement.h      # BLE advertisement management
     ├── Uuid.h               # UUID utilities
-    ├── Utils.h              # Utility functions
+    ├── Utils.h              # D-Bus object path helpers (requires sdbus-c++; not used by the stub build)
+    ├── Connection.h         # D-Bus connection accessors (requires sdbus-c++; not used by the stub build)
     ├── Appearance.h         # Bluetooth appearance codes
-    ├── GattServices.h       # Standard GATT services
-    └── (all headers are dependency-free)
+    ├── GattServices.h       # Example common GATT services (header-only; no stub .cpp provided)
+    ├── sdbus/               # sdbus-c++-xml2cpp generated BlueZ proxy/adaptor headers (requires sdbus-c++; not used by the stub build)
+    └── (Adapter/Advertisement/Audio/Device/GattClient/GattServer/Manager/Uuid/Appearance headers are dependency-free)
 
 stub/
 ├── Manager.cpp              # Stub implementation (no-ops, state tracking)
@@ -60,6 +62,13 @@ stub/
 ├── GattServer.cpp
 └── Advertisement.cpp
 ```
+
+> **Note:** `Utils.h`, `Connection.h`, and `sdbus/` declare the real SDK's D-Bus
+> plumbing and pull in `<sdbus-c++/sdbus-c++.h>`. They are not part of the
+> zero-dependency stub surface and have no stub backend — only include them
+> directly if you are linking against the real SDK. `GattServices.h` has no
+> corresponding `stub/GattServices.cpp`; it's reference code for building GATT
+> services on top of `GattServer`, not a stubbed library symbol set.
 
 ### Build Configuration
 

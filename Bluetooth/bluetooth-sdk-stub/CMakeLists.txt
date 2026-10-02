@@ -15,6 +15,7 @@ add_library(rdk_bluetooth SHARED
     stub/Manager.cpp
     stub/Device.cpp
     stub/Advertisement.cpp
+    stub/Audio.cpp
     stub/GattClient.cpp
     stub/GattServer.cpp
     stub/Uuid.cpp

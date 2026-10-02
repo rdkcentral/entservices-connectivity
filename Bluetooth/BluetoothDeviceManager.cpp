@@ -61,14 +61,14 @@ namespace WPEFramework {
                 return result;
             }
 
-            // Build a mapping from device address to device handle using the SDK.
+            // Build a mapping from device address to device handle via the adapter.
             if (!_btAdapter) {
                 LOGERR("BtAdapter not set during filesystem persistence import");
                 return Core::ERROR_GENERAL;
             }
             
             // Parse() treats missing/corrupted content as a default empty list; short-circuit
-            // here too so that case is not exposed to a BTRMGR_GetPairedDevices() failure below.
+            // here too so that case is not exposed to a getPairedDevices() failure below.
             if (importedDevices.empty()) {
                 _adminLock.Lock();
                 _pairedDeviceCache.clear();
@@ -76,12 +76,7 @@ namespace WPEFramework {
                 return Core::ERROR_NONE;
             }
 
-            // Build a mapping from device address to device handle using BTRMGR.
-            BTRMGR_PairedDevicesList_t pairedDevices{};
-            if (BTRMGR_GetPairedDevices(0, &pairedDevices) != BTRMGR_RESULT_SUCCESS) {
-                LOGERR("Failed to get paired devices from BTRMGR during filesystem persistence import");
-                return Core::ERROR_GENERAL;
-            }
+            // Build a mapping from device address to device handle via the implementation-agnostic adapter.
             auto sdkPairedDevices = _btAdapter->getPairedDevices();
 
             std::unordered_map<std::string, std::string> addrToDeviceId;
@@ -98,8 +93,8 @@ namespace WPEFramework {
                 if (it != addrToDeviceId.end()) {
                     importedCache[it->second] = std::move(info);
                 } else if (!info.deviceAddr.empty()) {
-                    // BTRMGR doesn't know this device; key by MAC so it is preserved in persistence.
-                    LOGWARN("No BTRMGR handle for addr=%s, importing with MAC as key", info.deviceAddr.c_str());
+                    // The adapter doesn't know this device; key by MAC so it is preserved in persistence.
+                    LOGWARN("No adapter handle for addr=%s, importing with MAC as key", info.deviceAddr.c_str());
                     importedCache[info.deviceAddr] = std::move(info);
                 } else {
                     LOGWARN("Skipping device with empty deviceAddr during filesystem persistence import");
@@ -222,10 +217,10 @@ namespace WPEFramework {
                 return importResult;
             }
 
-            // Step 2: Mandatory BTRMGR enrichment. AS lacks some fields (e.g. deviceType) required
+            // Step 2: Mandatory adapter enrichment. AS lacks some fields (e.g. deviceType) required
             // by the RDK store schema; enrichment is a hard requirement for migration correctness.
             // Skip when the imported cache is empty — there is nothing to enrich, and an error from
-            // BTRMGR_GetPairedDevices() should not abort migration in that case.
+            // getPairedDevices() should not abort migration in that case.
             _adminLock.Lock();
             const bool importedCacheEmpty = _pairedDeviceCache.empty();
             _adminLock.Unlock();
@@ -233,11 +228,11 @@ namespace WPEFramework {
             if (!importedCacheEmpty) {
                 const Core::hresult deviceResult = updateCacheFromDevice(/* backfillOnly= */ true);
                 if (Core::ERROR_NONE != deviceResult) {
-                    LOGERR("mandatory BTRMGR enrichment failed (hresult=%d); aborting migration", deviceResult);
+                    LOGERR("mandatory adapter enrichment failed (hresult=%d); aborting migration", deviceResult);
                     return deviceResult;
                 }
             } else {
-                LOGINFO("imported cache is empty, skipping BTRMGR enrichment");
+                LOGINFO("imported cache is empty, skipping adapter enrichment");
             }
 
             // Step 3: Write enriched deviceInfo to RDK Persistent Store (before migration marker).
@@ -405,7 +400,7 @@ namespace WPEFramework {
                         existing.deviceType = deviceType;
                         LOGINFO("Backfilled deviceType for deviceID=%s: %s\n", deviceId.c_str(), deviceType.c_str());
                     }
-                    // BTRMGR is authoritative for the gamepad classification.
+                    // The adapter is authoritative for the gamepad classification.
                     existing.isGamePad = isGamePad;
                 } else if (!backfillOnly) {
                     LOGINFO("Adding device to cache: deviceID=%s, deviceType=%s\n", deviceId.c_str(), deviceType.c_str());
@@ -567,7 +562,7 @@ namespace WPEFramework {
 
             const Core::hresult deviceResult = updateCacheFromDevice();
             if (Core::ERROR_NONE != deviceResult) {
-                // BTRMGR is fundamental to all BT operations — if it's unavailable here it
+                // The adapter is fundamental to all BT operations — if it's unavailable here it
                 // will be unavailable for everything else. Fail init so the plugin is not
                 // activated in a broken state.
                 LOGERR("Failed to update cache from device (hresult=%d); aborting init", deviceResult);

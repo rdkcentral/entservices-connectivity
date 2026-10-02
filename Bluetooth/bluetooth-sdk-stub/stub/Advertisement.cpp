@@ -34,6 +34,7 @@ class Advertisement::Impl {
   void ServiceUUIDs(std::vector<Uuid> serviceUuids) { m_serviceUuids = std::move(serviceUuids); }
   void ManufacturerData(std::map<uint16_t, std::vector<uint8_t>>& data) { m_manufacturerData = data; }
   void ServiceData(std::vector<Uuid>& serviceUuids) { m_serviceUuids = serviceUuids; }
+  void Discoverable(bool discoverable) { m_discoverable = discoverable; }
   void DiscoverableTimeout(std::chrono::seconds value) { m_discoverableTimeout = value; }
   void LocalName(std::string name) { m_localName = std::move(name); }
   void AppearanceValue(Appearance appearance) { m_appearance = appearance; }
@@ -48,6 +49,7 @@ class Advertisement::Impl {
   AdvertisementType m_type{AdvertisementType::Peripheral};
   std::vector<Uuid> m_serviceUuids;
   std::map<uint16_t, std::vector<uint8_t>> m_manufacturerData;
+  bool m_discoverable{false};
   std::chrono::seconds m_discoverableTimeout{0};
   std::string m_localName{"Bluetooth SDK"};
   Appearance m_appearance{0};
@@ -66,6 +68,7 @@ void Advertisement::Type(AdvertisementType type) { m_impl->Type(type); }
 void Advertisement::ServiceUUIDs(std::vector<Uuid> serviceUuids) { m_impl->ServiceUUIDs(std::move(serviceUuids)); }
 void Advertisement::ManufacturerData(std::map<uint16_t, std::vector<uint8_t>>& data) { m_impl->ManufacturerData(data); }
 void Advertisement::ServiceData(std::vector<Uuid>& serviceUuids) { m_impl->ServiceData(serviceUuids); }
+void Advertisement::Discoverable(bool discoverable) { m_impl->Discoverable(discoverable); }
 void Advertisement::DiscoverableTimeout(std::chrono::seconds value) { m_impl->DiscoverableTimeout(value); }
 void Advertisement::LocalName(std::string name) { m_impl->LocalName(std::move(name)); }
 void Advertisement::AppearanceValue(Appearance appearance) { m_impl->AppearanceValue(appearance); }

@@ -207,8 +207,14 @@ The stub implements these key classes:
 - **GattClient / GattServer:** GATT operations (stub: minimal).
 - **Advertisement / AdvertisementMgr:** BLE advertisement (stub: no-op).
 - **Audio:** Volume, mute, and delay compensation (stub: no-op when `AUDIO_SUPPORT=ON`).
+- **GattServices:** Example Heart Rate / Battery Level / Current Time GATT services built on top of `GattServer` (header-only; no stub `.cpp`, bring your own implementation if you need these).
 
 All methods return `Status::BLUETOOTH_ERROR` with "stub: no Bluetooth backend available" on real device operations. State changes (e.g., `Device::state()`) are tracked locally for integration testing.
+
+`include/bluetooth/Connection.h`, `Utils.h`, and `include/bluetooth/sdbus/` are not part of this
+API — they declare the real SDK's internal D-Bus plumbing (`#include <sdbus-c++/sdbus-c++.h>`)
+and have no stub backend. They're bundled for header-compatibility with the real SDK but should
+not be included when building against the zero-dependency stub.
 
 ## Audio Support
 
