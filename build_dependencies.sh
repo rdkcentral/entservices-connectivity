@@ -2,6 +2,8 @@
 set -x
 set -e
 ##############################
+THUNDER_TOOLS_COMMIT_SHA="d5dd83c7c19c49c7f25c558c126500bd2d64f7a4"
+THUNDER_COMMIT_SHA="2c0fcc5529e7da734be558ca6efa05d934dcce31"
 GITHUB_WORKSPACE="${PWD}"
 ls -la ${GITHUB_WORKSPACE}
 cd ${GITHUB_WORKSPACE}
@@ -27,9 +29,15 @@ cd ..
 # Clone the required repositories
 
 
-git clone --branch  R4.4.3 https://github.com/rdkcentral/ThunderTools.git
+git clone --branch R4_4-RDK https://github.com/rdkcentral/ThunderTools.git
+cd ThunderTools
+git checkout $THUNDER_TOOLS_COMMIT_SHA
+cd ..
 
-git clone --branch R4.4.1 https://github.com/rdkcentral/Thunder.git
+git clone --branch R4_4-RDK https://github.com/rdkcentral/Thunder.git
+cd Thunder
+git checkout $THUNDER_COMMIT_SHA
+cd ..
 
 # Pinned to support/8.6.3.0 because entservices-apis@develop currently fails
 # ProxyStubGenerator on apis/DeviceSettings/IDeviceSettings.h (RDKEMW-6078, #911).
@@ -46,7 +54,6 @@ git clone --branch 1.0.14 https://github.com/rdkcentral/entservices-testframewor
 echo "======================================================================================"
 echo "buliding thunderTools"
 cd ThunderTools
-patch -p1 < $GITHUB_WORKSPACE/entservices-testframework/patches/00010-R4.4-Add-support-for-project-dir.patch
 cd -
 
 
@@ -65,10 +72,6 @@ echo "==========================================================================
 echo "buliding thunder"
 
 cd Thunder
-patch -p1 < $GITHUB_WORKSPACE/entservices-testframework/patches/Use_Legact_Alt_Based_On_ThunderTools_R4.4.3.patch
-patch -p1 < $GITHUB_WORKSPACE/entservices-testframework/patches/error_code_R4_4.patch
-patch -p1 < $GITHUB_WORKSPACE/entservices-testframework/patches/1004-Add-support-for-project-dir.patch
-patch -p1 < $GITHUB_WORKSPACE/entservices-testframework/patches/RDKEMW-733-Add-ENTOS-IDS.patch
 cd -
 
 cmake -G Ninja -S Thunder -B build/Thunder \
