@@ -14,7 +14,9 @@ on:
 env:
   BUILD_TYPE: Debug
   THUNDER_REF: "R4.4.1"
-  INTERFACES_REF: "develop"
+  # Pinned to support/8.6.3.0 because entservices-apis@develop currently fails
+  # ProxyStubGenerator on apis/DeviceSettings/IDeviceSettings.h (RDKEMW-6078, #911).
+  INTERFACES_REF: "support/8.6.3.0"
   AUTOMATICS_UNAME: ${{ secrets.AUTOMATICS_UNAME}}
   AUTOMATICS_PASSCODE: ${{ secrets.AUTOMATICS_PASSCODE}}
 
