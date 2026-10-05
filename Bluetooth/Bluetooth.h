@@ -73,6 +73,59 @@ namespace WPEFramework {
 
         private:
 
+            // Runs onPowerModeChanged() on the worker pool so BTMgr calls it makes never
+            // block the Thunder thread that delivers the IPowerManager notification.
+            class EXTERNAL PowerModeChangedJob : public Core::IDispatch {
+
+            public:
+                PowerModeChangedJob() = delete;
+                PowerModeChangedJob(const PowerModeChangedJob&) = delete;
+                PowerModeChangedJob& operator=(const PowerModeChangedJob&) = delete;
+
+                static Core::ProxyType<Core::IDispatch> Create(
+                    Bluetooth* bluetooth,
+                    const WPEFramework::Exchange::IPowerManager::PowerState currentState,
+                    const WPEFramework::Exchange::IPowerManager::PowerState newState)
+                {
+#ifndef USE_THUNDER_R4
+                    return (Core::proxy_cast<Core::IDispatch>(Core::ProxyType<PowerModeChangedJob>::Create(bluetooth, currentState, newState)));
+#else
+                    return (Core::ProxyType<Core::IDispatch>(Core::ProxyType<PowerModeChangedJob>::Create(bluetooth, currentState, newState)));
+#endif
+                }
+
+                ~PowerModeChangedJob() override
+                {
+                    if (_bluetooth != nullptr) {
+                        _bluetooth->Release();
+                    }
+                }
+
+                void Dispatch() override
+                {
+                    _bluetooth->onPowerModeChanged(_currentState, _newState);
+                }
+
+            protected:
+                PowerModeChangedJob(
+                    Bluetooth* bluetooth,
+                    const WPEFramework::Exchange::IPowerManager::PowerState currentState,
+                    const WPEFramework::Exchange::IPowerManager::PowerState newState)
+                    : _bluetooth(bluetooth)
+                    , _currentState(currentState)
+                    , _newState(newState)
+                {
+                    if (_bluetooth != nullptr) {
+                        _bluetooth->AddRef();
+                    }
+                }
+
+            private:
+                Bluetooth* _bluetooth;
+                const WPEFramework::Exchange::IPowerManager::PowerState _currentState;
+                const WPEFramework::Exchange::IPowerManager::PowerState _newState;
+            };
+
             class PowerManagerNotification : public WPEFramework::Exchange::IPowerManager::IModeChangedNotification {
 
             private:
@@ -92,7 +145,8 @@ namespace WPEFramework {
 
                 void OnPowerModeChanged(const WPEFramework::Exchange::IPowerManager::PowerState currentState, const WPEFramework::Exchange::IPowerManager::PowerState newState) override
                 {
-                    _bluetooth.onPowerModeChanged(currentState, newState);
+                    // Offload to the worker pool; do not call _bluetooth.onPowerModeChanged() directly from here.
+                    Core::IWorkerPool::Instance().Submit(Bluetooth::PowerModeChangedJob::Create(&_bluetooth, currentState, newState));
                 }
 
                 template <typename T>
