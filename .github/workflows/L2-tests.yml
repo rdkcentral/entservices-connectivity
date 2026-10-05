@@ -530,7 +530,7 @@ jobs:
           /tmp/persistent/rdkservicestore
           /tmp/secure/persistent/rdkservicestore
 
-      - name: Fix WPEFramework plugin configs path and enable full messaging
+      - name: Fix WPEFramework plugin configs path
         run: |
           export CONFIG_JSON="$GITHUB_WORKSPACE/install/etc/WPEFramework/config.json"
           PYCODE='
@@ -541,15 +541,6 @@ jobs:
           with open(path) as f:
               config = json.load(f)
 
-          any_category = {"category": "AnyCategory", "enabled": True}
-          config["messaging"] = {
-              "path": "MessageDispatcher",
-              "port": 0,
-              "logging": {"abbreviated": False, "settings": [any_category]},
-              "tracing": {"settings": [any_category, {"module": "Plugin_AnyPlugin", "enabled": True}]},
-              "reporting": {"abbreviated": False, "settings": [any_category]},
-          }
-
           # Thunders GenericConfig.cmake hardcodes "configs" to the system path
           # /etc/WPEFramework/plugins regardless of CMAKE_INSTALL_PREFIX, so plugin
           # configs installed under the repo-local prefix are never found (RDKEMW-26307).
@@ -557,16 +548,9 @@ jobs:
 
           with open(path, "w") as f:
               json.dump(config, f)
-          print("Patched messaging config:", config["messaging"])
-
-          for key in ("configs", "systempath", "discovery", "disablepluginautoactivation"):
-              print(f"config[{key!r}] =", config.get(key))
+          print("Patched configs path:", config["configs"])
           '
           python3 -c "$PYCODE"
-
-          echo "::group::WPEFramework plugins directory listing"
-          ls -la "$GITHUB_WORKSPACE/install/etc/WPEFramework/plugins/" || echo "(directory not found)"
-          echo "::endgroup::"
 
       - name: Download pact_verifier_cli
         run: |
@@ -574,79 +558,13 @@ jobs:
           $GITHUB_WORKSPACE/entservices-testframework/Tests/L2Tests/pact/install-verifier-cli.sh
 
       - name: Run unit tests without valgrind
-        run: |
-          export PATH=$GITHUB_WORKSPACE/install/usr/bin:${PATH}
-          export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/install/usr/lib:$GITHUB_WORKSPACE/install/usr/lib/wpeframework/plugins:${LD_LIBRARY_PATH}
-          export GTEST_OUTPUT="json:$(pwd)/rdkL2TestResults.json"
-
-          # Diagnostics for RDKEMW-26307: poll Controller's JSON-RPC status for org.rdk.L2Tests,
-          # since WPEFramework's trace/logging categories are disabled by default in this config
-          # and won't show *why* a plugin failed/declined to activate.
-          STATUS_LOG="$GITHUB_WORKSPACE/l2tests_plugin_status.log"
-          export STATUS_LOG
-          : > "$STATUS_LOG"
-          (
-            set +e
-            for _ in $(seq 1 60); do
-              ts=$(date +%H:%M:%S.%3N)
-              body=$(curl -s --max-time 1 -X POST http://127.0.0.1:9998/jsonrpc \
-                -H "Content-Type: application/json" \
-                -d '{"jsonrpc":"2.0","id":1,"method":"Controller.status"}')
-              echo "[$ts] $body" >> "$STATUS_LOG"
-              sleep 0.25
-            done
-          ) &
-          POLL_PID=$!
-
-          set +e
-          RdkServicesL2Test
-          TEST_RESULT=$?
-          set -e
-
-          kill "$POLL_PID" 2>/dev/null || true
-          wait "$POLL_PID" 2>/dev/null || true
-
-          echo "::group::org.rdk.L2Tests Controller status polled during startup (raw)"
-          cat "$STATUS_LOG"
-          echo "::endgroup::"
-
-          echo "::group::org.rdk.L2Tests entries only"
-          PYCODE='
-          import json
-          import os
-          import re
-
-          with open(os.environ["STATUS_LOG"]) as f:
-              for line in f:
-                  match = re.match(r"\[(\S+)\]\s*(.*)", line.strip())
-                  if not match:
-                      continue
-                  ts, body = match.groups()
-                  if not body:
-                      continue
-                  try:
-                      data = json.loads(body)
-                  except ValueError:
-                      print(f"[{ts}] <unparseable response: {body}>")
-                      continue
-                  plugins = data.get("result") or []
-                  found = [p for p in plugins if p.get("callsign") == "org.rdk.L2Tests"]
-                  if found:
-                      print(f"[{ts}] {found[0]}")
-                  elif "error" in data:
-                      print(f"[{ts}] error: {data['error']}")
-                  else:
-                      print(f"[{ts}] org.rdk.L2Tests not present in plugin list ({len(plugins)} plugins)")
-          '
-          python3 -c "$PYCODE"
-          echo "::endgroup::"
-
-          if [ "$TEST_RESULT" -eq 0 ]; then
-            cp -rf $(pwd)/rdkL2TestResults.json $GITHUB_WORKSPACE/rdkL2TestResultsWithoutValgrind.json
-            rm -rf $(pwd)/rdkL2TestResults.json
-          fi
-
-          exit "$TEST_RESULT"
+        run: >
+          PATH=$GITHUB_WORKSPACE/install/usr/bin:${PATH}
+          LD_LIBRARY_PATH=$GITHUB_WORKSPACE/install/usr/lib:$GITHUB_WORKSPACE/install/usr/lib/wpeframework/plugins:${LD_LIBRARY_PATH}
+          GTEST_OUTPUT="json:$(pwd)/rdkL2TestResults.json"
+          RdkServicesL2Test &&
+          cp -rf $(pwd)/rdkL2TestResults.json $GITHUB_WORKSPACE/rdkL2TestResultsWithoutValgrind.json &&
+          rm -rf $(pwd)/rdkL2TestResults.json
 
       - name: Run unit tests with valgrind
         if: ${{ !env.ACT && inputs.caller_source != 'testframework' }}
@@ -703,5 +621,4 @@ jobs:
             valgrind_log
             rdkL2TestResultsWithoutValgrind.json
             rdkL2TestResultsWithValgrind.json
-            l2tests_plugin_status.log
           if-no-files-found: warn
