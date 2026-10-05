@@ -563,8 +563,8 @@ jobs:
           TEST_RESULT=$?
           set -e
 
-          kill "$POLL_PID" 2>/dev/null
-          wait "$POLL_PID" 2>/dev/null
+          kill "$POLL_PID" 2>/dev/null || true
+          wait "$POLL_PID" 2>/dev/null || true
 
           echo "::group::org.rdk.L2Tests Controller status polled during startup"
           cat "$STATUS_LOG"
