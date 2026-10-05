@@ -530,7 +530,7 @@ jobs:
           /tmp/persistent/rdkservicestore
           /tmp/secure/persistent/rdkservicestore
 
-      - name: Enable full WPEFramework messaging for diagnostics
+      - name: Fix WPEFramework plugin configs path and enable full messaging
         run: |
           export CONFIG_JSON="$GITHUB_WORKSPACE/install/etc/WPEFramework/config.json"
           PYCODE='
@@ -549,6 +549,11 @@ jobs:
               "tracing": {"settings": [any_category, {"module": "Plugin_AnyPlugin", "enabled": True}]},
               "reporting": {"abbreviated": False, "settings": [any_category]},
           }
+
+          # Thunders GenericConfig.cmake hardcodes "configs" to the system path
+          # /etc/WPEFramework/plugins regardless of CMAKE_INSTALL_PREFIX, so plugin
+          # configs installed under the repo-local prefix are never found (RDKEMW-26307).
+          config["configs"] = os.path.join(os.path.dirname(path), "plugins")
 
           with open(path, "w") as f:
               json.dump(config, f)
