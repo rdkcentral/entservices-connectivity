@@ -553,8 +553,15 @@ jobs:
           with open(path, "w") as f:
               json.dump(config, f)
           print("Patched messaging config:", config["messaging"])
+
+          for key in ("configs", "systempath", "discovery", "disablepluginautoactivation"):
+              print(f"config[{key!r}] =", config.get(key))
           '
           python3 -c "$PYCODE"
+
+          echo "::group::WPEFramework plugins directory listing"
+          ls -la "$GITHUB_WORKSPACE/install/etc/WPEFramework/plugins/" || echo "(directory not found)"
+          echo "::endgroup::"
 
       - name: Download pact_verifier_cli
         run: |
