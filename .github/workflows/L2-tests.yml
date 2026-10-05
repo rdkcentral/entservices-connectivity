@@ -536,13 +536,46 @@ jobs:
           $GITHUB_WORKSPACE/entservices-testframework/Tests/L2Tests/pact/install-verifier-cli.sh
 
       - name: Run unit tests without valgrind
-        run: >
-          PATH=$GITHUB_WORKSPACE/install/usr/bin:${PATH}
-          LD_LIBRARY_PATH=$GITHUB_WORKSPACE/install/usr/lib:$GITHUB_WORKSPACE/install/usr/lib/wpeframework/plugins:${LD_LIBRARY_PATH}
-          GTEST_OUTPUT="json:$(pwd)/rdkL2TestResults.json"
-          RdkServicesL2Test &&
-          cp -rf $(pwd)/rdkL2TestResults.json $GITHUB_WORKSPACE/rdkL2TestResultsWithoutValgrind.json &&
-          rm -rf $(pwd)/rdkL2TestResults.json
+        run: |
+          export PATH=$GITHUB_WORKSPACE/install/usr/bin:${PATH}
+          export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/install/usr/lib:$GITHUB_WORKSPACE/install/usr/lib/wpeframework/plugins:${LD_LIBRARY_PATH}
+          export GTEST_OUTPUT="json:$(pwd)/rdkL2TestResults.json"
+
+          # Diagnostics for RDKEMW-26307: poll Controller's JSON-RPC status for org.rdk.L2Tests,
+          # since WPEFramework's trace/logging categories are disabled by default in this config
+          # and won't show *why* a plugin failed/declined to activate.
+          STATUS_LOG="$GITHUB_WORKSPACE/l2tests_plugin_status.log"
+          : > "$STATUS_LOG"
+          (
+            for _ in $(seq 1 60); do
+              ts=$(date +%H:%M:%S.%3N)
+              body=$(curl -s --max-time 1 -X POST http://127.0.0.1:9998/jsonrpc \
+                -H "Content-Type: application/json" \
+                -d '{"jsonrpc":"2.0","id":1,"method":"Controller.1.status@org.rdk.L2Tests"}')
+              echo "[$ts] $body" >> "$STATUS_LOG"
+              sleep 0.25
+            done
+          ) &
+          POLL_PID=$!
+
+          set +e
+          RdkServicesL2Test
+          TEST_RESULT=$?
+          set -e
+
+          kill "$POLL_PID" 2>/dev/null
+          wait "$POLL_PID" 2>/dev/null
+
+          echo "::group::org.rdk.L2Tests Controller status polled during startup"
+          cat "$STATUS_LOG"
+          echo "::endgroup::"
+
+          if [ "$TEST_RESULT" -eq 0 ]; then
+            cp -rf $(pwd)/rdkL2TestResults.json $GITHUB_WORKSPACE/rdkL2TestResultsWithoutValgrind.json
+            rm -rf $(pwd)/rdkL2TestResults.json
+          fi
+
+          exit "$TEST_RESULT"
 
       - name: Run unit tests with valgrind
         if: ${{ !env.ACT && inputs.caller_source != 'testframework' }}
@@ -599,4 +632,5 @@ jobs:
             valgrind_log
             rdkL2TestResultsWithoutValgrind.json
             rdkL2TestResultsWithValgrind.json
+            l2tests_plugin_status.log
           if-no-files-found: warn
