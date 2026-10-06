@@ -21,6 +21,9 @@
 
 #include <bluetooth/Appearance.h>
 #include <bluetooth/Uuid.h>
+#include <core/core.h>
+#include <sys/syscall.h>
+#include <unistd.h>
 #include <UtilsLogging.h>
 #include <LogRedirect.h>
 
