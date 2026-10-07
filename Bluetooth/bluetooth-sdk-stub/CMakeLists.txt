@@ -7,16 +7,10 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(Threads REQUIRED)
 
-# Build the SDK-compatible stub without external dependencies.
+# Build the fake librdk_bluetooth.so with no external dependencies
 option(AUDIO_SUPPORT "Enable Bluetooth audio API symbols (no WirePlumber linking required)" OFF)
 
-if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
-    set(BLUETOOTH_SDK_STUB_LIBRARY_TYPE SHARED)
-else()
-    set(BLUETOOTH_SDK_STUB_LIBRARY_TYPE STATIC)
-endif()
-
-add_library(rdk_bluetooth ${BLUETOOTH_SDK_STUB_LIBRARY_TYPE}
+add_library(rdk_bluetooth SHARED
     stub/Adapter.cpp
     stub/Manager.cpp
     stub/Device.cpp
@@ -28,7 +22,6 @@ add_library(rdk_bluetooth ${BLUETOOTH_SDK_STUB_LIBRARY_TYPE}
 )
 
 target_compile_options(rdk_bluetooth PRIVATE -Wall -Wextra -Werror -Wno-unused-parameter -Wno-error=type-limits -Wno-error=extra)
-set_target_properties(rdk_bluetooth PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # AppleClang-specific: suppress unused private field warnings in stub
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
@@ -46,17 +39,23 @@ if(AUDIO_SUPPORT)
     target_compile_definitions(rdk_bluetooth PUBLIC AUDIO_SUPPORT)
 endif()
 
-if(BLUETOOTH_SDK_STUB_LIBRARY_TYPE STREQUAL "SHARED")
-    set_target_properties(rdk_bluetooth PROPERTIES
-        VERSION 1.0.0
-        SOVERSION 1
-    )
-endif()
+# Library versioning
+# VERSION: Full version number (1.0.0) -> librdk_bluetooth.so.1.0.0
+# SOVERSION: ABI version (1) -> librdk_bluetooth.so.1 symlink for ABI compatibility
+set_target_properties(rdk_bluetooth PROPERTIES
+    VERSION 1.0.0
+    SOVERSION 1
+)
 
 # Installation target: only install when this CMakeLists.txt is configured as
 # its own top-level project (e.g. the standalone bluetooth-sdk-stub recipe).
-# When added as a subdirectory, the stub is static and linked into the plugin;
-# installing a second shared library would create a runtime dependency.
+# When pulled in via add_subdirectory() from Bluetooth/CMakeLists.txt, the
+# stub is linked into the plugin at build time only and must NOT be installed
+# here — the target rootfs already gets librdk_bluetooth.so.1 from the
+# bluetooth-sdk-stub recipe (or the real SDK recipe), and installing our own
+# copy from entservices-connectivity as well causes bitbake's do_package to
+# see two shlib providers for the same SONAME ("Multiple shlib providers for
+# librdk_bluetooth.so.1: bluetooth-sdk-stub, entservices-connectivity").
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     install(TARGETS rdk_bluetooth
         LIBRARY DESTINATION lib
