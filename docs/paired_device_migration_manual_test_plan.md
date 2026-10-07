@@ -520,7 +520,7 @@ ls -la /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
    ```
 
 **Expected Results:**
-- New device appears in PersistentStore with `deviceID`, `deviceType`, and `autoconnect` fields.
+- New device appears in PersistentStore with `deviceID`, `deviceAddr`, `deviceType`, `isGamePad`, `autoconnect`, `lastConnectTimeUtc`, and `lastVolumeSetting` fields.
 - New device appears in filesystem file with `deviceAddr`, `friendlyName`, `deviceType`, `autoConnectStatus`, `lastVolumeSetting`, `lastConnectionTimeUTC` fields.
 - Schema of filesystem file remains valid per `docs/paired_bluetooth_devices.schema.json`.
 
@@ -568,16 +568,23 @@ ls -la /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
 
 ---
 
-### TC-RB-04: HID devices excluded from filesystem sync
+### TC-RB-04: HID devices excluded from filesystem sync — except gamepads
+
+**Note:** BTRMGR reports both ordinary Human Interface Devices (e.g., keyboards, remotes) and gamepads using the same device-type string, `"HUMAN INTERFACE DEVICE"`. The plugin disambiguates gamepads via a dedicated `isGamePad` flag (set when BTRMGR reports device type `BTRMGR_DEVICE_TYPE_HID_GAMEPAD`) and excludes only **non-gamepad** HID devices from the AS filesystem file.
 
 **Steps:**
 1. Call `performMigration`.
-2. Pair a Human Interface Device (e.g., BT keyboard/remote identified as "HUMAN INTERFACE DEVICE").
-3. Verify it appears in PersistentStore `deviceInfo`.
+2. Pair a non-gamepad Human Interface Device (e.g., BT keyboard/remote identified as "HUMAN INTERFACE DEVICE", `isGamePad=false`).
+3. Verify it appears in PersistentStore `deviceInfo` with `"isGamePad": false`.
 4. Verify it does **NOT** appear in the filesystem file.
+5. Pair a Bluetooth gamepad (also reported by BTRMGR as type "HUMAN INTERFACE DEVICE", but classified `isGamePad=true`).
+6. Verify the gamepad appears in PersistentStore `deviceInfo` with `"isGamePad": true`.
+7. Verify the gamepad **DOES** appear in the filesystem file, unlike the non-gamepad HID device from steps 2–4.
 
 **Expected Results:**
-- HID devices are in PersistentStore but excluded from the filesystem file (matching legacy AS behaviour).
+- Non-gamepad HID devices are in PersistentStore but excluded from the filesystem file (matching legacy AS behaviour).
+- Gamepads are in PersistentStore **and** included in the filesystem file — the `isGamePad` flag overrides the HID-type exclusion.
+- `deviceInfo` entries for every device (HID or not) include an `isGamePad` boolean field.
 
 ---
 
@@ -721,17 +728,63 @@ curl --header "Content-Type: application/json" --request POST \
 
 ---
 
+### TC-MIG-06: performMigration with corrupted or malformed AS file content
+
+**Precondition:** Both `deviceInfo` and `migrationVersion` must be absent from PS, and the AS file must exist but contain invalid JSON, or valid JSON missing the `pairedDevices` array.
+
+**Setup:**
+```bash
+# 1. Clear PS state from TC-MIG-05 (both PS keys are present from that test)
+curl --header "Content-Type: application/json" --request POST \
+  --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.1.clearMigration","params":{}}' \
+  http://127.0.0.1:9998/jsonrpc
+
+# 2. Write a corrupted/invalid-JSON AS file
+echo '{not valid json' > /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
+
+# 3. Confirm both PS keys are now absent
+curl --header "Content-Type: application/json" --request POST \
+  --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.PersistentStore.getValue","params":{"namespace":"Bluetooth","key":"migrationVersion"}}' \
+  http://127.0.0.1:9998/jsonrpc
+# Expected: error response (key not found)
+```
+
+**Steps:**
+1. Call `performMigration`:
+   ```bash
+   curl --header "Content-Type: application/json" --request POST \
+     --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.1.performMigration","params":{}}' \
+     http://127.0.0.1:9998/jsonrpc
+   ```
+2. Read `deviceInfo` from PS.
+3. Read `migrationVersion` from PS.
+4. Repeat steps 1–3 after calling `clearMigration` again and replacing the AS file with a well-formed JSON object that is missing the `pairedDevices` array entirely (e.g. `echo '{"foo":"bar"}' > /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json`).
+
+**Expected Results:**
+- `performMigration` returns `{"success": true}` in both cases — a corrupted or malformed AS file is **not** treated as an error and does **not** block migration.
+- `deviceInfo` is present but contains an empty array (`[]`), identical to the empty-file case (TC-MIG-04).
+- `migrationVersion` is present and set to `"1"`.
+- Plugin continues operating normally.
+
+**Expected Log Entries:**
+- `migration_attempted`
+- `filesystem persistence file payload is not valid JSON, treating as default empty content` (invalid-JSON case) or `filesystem persistence file missing pairedDevices array, treating as default empty content` (missing-array case)
+- `imported cache is empty, skipping BTRMGR enrichment`
+- `initial migration succeeded`
+
+---
+
 ## Section 6: Edge Cases
 
-> **State entering this section:** After TC-MIG-05, the AS file does not exist and both PS keys are present (from TC-MIG-05's `performMigration`). TC-EDGE-01 includes a Setup block to restore the required state.
+> **State entering this section:** After TC-MIG-06, the AS file contains the missing-`pairedDevices`-array content and both PS keys are present (from TC-MIG-06's final `performMigration` call). TC-EDGE-01 includes a Setup block to restore the required state.
 
-### TC-EDGE-01: Device in AS file but no longer paired in BTRMGR
+### TC-EDGE-01: Device in AS file but no longer paired in BTRMGR — imported as a MAC-keyed entry
 
 **Precondition:** Both PS keys must be absent and the AS file must contain a device entry whose address is not in the platform's paired device list.
 
 **Setup:**
 ```bash
-# 1. Clear PS state from TC-MIG-05 (both PS keys are present from that test)
+# 1. Clear PS state from TC-MIG-06 (both PS keys are present from that test)
 curl --header "Content-Type: application/json" --request POST \
   --data '{"jsonrpc":"2.0","id":42,"method":"org.rdk.Bluetooth.1.clearMigration","params":{}}' \
   http://127.0.0.1:9998/jsonrpc
@@ -770,14 +823,19 @@ curl --header "Content-Type: application/json" --request POST \
 2. Read `deviceInfo` from PS.
 
 **Expected Results:**
-- Device with address `AA:BB:CC:DD:EE:FF` is skipped during import because it is no longer in the platform's paired device list.
-- Other valid devices import normally.
+- Device with address `AA:BB:CC:DD:EE:FF` is **not** skipped. Because BTRMGR has no paired-device handle for that address, the device is imported into `deviceInfo` keyed by its MAC address (`AA:BB:CC:DD:EE:FF`) instead of a numeric BTRMGR device handle.
+- The mandatory BTRMGR enrichment step (backfill-only) does not remove or alter this MAC-keyed entry, since enrichment only touches entries whose key already matches a currently-paired BTRMGR handle.
+- Other valid (currently-paired) devices import normally, keyed by their BTRMGR device handle.
 - `performMigration` returns `{"success": true}`.
+- If the phantom device is later re-paired (so BTRMGR assigns it a handle), the next `addDevice` call evicts the MAC-keyed cache entry and replaces it with a handle-keyed entry for the same physical device.
 
 **Expected Log Entries:**
 - `migration_attempted`
-- `No paired device handle found for addr=AA:BB:CC:DD:EE:FF during filesystem persistence import, skipping`
+- `No BTRMGR handle for addr=AA:BB:CC:DD:EE:FF, importing with MAC as key`
 - `initial migration succeeded`
+
+**Expected Log Entries on later re-pairing (if exercised):**
+- `Evicting MAC-keyed cache entry for addr=AA:BB:CC:DD:EE:FF, replacing with handle-keyed entry <new deviceID>`
 
 ---
 
