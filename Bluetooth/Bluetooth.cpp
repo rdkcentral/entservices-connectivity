@@ -70,6 +70,10 @@ const string WPEFramework::Plugin::Bluetooth::METHOD_GET_DEVICE_VOLUME_MUTE_INFO
 const string WPEFramework::Plugin::Bluetooth::METHOD_SET_DEVICE_VOLUME_MUTE_INFO = "setDeviceVolumeMuteInfo";
 const string WPEFramework::Plugin::Bluetooth::METHOD_SET_AUTO_CONNECT = "setAutoConnect";
 const string WPEFramework::Plugin::Bluetooth::METHOD_GET_AUTO_CONNECT_STATUS = "getAutoConnect";
+#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+const string WPEFramework::Plugin::Bluetooth::METHOD_PERFORM_MIGRATION = "performMigration";
+const string WPEFramework::Plugin::Bluetooth::METHOD_CLEAR_MIGRATION = "clearMigration";
+#endif
 
 const string WPEFramework::Plugin::Bluetooth::EVT_STATUS_CHANGED = "onStatusChanged";
 const string WPEFramework::Plugin::Bluetooth::EVT_PAIRING_REQUEST = "onPairingRequest";
@@ -226,6 +230,10 @@ namespace WPEFramework
             Register(METHOD_SET_DEVICE_VOLUME_MUTE_INFO, &Bluetooth::setDeviceVolumeMuteInfoWrapper, this);
             Register(METHOD_SET_AUTO_CONNECT, &Bluetooth::setAutoConnectWrapper, this);
             Register(METHOD_GET_AUTO_CONNECT_STATUS, &Bluetooth::getAutoConnectWrapper, this);
+#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+            Register(METHOD_PERFORM_MIGRATION, &Bluetooth::performMigrationWrapper, this);
+            Register(METHOD_CLEAR_MIGRATION, &Bluetooth::clearMigrationWrapper, this);
+#endif
 
             Utils::IARM::init();
 
@@ -239,6 +247,16 @@ namespace WPEFramework
             else {
                 BTRMGR_RegisterEventCallback(bluetoothSrv_EventCallback);
             }
+
+            // Must run before the PowerManager registration/initial onPowerModeChanged() call below:
+            // that call needs the migration state and paired-device cache already restored.
+            if (Core::ERROR_NONE != m_bluetoothDeviceManager.init(service)) {
+                message = "Failed to initialize BluetoothDeviceManager";
+                LOGERR("%s", message.c_str());
+                return message;
+            }
+
+            m_powerModeEventQueue = std::make_unique<PowerModeEventQueue>(*this);
 
             m_powerManagerPlugin = PowerManagerInterfaceBuilder(_T("org.rdk.PowerManager"))
                 .withIShell(service)
@@ -259,12 +277,6 @@ namespace WPEFramework
                 LOGERR("Failed to get PowerManager interface");
             }
 
-            if (Core::ERROR_NONE != m_bluetoothDeviceManager.init(service)) {
-                message = "Failed to initialize BluetoothDeviceManager";
-                LOGERR("%s", message.c_str());
-                return message;
-            }
-
             disconnectExternallyConnectedDevices();
 
             return message;
@@ -272,10 +284,17 @@ namespace WPEFramework
 
         void Bluetooth::Deinitialize(PluginHost::IShell* service)
         {
+            if (m_powerManagerPlugin) {
+                m_powerManagerPlugin->Unregister(&m_powerManagerNotification);
+            }
+
+            // Joins the queue's dedicated thread, guaranteeing no onPowerModeChanged() call is
+            // still queued or in flight before the members below are torn down.
+            m_powerModeEventQueue.reset();
+
             m_bluetoothDeviceManager.deinit();
 
             if (m_powerManagerPlugin) {
-                m_powerManagerPlugin->Unregister(&m_powerManagerNotification);
                 m_powerManagerPlugin.Reset();
             }
 
@@ -1169,32 +1188,35 @@ namespace WPEFramework
                     break;
 
                 case BTRMGR_EVENT_RECEIVED_EXTERNAL_CONNECT_REQUEST: {
-                    LOGERR("Received %s Event from BTRMgr", "external connection request");
+                    LOGINFO("Received %s Event from BTRMgr", "external connection request");
 
-                    // Plug-in handles external connect requests if autoconnect was explicitly set, otherwise let client handle it.
+                    #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+                    if (m_bluetoothDeviceManager.isMigrated()) {
 
-                    AutoConnectStatus autoConnectStatus;
-                    Core::hresult result = m_bluetoothDeviceManager.getAutoConnect(std::to_string(eventMsg.m_externalDevice.m_deviceHandle), autoConnectStatus);
+                        // Migration is complete, check the autoconnect status and respond to the event accordingly.
 
-                    if (Core::ERROR_NONE == result && AUTO_CONNECT_STATUS_UNSET != autoConnectStatus) {
-                        
-                        bool bAccepted = AUTO_CONNECT_STATUS_ENABLED == autoConnectStatus;
+                        AutoConnectStatus autoConnectStatus;
+                        Core::hresult result = m_bluetoothDeviceManager.getAutoConnect(std::to_string(eventMsg.m_externalDevice.m_deviceHandle), autoConnectStatus);
+                        if (Core::ERROR_NONE == result) {
+                            bool bAccepted = AUTO_CONNECT_STATUS_ENABLED == autoConnectStatus;
 
-                        (void)setEventResponse(eventMsg.m_externalDevice.m_deviceHandle,
-                            EVT_CONNECTION_REQUEST,
-                            bAccepted ? "ACCEPTED" : "REJECTED");
+                            (void)setEventResponse(eventMsg.m_externalDevice.m_deviceHandle,
+                                EVT_CONNECTION_REQUEST,
+                                bAccepted ? "ACCEPTED" : "REJECTED");
 
-                        if (bAccepted) {
-                            // Connect device
-                            (void)setDeviceConnection(eventMsg.m_externalDevice.m_deviceHandle, true, BTRMGR_GetDeviceTypeAsString(eventMsg.m_externalDevice.m_deviceType));
+                            if (bAccepted) {
+                                // Connect device
+                                (void)setDeviceConnection(eventMsg.m_externalDevice.m_deviceHandle, true, BTRMGR_GetDeviceTypeAsString(eventMsg.m_externalDevice.m_deviceType));
+                            }
+
+                            return; // Response sent, no need to notify client about this event.
+                        } else {
+                            LOGERR("Failed to get autoconnect status for device %llu: %d", eventMsg.m_externalDevice.m_deviceHandle, result);
                         }
-
-                        return; // Response sent, no need to notify client about this event.
                     } else {
-                        LOGINFO("Autoconnect not explicitly set for device %llu", eventMsg.m_externalDevice.m_deviceHandle);
+                        LOGINFO("Device manager not migrated, notifying client about connection request for device %llu", eventMsg.m_externalDevice.m_deviceHandle);
                     }
-
-                    // autoconnect flag was not explicitly set for the device, notify client about the connection request and let it decide.
+                    #endif
 
                     params["deviceID"] = std::to_string(eventMsg.m_externalDevice.m_deviceHandle);
                     params["name"] = string(eventMsg.m_externalDevice.m_name);
@@ -1214,7 +1236,7 @@ namespace WPEFramework
                 }
 
                 case BTRMGR_EVENT_RECEIVED_EXTERNAL_PLAYBACK_REQUEST:
-                    LOGERR("Received %s Event from BTRMgr", "external playback request");
+                    LOGINFO("Received %s Event from BTRMgr", "external playback request");
                     params["deviceID"] = std::to_string(eventMsg.m_externalDevice.m_deviceHandle);
                     params["name"] = string(eventMsg.m_externalDevice.m_name);
                     params["deviceType"] = BTRMGR_GetDeviceTypeAsString(eventMsg.m_externalDevice.m_deviceType);
@@ -1517,6 +1539,31 @@ namespace WPEFramework
             returnResponse(true);
         }
 
+        bool Bluetooth::parseDeviceID(const std::string& deviceIDStr,long long int& deviceID)
+        {
+			size_t pos = 0;
+			try
+		    {
+				deviceID = std::stoll(deviceIDStr, &pos);
+				if (pos != deviceIDStr.length())
+				{
+					LOGERR("Invalid deviceID: %s", deviceIDStr.c_str());
+					return false;
+				}
+				return true;
+			}
+			catch (const std::invalid_argument&)
+			{
+				LOGERR("Invalid deviceID: %s", deviceIDStr.c_str());
+				return false;
+			}
+			catch (const std::out_of_range&)
+			{
+				LOGERR("deviceID out of range: %s", deviceIDStr.c_str());
+				return false;
+			}
+		}
+
         uint32_t Bluetooth::connectWrapper(const JsonObject& parameters, JsonObject& response)
         {
             LOGINFOMETHOD();
@@ -1530,9 +1577,13 @@ namespace WPEFramework
             if (parameters.HasLabel("deviceID"))
             {
                 getStringParameter("deviceID", deviceIDStr);
-                deviceID = stoll(deviceIDStr);
-                deviceIDDefined = true;
-            }
+				if (!parseDeviceID(deviceIDStr, deviceID))
+				{
+					successFlag = false;
+					returnResponse(successFlag);
+				}
+				deviceIDDefined = true;
+			}
 
             if (parameters.HasLabel("deviceType"))
             {
@@ -1569,7 +1620,11 @@ namespace WPEFramework
             if (parameters.HasLabel("deviceID"))
             {
                 getStringParameter("deviceID", deviceIDStr);
-                deviceID = stoll(deviceIDStr);
+				if (!parseDeviceID(deviceIDStr, deviceID))
+				{
+					successFlag = false;
+					returnResponse(successFlag);
+				}
                 deviceIDDefined = true;
             }
 
@@ -1608,7 +1663,11 @@ namespace WPEFramework
             if (parameters.HasLabel("deviceID"))
             {
                 getStringParameter("deviceID", deviceIDStr);
-                deviceID = stoll(deviceIDStr);
+				if (!parseDeviceID(deviceIDStr, deviceID))
+				{
+					successFlag = false;
+					returnResponse(successFlag);
+				}
                 deviceIDDefined = true;
             }
 
@@ -1639,7 +1698,11 @@ namespace WPEFramework
 
             if (parameters.HasLabel("deviceID")) {
                 getStringParameter("deviceID", deviceIDStr);
-                deviceID = stoll(deviceIDStr);
+				if (!parseDeviceID(deviceIDStr, deviceID))
+				{
+					successFlag = false;
+					returnResponse(successFlag);
+				}
                 deviceIDDefined = true;
             }
 
@@ -1665,7 +1728,11 @@ namespace WPEFramework
 
             if (parameters.HasLabel("deviceID")) {
                 getStringParameter("deviceID", deviceIDStr);
-                deviceID = stoll(deviceIDStr);
+				if (!parseDeviceID(deviceIDStr, deviceID))
+				{
+					successFlag = false;
+					returnResponse(successFlag);
+				}
                 deviceIDDefined = true;
             }
 
@@ -1727,7 +1794,11 @@ namespace WPEFramework
             if (parameters.HasLabel("deviceID"))
             {
                 getStringParameter("deviceID", deviceIDStr);
-                deviceID = stoll(deviceIDStr);
+				if (!parseDeviceID(deviceIDStr, deviceID))
+				{
+					successFlag = false;
+					returnResponse(successFlag);
+				}
                 deviceIDDefined = true;
             }
 
@@ -1762,7 +1833,11 @@ namespace WPEFramework
             if (parameters.HasLabel("deviceID"))
             {
                 getStringParameter("deviceID", deviceIDStr);
-                deviceID = stoll(deviceIDStr);
+				if (!parseDeviceID(deviceIDStr, deviceID))
+				{
+					successFlag = false;
+					returnResponse(successFlag);
+				}
                 deviceIDDefined = true;
             }
             if (parameters.HasLabel("deviceType"))
@@ -1802,7 +1877,11 @@ namespace WPEFramework
             if (parameters.HasLabel("deviceID"))
             {
                 getStringParameter("deviceID", deviceIDStr);
-                deviceID = stoll(deviceIDStr);
+				if (!parseDeviceID(deviceIDStr, deviceID))
+				{
+					successFlag = false;
+					returnResponse(successFlag);
+				}
                 deviceIDDefined = true;
             }
             if (parameters.HasLabel("deviceType"))
@@ -1852,7 +1931,11 @@ namespace WPEFramework
             if (parameters.HasLabel("deviceID"))
             {
                 getStringParameter("deviceID", deviceIDStr);
-                deviceID = stoll(deviceIDStr);
+				if (!parseDeviceID(deviceIDStr, deviceID))
+				{
+					successFlag = false;
+					returnResponse(successFlag);
+				}
                 deviceIDDefined = true;
             }
 
@@ -1889,7 +1972,11 @@ namespace WPEFramework
             if (parameters.HasLabel("deviceID"))
             {
                 getStringParameter("deviceID", deviceIDStr);
-                deviceID = stoll(deviceIDStr);
+				if (!parseDeviceID(deviceIDStr, deviceID))
+				{
+					successFlag = false;
+					returnResponse(successFlag);
+				}
                 response["deviceInfo"] = getDeviceInfo(deviceID);
                 successFlag = true;
             } else {
@@ -1908,7 +1995,11 @@ namespace WPEFramework
             if (parameters.HasLabel("deviceID"))
             {
                 getStringParameter("deviceID", deviceIDStr);
-                deviceID = stoll(deviceIDStr);
+				if (!parseDeviceID(deviceIDStr, deviceID))
+				{
+					successFlag = false;
+					returnResponse(successFlag);
+				}
                 response["trackInfo"] = getMediaTrackInfo(deviceID);
                 successFlag = true;
             } else {
@@ -1970,9 +2061,37 @@ namespace WPEFramework
         //
         /// Registered methods end
 
+#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+        uint32_t Bluetooth::performMigrationWrapper(const JsonObject& parameters, JsonObject& response)
+        {
+            LOGINFOMETHOD();
+            UNUSED(parameters);
+            const Core::hresult result = m_bluetoothDeviceManager.performMigration();
+            if (Core::ERROR_NONE != result) {
+                LOGERR("performMigration failed, hresult=%d", result);
+            }
+            returnResponse(Core::ERROR_NONE == result);
+        }
+
+        uint32_t Bluetooth::clearMigrationWrapper(const JsonObject& parameters, JsonObject& response)
+        {
+            LOGINFOMETHOD();
+            UNUSED(parameters);
+            const Core::hresult result = m_bluetoothDeviceManager.clearMigration();
+            if (Core::ERROR_NONE != result) {
+                LOGERR("clearMigration failed, hresult=%d", result);
+            }
+            returnResponse(Core::ERROR_NONE == result);
+        }
+#endif
+
         void Bluetooth::onPowerModeChanged(const WPEFramework::Exchange::IPowerManager::PowerState currentState, const WPEFramework::Exchange::IPowerManager::PowerState newState)
         {
-            #ifndef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+            #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+                if (!m_bluetoothDeviceManager.isMigrated()) {
+                    return;
+                }
+            #else
                 return;
             #endif
 
