@@ -248,6 +248,16 @@ namespace WPEFramework
                 BTRMGR_RegisterEventCallback(bluetoothSrv_EventCallback);
             }
 
+            // Must run before the PowerManager registration/initial onPowerModeChanged() call below:
+            // that call needs the migration state and paired-device cache already restored.
+            if (Core::ERROR_NONE != m_bluetoothDeviceManager.init(service)) {
+                message = "Failed to initialize BluetoothDeviceManager";
+                LOGERR("%s", message.c_str());
+                return message;
+            }
+
+            m_powerModeEventQueue = std::make_unique<PowerModeEventQueue>(*this);
+
             m_powerManagerPlugin = PowerManagerInterfaceBuilder(_T("org.rdk.PowerManager"))
                 .withIShell(service)
                 .withRetryIntervalMS(200)
@@ -267,12 +277,6 @@ namespace WPEFramework
                 LOGERR("Failed to get PowerManager interface");
             }
 
-            if (Core::ERROR_NONE != m_bluetoothDeviceManager.init(service)) {
-                message = "Failed to initialize BluetoothDeviceManager";
-                LOGERR("%s", message.c_str());
-                return message;
-            }
-
             disconnectExternallyConnectedDevices();
 
             return message;
@@ -280,10 +284,17 @@ namespace WPEFramework
 
         void Bluetooth::Deinitialize(PluginHost::IShell* service)
         {
+            if (m_powerManagerPlugin) {
+                m_powerManagerPlugin->Unregister(&m_powerManagerNotification);
+            }
+
+            // Joins the queue's dedicated thread, guaranteeing no onPowerModeChanged() call is
+            // still queued or in flight before the members below are torn down.
+            m_powerModeEventQueue.reset();
+
             m_bluetoothDeviceManager.deinit();
 
             if (m_powerManagerPlugin) {
-                m_powerManagerPlugin->Unregister(&m_powerManagerNotification);
                 m_powerManagerPlugin.Reset();
             }
 
