@@ -1599,6 +1599,10 @@ namespace WPEFramework
         uint32_t Bluetooth::disconnectWrapper(const JsonObject& parameters, JsonObject& response)
         {
             LOGINFOMETHOD();
+            // TEST ONLY: ignore UI call to debug BT audio via btrMgrTest
+            LOGWARN("TEST: ignoring disconnectWrapper");
+            response["success"] = true;
+            return Core::ERROR_NONE;
             string deviceIDStr;
             long long int deviceID = 0;
             bool deviceIDDefined = false;
@@ -1709,6 +1713,10 @@ namespace WPEFramework
         uint32_t Bluetooth::unpairWrapper(const JsonObject& parameters, JsonObject& response)
         {
             LOGINFOMETHOD();
+            // TEST ONLY: ignore UI call to debug BT audio via btrMgrTest
+            LOGWARN("TEST: ignoring unpairWrapper");
+            response["success"] = true;
+            return Core::ERROR_NONE;
             bool successFlag;
             string deviceIDStr;
             long long int deviceID = 0;
