@@ -650,7 +650,9 @@ namespace WPEFramework
                     BTRMGR_DeviceOperationType_t stream_pref = BTRMGR_DEVICE_OP_TYPE_AUDIO_OUTPUT;
                     rc = BTRMGR_StartAudioStreamingOut(0, deviceHandle, stream_pref);
                 } else {
-                    rc = BTRMGR_StopAudioStreamingOut(0, deviceHandle);
+                    // TEST ONLY: ignore audio-out stop to debug BT audio via btrMgrTest
+                    LOGWARN("TEST: ignoring StopAudioStreamingOut for device %llu", (unsigned long long)deviceHandle);
+                    return true;
                 }
             }
 
