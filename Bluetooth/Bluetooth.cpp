@@ -615,6 +615,10 @@ namespace WPEFramework
 
         bool Bluetooth::setDeviceConnection(long long int deviceID, bool connect, const string &deviceType)
         {
+            // TEST ONLY: whole function disabled to debug BT audio via btrMgrTest
+            LOGWARN("TEST: setDeviceConnection ignored, device %llu connect=%d", deviceID, connect);
+            return true;
+#if 0
             BTRMGR_Result_t rc = BTRMGR_RESULT_SUCCESS;
             BTRMgrDeviceHandle deviceHandle = (BTRMgrDeviceHandle) deviceID;
 
@@ -650,9 +654,7 @@ namespace WPEFramework
                     BTRMGR_DeviceOperationType_t stream_pref = BTRMGR_DEVICE_OP_TYPE_AUDIO_OUTPUT;
                     rc = BTRMGR_StartAudioStreamingOut(0, deviceHandle, stream_pref);
                 } else {
-                    // TEST ONLY: ignore audio-out stop to debug BT audio via btrMgrTest
-                    LOGWARN("TEST: ignoring StopAudioStreamingOut for device %llu", (unsigned long long)deviceHandle);
-                    return true;
+                    rc = BTRMGR_StopAudioStreamingOut(0, deviceHandle);
                 }
             }
 
@@ -665,6 +667,7 @@ namespace WPEFramework
             }
 
             return BTRMGR_RESULT_SUCCESS == rc;
+#endif
         }
 
         bool Bluetooth::setAudioStream(long long int deviceID, const string &audioStreamName)
