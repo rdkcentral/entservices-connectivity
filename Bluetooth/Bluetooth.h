@@ -20,6 +20,7 @@
 #pragma once
 
 #include <thread>
+#include <memory>
 
 #include "Module.h"
 #include <interfaces/IPowerManager.h>
@@ -73,6 +74,59 @@ namespace WPEFramework {
 
         private:
 
+            // Serializes OnPowerModeChanged() onto a single dedicated thread (FIFO, one at a
+            // time) so BTMgr calls never block Thunder's notification thread, rapid transitions
+            // can't run concurrently or out of order, and the shared Core::IWorkerPool can't be
+            // starved by a stuck BTMgr call. Deinitialize() destroys this before tearing down
+            // any other member, which joins the thread and guarantees no handler is in flight.
+            class EXTERNAL PowerModeEventQueue : public Core::Thread {
+
+            public:
+                PowerModeEventQueue() = delete;
+                PowerModeEventQueue(const PowerModeEventQueue&) = delete;
+                PowerModeEventQueue& operator=(const PowerModeEventQueue&) = delete;
+
+                explicit PowerModeEventQueue(Bluetooth& bluetooth)
+                    : Core::Thread(Core::Thread::DefaultStackSize(), _T("BluetoothPowerModeQueue"))
+                    , _bluetooth(bluetooth)
+                    , _queue(16)
+                {
+                    Run();
+                }
+
+                ~PowerModeEventQueue() override
+                {
+                    // Unblocks a thread parked in _queue.Extract() so Stop()/~Thread() can join it.
+                    Stop();
+                    _queue.Disable();
+                }
+
+                void Post(
+                    const WPEFramework::Exchange::IPowerManager::PowerState currentState,
+                    const WPEFramework::Exchange::IPowerManager::PowerState newState)
+                {
+                    _queue.Post(Transition{currentState, newState});
+                }
+
+            private:
+                struct Transition {
+                    WPEFramework::Exchange::IPowerManager::PowerState currentState;
+                    WPEFramework::Exchange::IPowerManager::PowerState newState;
+                };
+
+                uint32_t Worker() override
+                {
+                    Transition transition;
+                    if (_queue.Extract(transition, Core::infinite)) {
+                        _bluetooth.onPowerModeChanged(transition.currentState, transition.newState);
+                    }
+                    return Core::infinite;
+                }
+
+                Bluetooth& _bluetooth;
+                Core::QueueType<Transition> _queue;
+            };
+
             class PowerManagerNotification : public WPEFramework::Exchange::IPowerManager::IModeChangedNotification {
 
             private:
@@ -92,7 +146,10 @@ namespace WPEFramework {
 
                 void OnPowerModeChanged(const WPEFramework::Exchange::IPowerManager::PowerState currentState, const WPEFramework::Exchange::IPowerManager::PowerState newState) override
                 {
-                    _bluetooth.onPowerModeChanged(currentState, newState);
+                    // Hand off to the dedicated queue; do not call _bluetooth.onPowerModeChanged() directly from here.
+                    if (_bluetooth.m_powerModeEventQueue) {
+                        _bluetooth.m_powerModeEventQueue->Post(currentState, newState);
+                    }
                 }
 
                 template <typename T>
@@ -289,6 +346,7 @@ namespace WPEFramework {
             friend class DiscoveryTimer;
             PowerManagerInterfaceRef m_powerManagerPlugin;
             Core::Sink<PowerManagerNotification> m_powerManagerNotification;
+            std::unique_ptr<PowerModeEventQueue> m_powerModeEventQueue;
             BluetoothDeviceManager m_bluetoothDeviceManager;
         };
 

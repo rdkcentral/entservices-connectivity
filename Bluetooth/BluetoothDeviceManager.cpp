@@ -59,6 +59,15 @@ namespace WPEFramework {
                 return result;
             }
 
+            // Parse() treats missing/corrupted content as a default empty list; short-circuit
+            // here too so that case is not exposed to a BTRMGR_GetPairedDevices() failure below.
+            if (importedDevices.empty()) {
+                _adminLock.Lock();
+                _pairedDeviceCache.clear();
+                _adminLock.Unlock();
+                return Core::ERROR_NONE;
+            }
+
             // Build a mapping from device address to device handle using BTRMGR.
             BTRMGR_PairedDevicesList_t pairedDevices{};
             if (BTRMGR_GetPairedDevices(0, &pairedDevices) != BTRMGR_RESULT_SUCCESS) {
@@ -122,12 +131,14 @@ namespace WPEFramework {
 
         Core::hresult BluetoothDeviceManager::readMigrationVersionFromStorage(std::string& version) const
         {
-            if (_service == nullptr) {
+            PluginHost::IShell* service = AcquireService();
+            if (service == nullptr) {
                 LOGERR("Service is null");
                 return Core::ERROR_GENERAL;
             }
 
-            Exchange::IStore* pPersistentStore = _service->QueryInterfaceByCallsign<Exchange::IStore>(PERSISTENT_STORE_CALLSIGN);
+            Exchange::IStore* pPersistentStore = service->QueryInterfaceByCallsign<Exchange::IStore>(PERSISTENT_STORE_CALLSIGN);
+            service->Release();
             if (pPersistentStore == nullptr) {
                 LOGERR("Failed to get PersistentStore interface");
                 return Core::ERROR_GENERAL;
@@ -145,12 +156,14 @@ namespace WPEFramework {
 
         Core::hresult BluetoothDeviceManager::writeMigrationVersionToStorage()
         {
-            if (_service == nullptr) {
+            PluginHost::IShell* service = AcquireService();
+            if (service == nullptr) {
                 LOGERR("Service is null");
                 return Core::ERROR_GENERAL;
             }
 
-            Exchange::IStore* pPersistentStore = _service->QueryInterfaceByCallsign<Exchange::IStore>(PERSISTENT_STORE_CALLSIGN);
+            Exchange::IStore* pPersistentStore = service->QueryInterfaceByCallsign<Exchange::IStore>(PERSISTENT_STORE_CALLSIGN);
+            service->Release();
             if (pPersistentStore == nullptr) {
                 LOGERR("Failed to get PersistentStore interface");
                 return Core::ERROR_GENERAL;
@@ -249,12 +262,14 @@ namespace WPEFramework {
         {
             Core::SafeSyncType<Core::CriticalSection> lock(_migrationLock);
 
-            if (_service == nullptr) {
+            PluginHost::IShell* service = AcquireService();
+            if (service == nullptr) {
                 LOGERR("service is null");
                 return Core::ERROR_GENERAL;
             }
 
-            Exchange::IStore* pPersistentStore = _service->QueryInterfaceByCallsign<Exchange::IStore>(PERSISTENT_STORE_CALLSIGN);
+            Exchange::IStore* pPersistentStore = service->QueryInterfaceByCallsign<Exchange::IStore>(PERSISTENT_STORE_CALLSIGN);
+            service->Release();
             if (pPersistentStore == nullptr) {
                 LOGERR("failed to get PersistentStore interface");
                 return Core::ERROR_GENERAL;
@@ -289,12 +304,14 @@ namespace WPEFramework {
 
         Core::hresult BluetoothDeviceManager::updateCacheFromStorage()
         {
-            if (_service == nullptr) {
+            PluginHost::IShell* service = AcquireService();
+            if (service == nullptr) {
                 LOGERR("Service is null\n");
                 return Core::ERROR_GENERAL;
             }
 
-            Exchange::IStore* pPersistentStore = _service->QueryInterfaceByCallsign<Exchange::IStore>(PERSISTENT_STORE_CALLSIGN);
+            Exchange::IStore* pPersistentStore = service->QueryInterfaceByCallsign<Exchange::IStore>(PERSISTENT_STORE_CALLSIGN);
+            service->Release();
             if (pPersistentStore == nullptr) {
                 LOGERR("Failed to get PersistentStore interface\n");
                 return Core::ERROR_GENERAL;
@@ -439,12 +456,14 @@ namespace WPEFramework {
 
         Core::hresult BluetoothDeviceManager::writeStorageFromCache()
         {
-            if (_service == nullptr) {
+            PluginHost::IShell* service = AcquireService();
+            if (service == nullptr) {
                 LOGERR("Service is null");
                 return Core::ERROR_GENERAL;
             }
 
-            Exchange::IStore* pPersistentStore = _service->QueryInterfaceByCallsign<Exchange::IStore>(PERSISTENT_STORE_CALLSIGN);
+            Exchange::IStore* pPersistentStore = service->QueryInterfaceByCallsign<Exchange::IStore>(PERSISTENT_STORE_CALLSIGN);
+            service->Release();
 
             if (pPersistentStore == nullptr) {
                 LOGERR("Failed to get PersistentStore interface");
@@ -518,8 +537,10 @@ namespace WPEFramework {
                 return Core::ERROR_GENERAL;
             }
 
+            service->AddRef();
+            _adminLock.Lock();
             _service = service;
-            _service->AddRef();
+            _adminLock.Unlock();
 
 #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
             {
@@ -539,8 +560,7 @@ namespace WPEFramework {
                     const Core::hresult storageResult = updateCacheFromStorage();
                     if ((Core::ERROR_NONE != storageResult) && !missingFromPersistentStore(storageResult)) {
                         LOGERR("PersistentStore read failed (hresult=%d); aborting init to avoid data loss", storageResult);
-                        _service->Release();
-                        _service = nullptr;
+                        ReleaseService();
                         return storageResult;
                     }
                 } else {
@@ -554,8 +574,7 @@ namespace WPEFramework {
             const Core::hresult storageResult = updateCacheFromStorage();
             if ((Core::ERROR_NONE != storageResult) && !missingFromPersistentStore(storageResult)) {
                 LOGERR("PersistentStore read failed (hresult=%d); aborting init to avoid data loss", storageResult);
-                _service->Release();
-                _service = nullptr;
+                ReleaseService();
                 return storageResult;
             }
 
@@ -565,16 +584,14 @@ namespace WPEFramework {
                 // will be unavailable for everything else. Fail init so the plugin is not
                 // activated in a broken state.
                 LOGERR("Failed to update cache from device (hresult=%d); aborting init", deviceResult);
-                _service->Release();
-                _service = nullptr;
+                ReleaseService();
                 return deviceResult;
             }
 
             const Core::hresult writeResult = writeStorageFromCache();
             if (Core::ERROR_NONE != writeResult) {
                 LOGWARN("Failed to write cache to PersistentStore, hresult=%d", writeResult);
-                _service->Release();
-                _service = nullptr;
+                ReleaseService();
                 return writeResult;
             }
 
@@ -584,9 +601,29 @@ namespace WPEFramework {
 
         void BluetoothDeviceManager::deinit()
         {
-            if (_service != nullptr) {
-                _service->Release();
-                _service = nullptr;
+            ReleaseService();
+        }
+
+        PluginHost::IShell* BluetoothDeviceManager::AcquireService() const
+        {
+            _adminLock.Lock();
+            PluginHost::IShell* service = _service;
+            if (service != nullptr) {
+                service->AddRef();
+            }
+            _adminLock.Unlock();
+            return service;
+        }
+
+        void BluetoothDeviceManager::ReleaseService()
+        {
+            _adminLock.Lock();
+            PluginHost::IShell* service = _service;
+            _service = nullptr;
+            _adminLock.Unlock();
+
+            if (service != nullptr) {
+                service->Release();
             }
         }
 
