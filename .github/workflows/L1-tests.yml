@@ -121,7 +121,7 @@ jobs:
         with:
           repository: rdkcentral/entservices-testframework
           path: entservices-testframework
-          ref: topic/RDKEMW-25598_Cleanup
+          ref: feature/RDKEMW-25013
 
       - name: Checkout entservices-connectivity
         if: ${{ inputs.caller_source == 'local' }}
