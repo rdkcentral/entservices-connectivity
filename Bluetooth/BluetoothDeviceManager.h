@@ -90,6 +90,11 @@ namespace WPEFramework {
                 Core::hresult updateCacheFromStorage();
                 Core::hresult updateCacheFromDevice(bool backfillOnly = false);
                 Core::hresult writeStorageFromCache();
+
+                // Returns an AddRef()'d _service under lock so callers hold a safe reference even
+                // if deinit() concurrently clears _service; caller must Release() when done.
+                PluginHost::IShell* AcquireService() const;
+                void ReleaseService();
         #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
                 Core::hresult writeCacheFromFilesystemPersistence(const std::string& rawContent);
                 void writeFilesystemPersistenceFromCache(const std::unordered_map<std::string, BluetoothDeviceInfo>& cacheSnapshot);
