@@ -533,8 +533,9 @@ TEST_F(Bluetooth_L2Test, BluetoothEnableFailure)
 
     params["enabled"] = "true";
     uint32_t status = InvokeServiceMethod("org.rdk.Bluetooth.1", "enable", params, result);
-    /* HAL failure propagates through returnResponse(): JSON-RPC returns a non-ERROR_NONE status and success=false in the JSON body */
-    EXPECT_NE(Core::ERROR_NONE, status); // Should not be ERROR_NONE on failure
+    /* In Thunder R4.4.1, returnResponse(false) does not produce a JSON-RPC protocol error.
+     * The JSONRPC Invoke status is always ERROR_NONE; failure is indicated solely by success=false in the response body. */
+    EXPECT_EQ(Core::ERROR_NONE, status);
     EXPECT_FALSE(result["success"].Boolean());
 }
 
@@ -670,6 +671,7 @@ TEST_F(Bluetooth_L2Test, BluetoothGetDiscoveredDevices)
                 pList->m_deviceProperty[0].m_ui32DevClassBtSpec   = 0x240404;
                 pList->m_deviceProperty[0].m_ui16DevAppearanceBleSpec = 0;
                 strncpy(pList->m_deviceProperty[0].m_name, TEST_DEVICE_NAME, BTRMGR_NAME_LEN_MAX - 1);
+                pList->m_deviceProperty[0].m_name[BTRMGR_NAME_LEN_MAX - 1] = '\0';
                 return BTRMGR_RESULT_SUCCESS;
             }));
 
@@ -707,6 +709,7 @@ TEST_F(Bluetooth_L2Test, BluetoothGetPairedDevices)
                 pList->m_deviceProperty[0].m_ui32DevClassBtSpec    = 0x240404;
                 pList->m_deviceProperty[0].m_ui16DevAppearanceBleSpec = 0;
                 strncpy(pList->m_deviceProperty[0].m_name, TEST_DEVICE_NAME, BTRMGR_NAME_LEN_MAX - 1);
+                pList->m_deviceProperty[0].m_name[BTRMGR_NAME_LEN_MAX - 1] = '\0';
                 return BTRMGR_RESULT_SUCCESS;
             }));
 
@@ -742,6 +745,7 @@ TEST_F(Bluetooth_L2Test, BluetoothGetConnectedDevices)
                 pList->m_deviceProperty[0].m_ui32DevClassBtSpec    = 0x240404;
                 pList->m_deviceProperty[0].m_ui16DevAppearanceBleSpec = 0;
                 strncpy(pList->m_deviceProperty[0].m_name, TEST_DEVICE_NAME, BTRMGR_NAME_LEN_MAX - 1);
+                pList->m_deviceProperty[0].m_name[BTRMGR_NAME_LEN_MAX - 1] = '\0';
                 return BTRMGR_RESULT_SUCCESS;
             }));
 
@@ -936,6 +940,15 @@ TEST_F(Bluetooth_L2Test, BluetoothSetGetAutoConnect)
     JsonObject params;
     JsonObject result;
     uint32_t status = Core::ERROR_GENERAL;
+
+#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+    /* performMigration sets _isMigrated=true so that setAutoConnect is permitted.
+     * No legacy filesystem persistence file exists in this environment, so the call
+      * treats the source as empty (clears the in-memory cache) and still succeeds. */
+    status = InvokeServiceMethod("org.rdk.Bluetooth.1", "performMigration", params, result);
+    EXPECT_EQ(Core::ERROR_NONE, status);
+    EXPECT_TRUE(result["success"].Boolean());
+#endif /* BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION */
 
     /* setAutoConnect / getAutoConnect both operate on the BluetoothDeviceManager
      * paired-device cache.  The cache starts empty (fixture initialises with
@@ -1394,3 +1407,202 @@ TEST_F(Bluetooth_L2Test, BluetoothOnPlaybackNewTrack)
 
     jsonrpc.Unsubscribe(JSON_TIMEOUT, _T("onPlaybackNewTrack"));
 }
+
+#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+/* =========================================================================
+ * TC-29: performMigration — success with valid filesystem source
+ * Write a valid AS-format JSON file to the filesystem persistence path, then
+ * call performMigration. The plugin must import the devices and report
+ * success=true.
+ *
+ * writeCacheFromFilesystemPersistence() calls BTRMGR_GetPairedDevices to
+ * build an addr→deviceID map; any device whose address is not returned by
+ * that call is silently skipped. The default fixture mock returns 0 paired
+ * devices, so without overriding it the cache stays empty and the test can
+ * pass without having imported anything. This test therefore overrides the
+ * mock to return the matching device, drives the addr→ID resolution, and
+ * then asserts the imported autoConnectStatus=true flag is observable via
+ * getAutoConnect.
+ *
+ * BTRMGR_GetPairedDevices is called twice during performMigration:
+ *   1. writeCacheFromFilesystemPersistence() — builds addr→deviceID map
+ *   2. updateCacheFromDevice(backfillOnly=true) — backfills name / type
+ * The ON_CALL default action covers both calls.
+ * ====================================================================== */
+TEST_F(Bluetooth_L2Test, BluetoothPerformMigration_Success_FilePresent)
+{
+    static constexpr const char* kFilePath = "/tmp/paired_bluetooth_devices.json";
+    // Guarantee removal even when an ASSERT fires before the explicit std::remove at the end.
+    struct ScopedRemove {
+        const char* path;
+        ~ScopedRemove() { std::remove(path); }
+    } const fileCleanup{kFilePath};
+
+    /* Reset any prior migration state (e.g. migrationVersion written by an earlier
+     * test or a previous run) so that performMigration exercises the full import
+     * path rather than short-circuiting as a no-op. */
+    {
+        JsonObject clearResult;
+        uint32_t clearStatus = InvokeServiceMethod("org.rdk.Bluetooth.1", "clearMigration", clearResult);
+        ASSERT_EQ(Core::ERROR_NONE, clearStatus);
+        ASSERT_TRUE(clearResult["success"].Boolean());
+    }
+
+    /* Write a valid AS filesystem persistence payload.
+     * deviceAddr must match m_deviceAddress returned by the mock below. */
+    std::ofstream fs(kFilePath, std::ios::trunc);
+    ASSERT_TRUE(fs.is_open()) << "Cannot create test filesystem persistence file";
+    fs << "{\"pairedDevices\":[{\"deviceAddr\":\"" << TEST_DEVICE_ADDR << "\","
+       << "\"deviceType\":\"" << TEST_DEVICE_TYPE_STR << "\",\"autoConnectStatus\":true,"
+       << "\"lastConnectionTimeUTC\":0}]}";
+    fs.close();
+
+    /* Override the default (0 devices) with a device whose address matches
+     * the filesystem payload so the addr→deviceID resolution succeeds. */
+    ON_CALL(*p_btmgrImplMock, BTRMGR_GetPairedDevices(::testing::_, ::testing::_))
+        .WillByDefault(::testing::Invoke(
+            [](unsigned char, BTRMGR_PairedDevicesList_t* pList) -> BTRMGR_Result_t {
+                pList->m_numOfDevices = 1;
+                pList->m_deviceProperty[0].m_deviceHandle             = TEST_DEVICE_HANDLE;
+                pList->m_deviceProperty[0].m_deviceType               = BTRMGR_DEVICE_TYPE_LOUDSPEAKER;
+                pList->m_deviceProperty[0].m_isConnected              = 0;
+                pList->m_deviceProperty[0].m_isLastConnectedDevice    = 0;
+                pList->m_deviceProperty[0].m_ui32DevClassBtSpec       = 0x240404;
+                pList->m_deviceProperty[0].m_ui16DevAppearanceBleSpec = 0;
+                strncpy(pList->m_deviceProperty[0].m_name,
+                        TEST_DEVICE_NAME, BTRMGR_NAME_LEN_MAX - 1);
+                pList->m_deviceProperty[0].m_name[BTRMGR_NAME_LEN_MAX - 1] = '\0';
+                strncpy(pList->m_deviceProperty[0].m_deviceAddress,
+                        TEST_DEVICE_ADDR, BTRMGR_NAME_LEN_MAX - 1);
+                return BTRMGR_RESULT_SUCCESS;
+            }));
+
+    ON_CALL(*p_btmgrImplMock, BTRMGR_GetDeviceTypeAsString(BTRMGR_DEVICE_TYPE_LOUDSPEAKER))
+        .WillByDefault(::testing::Return(TEST_DEVICE_TYPE_STR));
+
+    JsonObject result;
+    uint32_t status = InvokeServiceMethod("org.rdk.Bluetooth.1", "performMigration", result);
+    EXPECT_EQ(Core::ERROR_NONE, status);
+    EXPECT_TRUE(result["success"].Boolean());
+
+    /* Verify the imported autoConnectStatus=true is observable via getAutoConnect.
+     * If the addr→deviceID resolution was skipped (e.g. BTRMGR_GetPairedDevices
+     * returned 0 devices), the cache would be empty and getAutoConnect would
+     * return an error rather than the imported flag. */
+    JsonObject acParams, acResult;
+    acParams["deviceID"] = std::to_string(TEST_DEVICE_HANDLE);
+    status = InvokeServiceMethod("org.rdk.Bluetooth.1", "getAutoConnect", acParams, acResult);
+    EXPECT_EQ(Core::ERROR_NONE, status);
+    EXPECT_TRUE(acResult["success"].Boolean());
+    EXPECT_TRUE(acResult["autoconnect"].Boolean());
+
+    std::remove(kFilePath);
+}
+
+/* =========================================================================
+ * TC-30: performMigration — missing filesystem source (treated as empty)
+ * When the filesystem persistence file is absent, performMigration must
+ * treat the source as an empty device list and still return success=true
+ * (the missing file is a graceful "skipped import" condition, not an error).
+ * ====================================================================== */
+TEST_F(Bluetooth_L2Test, BluetoothPerformMigration_MissingSource_TreatsAsEmpty)
+{
+    static constexpr const char* kFilePath = "/tmp/paired_bluetooth_devices.json";
+
+    /* Reset migration state so performMigration reaches the file-open branch
+     * and does not return early as a no-op. */
+    {
+        JsonObject clearResult;
+        uint32_t clearStatus = InvokeServiceMethod("org.rdk.Bluetooth.1", "clearMigration", clearResult);
+        ASSERT_EQ(Core::ERROR_NONE, clearStatus);
+        ASSERT_TRUE(clearResult["success"].Boolean());
+    }
+
+    /* Ensure the filesystem persistence file does not exist. */
+    std::remove(kFilePath);
+
+    JsonObject result;
+    uint32_t status = InvokeServiceMethod("org.rdk.Bluetooth.1", "performMigration", result);
+    EXPECT_EQ(Core::ERROR_NONE, status);
+    EXPECT_TRUE(result["success"].Boolean());
+}
+
+/* =========================================================================
+ * TC-31: clearMigration — success
+ * Calling clearMigration must delete both the deviceInfo and
+ * migrationVersion keys from PersistentStore and return success=true.
+ * ====================================================================== */
+TEST_F(Bluetooth_L2Test, BluetoothClearMigration_Success)
+{
+    JsonObject result;
+    uint32_t status = InvokeServiceMethod("org.rdk.Bluetooth.1", "clearMigration", result);
+    EXPECT_EQ(Core::ERROR_NONE, status);
+    EXPECT_TRUE(result["success"].Boolean());
+}
+
+/* =========================================================================
+ * TC-32: clearMigration — re-enables the pre-migration guard
+ * After a successful performMigration (_isMigrated=true), calling
+ * clearMigration must reset _isMigrated to false so that subsequent
+ * setAutoConnect calls are rejected by the guard.
+ * State is restored (performMigration re-run) at the end of the test.
+ * ====================================================================== */
+TEST_F(Bluetooth_L2Test, BluetoothClearMigration_ReEnablesPreMigrationGuard)
+{
+    static constexpr const char* kFilePath = "/tmp/paired_bluetooth_devices.json";
+    // Guarantee removal even when an ASSERT fires before the explicit std::remove at the end.
+    struct ScopedRemove {
+        const char* path;
+        ~ScopedRemove() { std::remove(path); }
+    } const fileCleanup{kFilePath};
+
+    /* Reset migration state so Step 1's performMigration is not a no-op.
+     * TC-31 normally leaves the state clear, but an explicit reset here makes
+     * the test order-independent and safe when run in isolation. */
+    {
+        JsonObject clearResult;
+        uint32_t clearStatus = InvokeServiceMethod("org.rdk.Bluetooth.1", "clearMigration", clearResult);
+        ASSERT_EQ(Core::ERROR_NONE, clearStatus);
+        ASSERT_TRUE(clearResult["success"].Boolean());
+    }
+
+    /* Step 1: Write filesystem file and perform migration → _isMigrated=true. */
+    {
+        std::ofstream fs(kFilePath, std::ios::trunc);
+        ASSERT_TRUE(fs.is_open()) << "Cannot create test filesystem persistence file";
+        fs << "{\"pairedDevices\":[{\"deviceAddr\":\"AA:BB:CC:DD:EE:FF\","
+           << "\"deviceType\":\"LOUDSPEAKER\",\"autoConnectStatus\":true,"
+           << "\"lastConnectionTimeUTC\":0}]}";
+        fs.close();
+    }
+
+    JsonObject result;
+    uint32_t status = InvokeServiceMethod("org.rdk.Bluetooth.1", "performMigration", result);
+    EXPECT_EQ(Core::ERROR_NONE, status);
+    EXPECT_TRUE(result["success"].Boolean());
+
+    /* Step 2: Clear migration state → _isMigrated=false. */
+    status = InvokeServiceMethod("org.rdk.Bluetooth.1", "clearMigration", result);
+    EXPECT_EQ(Core::ERROR_NONE, status);
+    EXPECT_TRUE(result["success"].Boolean());
+
+    /* Step 3: setAutoConnect must now fail because the guard is re-enabled.
+     * The device ID "12345" corresponds to TEST_DEVICE_HANDLE. Even though the
+     * device may not be in cache (clearMigration cleared it), the guard check
+     * happens before the cache lookup, so the error is guard-driven. */
+    JsonObject params;
+    params["deviceID"] = std::to_string(TEST_DEVICE_HANDLE);
+    params["enable"]   = true;
+    status = InvokeServiceMethod("org.rdk.Bluetooth.1", "setAutoConnect", params, result);
+    /* In Thunder R4.4.1, returnResponse(false) does not produce a JSON-RPC protocol error.
+     * The JSONRPC Invoke status is always ERROR_NONE; failure is indicated solely by success=false in the response body. */
+    EXPECT_EQ(Core::ERROR_NONE, status);
+    EXPECT_FALSE(result["success"].Boolean());
+
+    /* Step 4: Restore state so later tests are unaffected. */
+    status = InvokeServiceMethod("org.rdk.Bluetooth.1", "performMigration", result);
+    EXPECT_EQ(Core::ERROR_NONE, status);
+
+    std::remove(kFilePath);
+}
+#endif /* BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION */
