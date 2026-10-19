@@ -437,7 +437,7 @@ void BtSdkAdapterImpl::onAdapterEvent(bluetooth::AdapterEvent event,
     bool filtered = false;
     if (event == bluetooth::AdapterEvent::DeviceDiscovered && data.device) {
         registerDeviceEvents(data.device);
-        filtered = isFilteredFromDiscovery(data.device);
+        filtered = isFilteredFromDiscovery(data.device, /*typeSettled=*/false);
         if (filtered) {
             std::string mac;
             data.device->address(mac);
@@ -558,7 +558,7 @@ void BtSdkAdapterImpl::pruneDiscoveredDevices() {
     m_adapter->pruneDiscoveredDevices(nullptr, 0);
 }
 
-bool BtSdkAdapterImpl::isFilteredFromDiscovery(const std::shared_ptr<bluetooth::Device>& device) const {
+bool BtSdkAdapterImpl::isFilteredFromDiscovery(const std::shared_ptr<bluetooth::Device>& device, bool typeSettled) const {
     if (!device) return false;
 
     // Paired/connected devices are not scan results; they are never hidden.
@@ -573,19 +573,25 @@ bool BtSdkAdapterImpl::isFilteredFromDiscovery(const std::shared_ptr<bluetooth::
     uint16_t appearance = 0;
     uint32_t classOfDevice = 0;
     std::vector<std::string> uuids;
+    std::string icon;
     bluetooth::DeviceProperties props;
     if (device->getAllProperties(props)) {
         appearance    = props.appearance.value_or(0);
         classOfDevice = props.classOfDevice.value_or(0);
         uuids         = props.uuids.value_or(std::vector<std::string>{});
+        icon          = props.icon.value_or("");
     }
 
     // Classify afresh: the type cached in the registry can predate the device's properties being populated.
+    std::string deviceType = DeviceTypeClassifier::classify(appearance, classOfDevice, uuids);
+    if (deviceType == "UNKNOWN DEVICE") {
+        deviceType = ScanFilterPolicy::deviceTypeFromIcon(icon);
+    }
     const bool skip = ScanFilterPolicy::shouldSkipDiscovered(m_scanMode.load(), mac, name, appearance,
-                                                             DeviceTypeClassifier::classify(appearance, classOfDevice, uuids));
+                                                             deviceType, typeSettled);
     if (skip) {
-        LOGINFO("BtSdkAdapterImpl::isFilteredFromDiscovery: skipping mac=%s name=%s appearance=0x%04x",
-                mac.c_str(), name.c_str(), appearance);
+        LOGINFO("BtSdkAdapterImpl::isFilteredFromDiscovery: skipping mac=%s name=%s appearance=0x%04x cod=0x%06x icon=%s type=%s",
+                mac.c_str(), name.c_str(), appearance, classOfDevice, icon.c_str(), deviceType.c_str());
     }
     return skip;
 }

@@ -108,11 +108,21 @@ bool ScanFilterPolicy::isKnownGamepad(const std::string& mac, const std::string&
 }
 
 // static
+std::string ScanFilterPolicy::deviceTypeFromIcon(const std::string& icon) {
+    if (icon.rfind("input-", 0) == 0)  return "HUMAN INTERFACE DEVICE";
+    if (icon.rfind("audio-", 0) == 0)  return "LOUDSPEAKER";
+    if (icon.rfind("phone", 0) == 0)   return "SMARTPHONE";
+    if (icon.rfind("computer", 0) == 0) return "TABLET";
+    return "UNKNOWN DEVICE";
+}
+
+// static
 bool ScanFilterPolicy::shouldSkipDiscovered(Mode mode,
                                             const std::string& mac,
                                             const std::string& name,
                                             uint16_t appearance,
-                                            const std::string& deviceType) {
+                                            const std::string& deviceType,
+                                            bool typeSettled) {
     if (isRemoteControl(mac, appearance)) return true;
 
     // HID scans skip audio devices (btrCore: HID devices have no reliable appearance, so
@@ -120,7 +130,8 @@ bool ScanFilterPolicy::shouldSkipDiscovered(Mode mode,
     if (mode == Mode::Hid && isAudioType(deviceType)) return true;
 
     // Audio scans skip devices whose type could not be determined.
-    if ((mode == Mode::AudioOutput || mode == Mode::AudioAndHid)
+    if (typeSettled
+        && (mode == Mode::AudioOutput || mode == Mode::AudioAndHid)
         && deviceType == "UNKNOWN DEVICE"
         && !isKnownGamepad(mac, name)) {
         return true;

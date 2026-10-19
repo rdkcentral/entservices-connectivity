@@ -54,13 +54,20 @@ public:
     // RDK remote controls (GAP appearance 0x0180 or a known RCU OUI) are never reported by a scan.
     static bool isRemoteControl(const std::string& mac, uint16_t appearance);
 
+    // Best-effort device type from BlueZ's Icon property (derived by BlueZ from class, appearance and UUIDs),
+    // for devices DeviceTypeClassifier cannot place. Returns "UNKNOWN DEVICE" when the icon says nothing.
+    static std::string deviceTypeFromIcon(const std::string& icon);
+
     // True when the legacy stack would not have reported this discovered device
     // for a scan started in `mode`. `deviceType` is a DeviceTypeClassifier string.
+    // `typeSettled` is false when called from a discovery event: BlueZ may not have populated
+    // class/appearance/UUIDs yet, so an unknown type must not hide the device for good.
     static bool shouldSkipDiscovered(Mode mode,
                                      const std::string& mac,
                                      const std::string& name,
                                      uint16_t appearance,
-                                     const std::string& deviceType);
+                                     const std::string& deviceType,
+                                     bool typeSettled = true);
 
 private:
     static bool hasOui(const std::string& mac, const char* const* ouis);

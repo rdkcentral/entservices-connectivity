@@ -2197,6 +2197,22 @@ TEST(ScanFilterPolicyTest, shouldSkipDiscovered_HidScanSkipsAudio)
     EXPECT_FALSE(ScanFilterPolicy::shouldSkipDiscovered(Mode::Hid, "11:22:33:44:55:66", "Thing", 0, "UNKNOWN DEVICE"));
 }
 
+TEST(ScanFilterPolicyTest, shouldSkipDiscovered_UnsettledTypeNeverHidesUnknown)
+{
+    using Mode = ScanFilterPolicy::Mode;
+    EXPECT_FALSE(ScanFilterPolicy::shouldSkipDiscovered(Mode::AudioAndHid, "11:22:33:44:55:66", "Thing", 0, "UNKNOWN DEVICE", false));
+    EXPECT_TRUE(ScanFilterPolicy::shouldSkipDiscovered(Mode::AudioAndHid, "e8:0f:c8:01:02:03", "RCU", 0, "UNKNOWN DEVICE", false));
+}
+
+TEST(ScanFilterPolicyTest, deviceTypeFromIcon_MapsBluezIcons)
+{
+    EXPECT_EQ("HUMAN INTERFACE DEVICE", ScanFilterPolicy::deviceTypeFromIcon("input-gaming"));
+    EXPECT_EQ("LOUDSPEAKER", ScanFilterPolicy::deviceTypeFromIcon("audio-headset"));
+    EXPECT_EQ("SMARTPHONE", ScanFilterPolicy::deviceTypeFromIcon("phone"));
+    EXPECT_EQ("TABLET", ScanFilterPolicy::deviceTypeFromIcon("computer"));
+    EXPECT_EQ("UNKNOWN DEVICE", ScanFilterPolicy::deviceTypeFromIcon(""));
+}
+
 TEST(ScanFilterPolicyTest, shouldSkipDiscovered_AudioScansSkipUnknownTypes)
 {
     using Mode = ScanFilterPolicy::Mode;

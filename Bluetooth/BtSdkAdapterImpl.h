@@ -101,7 +101,7 @@ private:
     // Drops unpaired devices from the previous scan, as the legacy stack did when a scan started.
     void pruneDiscoveredDevices();
     // True for an unpaired device the legacy BTMgr stack would not have reported for the current scan.
-    bool isFilteredFromDiscovery(const std::shared_ptr<bluetooth::Device>& device) const;
+    bool isFilteredFromDiscovery(const std::shared_ptr<bluetooth::Device>& device, bool typeSettled = true) const;
 
     BtDeviceInfo deviceToInfo(std::shared_ptr<bluetooth::Device> device) const;
 
