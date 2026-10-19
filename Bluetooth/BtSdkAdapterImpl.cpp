@@ -37,19 +37,18 @@ std::string BtSdkAdapterImpl::init(PluginHost::IShell* /* service */,
     m_eventBridge = std::make_unique<EventBridge>(m_registry, std::move(eventCallbacks));
     m_authBridge  = std::make_unique<AuthBridge>(m_registry, std::move(authCallbacks));
 
+    // <pca> debug
     // auto authCb = [this](bluetooth::AuthorisationType type,
     //                      std::shared_ptr<bluetooth::Device> device) -> bool {
     //     return m_authBridge->onAuthRequest(type, std::move(device));
     // };
+    // </pca>
 
-    // An empty LogRedirect would leave the SDK's Logger singleton holding a null
-    // callback set, which it dereferences unconditionally on the very first log
-    // line emitted from inside the Manager constructor.
-    // auto logRedirect = std::make_unique<LogRedirect>(
-    //     [](std::string& msg) { LOGINFO("%s", msg.c_str()); },
-    //     [](std::string& msg) { LOGINFO("%s", msg.c_str()); },
-    //     [](std::string& msg) { LOGWARN("%s", msg.c_str()); },
-    //     [](std::string& msg) { LOGERR("%s", msg.c_str()); });
+    auto logRedirect = std::make_unique<LogRedirect>(
+        [](std::string& msg) { LOGINFO("%s", msg.c_str()); },
+        [](std::string& msg) { LOGINFO("%s", msg.c_str()); },
+        [](std::string& msg) { LOGWARN("%s", msg.c_str()); },
+        [](std::string& msg) { LOGERR("%s", msg.c_str()); });
 
     try {
         // <pca> debug - This is throwing, simplify for now to narrow-down the problem
@@ -59,7 +58,12 @@ std::string BtSdkAdapterImpl::init(PluginHost::IShell* /* service */,
         //     LogLocation::LogRedirect,
         //     std::move(logRedirect)
         // );
-        m_manager = std::make_unique<bluetooth::Manager>(bluetooth::AuthorisationMode::AutoAccept);
+        m_manager = std::make_unique<bluetooth::Manager>(
+            bluetooth::AuthorisationMode::AutoAccept,
+            nullptr,
+            LogLocation::LogRedirect,
+            std::move(logRedirect)
+        );
         // </pca>
     } catch (const std::exception& e) {
         const std::string error = std::string("Failed to construct Bluetooth Manager: ") + e.what();
