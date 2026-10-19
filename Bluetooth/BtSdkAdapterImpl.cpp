@@ -481,6 +481,15 @@ void BtSdkAdapterImpl::unregisterDeviceEvents(std::shared_ptr<bluetooth::Device>
 
 bluetooth::ScanFilter BtSdkAdapterImpl::buildScanFilter(const std::string& profile) const {
     LOGINFO("BtSdkAdapterImpl::buildScanFilter: entry profile=%s", profile.c_str());
+    // Mirrors the legacy BTMgr/btrCore discovery mapping (BTRMGR_DEVICE_OP_TYPE_* -> BlueZ SetDiscoveryFilter):
+    //   audio + HID        -> no filter
+    //   audio only         -> Transport=bredr
+    //   smartphone/tablet  -> Transport=bredr
+    //   HID only           -> no filter
+    //   LE                 -> Transport=le + LE service UUIDs
+    //   anything else      -> no filter
+    // Classic and HID discovery must not filter on service UUIDs: most devices don't advertise them
+    // in inquiry/advertising data, so BlueZ would silently drop them.
     bluetooth::ScanFilter filter;
     const bool hasAudio = profile.find("LOUDSPEAKER") != std::string::npos
                        || profile.find("HEADPHONES")  != std::string::npos
@@ -489,25 +498,33 @@ bluetooth::ScanFilter BtSdkAdapterImpl::buildScanFilter(const std::string& profi
     const bool hasHid   = profile.find("KEYBOARD") != std::string::npos
                        || profile.find("MOUSE")    != std::string::npos
                        || profile.find("JOYSTICK") != std::string::npos;
+    const bool hasPhone = profile.find("SMARTPHONE") != std::string::npos
+                       || profile.find("TABLET")     != std::string::npos;
+    const bool hasLe    = profile.find("LE TILE") != std::string::npos
+                       || profile == "LE"
+                       || profile.find(", LE") != std::string::npos
+                       || profile.find("LE,") != std::string::npos;
 
-    if (profile.find("LE TILE") != std::string::npos ||
-         profile == "LE" ||
-         profile.find(", LE") != std::string::npos ||
-         profile.find("LE,") != std::string::npos) {
-         filter.type = bluetooth::ScanType::LeOnly;
-         LOGINFO("BtSdkAdapterImpl::buildScanFilter: exit type=LeOnly uuidCount=0");
-         return filter;
-    }
-    if (profile.find("SMARTPHONE") != std::string::npos || profile.find("TABLET") != std::string::npos) {
+    if (hasAudio && hasHid) {
+        filter.type = bluetooth::ScanType::AllDevices;
+    } else if (hasAudio || hasPhone) {
         filter.type = bluetooth::ScanType::ClassicOnly;
-        filter.uuids = { bluetooth::Uuid(0x110a) };
-        LOGINFO("BtSdkAdapterImpl::buildScanFilter: exit type=ClassicOnly uuidCount=%zu", filter.uuids.size());
-        return filter;
+    } else if (hasHid) {
+        filter.type = bluetooth::ScanType::AllDevices;
+    } else if (hasLe) {
+        filter.type = bluetooth::ScanType::LeOnly;
+        // Same UUIDs btrCore filters LE discovery on: XBB (gdbus_bluez5 build) and Tile (dbus_bluez5 build).
+        filter.uuids = {
+            bluetooth::Uuid(0x0a18),
+            bluetooth::Uuid(0xfeed),
+            bluetooth::Uuid(0xfeec),
+            bluetooth::Uuid(0xfebe),
+        };
+    } else {
+        filter.type = bluetooth::ScanType::AllDevices;
     }
-    filter.type = bluetooth::ScanType::AllDevices;
-    if (hasAudio) filter.uuids.push_back(bluetooth::Uuid(0x110b));
-    if (hasHid)   filter.uuids.push_back(bluetooth::Uuid(0x1124));
-    LOGINFO("BtSdkAdapterImpl::buildScanFilter: exit type=AllDevices uuidCount=%zu", filter.uuids.size());
+    LOGINFO("BtSdkAdapterImpl::buildScanFilter: exit type=%d uuidCount=%zu",
+            static_cast<int>(filter.type), filter.uuids.size());
     return filter;
 }
 
