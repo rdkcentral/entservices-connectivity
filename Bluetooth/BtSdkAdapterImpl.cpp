@@ -104,6 +104,10 @@ void BtSdkAdapterImpl::deinit() {
     m_eventBridge.reset();
     m_authBridge.reset();
     m_registry.clear();
+    {
+        std::lock_guard<std::mutex> lock(m_suppressedMutex);
+        m_suppressedMacs.clear();
+    }
     std::lock_guard<std::mutex> lock(m_devicesMutex);
     m_devicesByHandle.clear();
     LOGINFO("BtSdkAdapterImpl::deinit: exit successfully");
@@ -173,7 +177,12 @@ bool BtSdkAdapterImpl::startScan(const std::string& profile) {
         LOGERR("BtSdkAdapterImpl::startScan: exit with error: adapter is unavailable");
         return false;
     }
-    Status status = m_adapter->startScan(buildScanFilter(profile));
+    const ScanFilterPolicy::Mode mode = ScanFilterPolicy::modeFromProfile(profile);
+    // Each legacy scan starts from an empty discovered list.
+    pruneDiscoveredDevices();
+    // Set before the scan starts so early discovery events are judged against the new mode.
+    m_scanMode = mode;
+    Status status = m_adapter->startScan(buildScanFilter(mode));
     if (!status) {
         LOGERR("BtSdkAdapterImpl::startScan: exit with error: %s", status.get_message().c_str());
         return false;
@@ -231,8 +240,10 @@ std::vector<IBtAdapter::BtDeviceInfo> BtSdkAdapterImpl::getDiscoveredDevices() c
         LOGERR("BtSdkAdapterImpl::getDiscoveredDevices: exit with error: adapter is unavailable");
         return result;
     }
-    for (auto& d : m_adapter->getDevices(bluetooth::DeviceState::Discovered))
+    for (auto& d : m_adapter->getDevices(bluetooth::DeviceState::Discovered)) {
+        if (isFilteredFromDiscovery(d)) continue;
         result.push_back(deviceToInfo(d));
+    }
     LOGINFO("BtSdkAdapterImpl::getDiscoveredDevices: exit count=%zu", result.size());
     return result;
 }
@@ -423,15 +434,32 @@ IBtAdapter::BtMediaTrackInfo BtSdkAdapterImpl::getMediaTrackInfo(long long int d
 void BtSdkAdapterImpl::onAdapterEvent(bluetooth::AdapterEvent event,
                                             bluetooth::AdapterEventData data) {
     LOGINFO("BtSdkAdapterImpl::onAdapterEvent: entry event=%d hasDevice=%d", static_cast<int>(event), data.device != nullptr);
+    bool filtered = false;
     if (event == bluetooth::AdapterEvent::DeviceDiscovered && data.device) {
         registerDeviceEvents(data.device);
+        filtered = isFilteredFromDiscovery(data.device);
+        if (filtered) {
+            std::string mac;
+            data.device->address(mac);
+            std::lock_guard<std::mutex> lock(m_suppressedMutex);
+            m_suppressedMacs.insert(mac);
+        }
     } else if (event == bluetooth::AdapterEvent::DeviceDisappeared && data.device) {
         std::string mac;
         data.device->address(mac);
+        {
+            // Never announced (filtered out) or removed by our own pruning: don't report it as lost.
+            std::lock_guard<std::mutex> lock(m_suppressedMutex);
+            filtered = (m_suppressedMacs.erase(mac) > 0);
+        }
         m_registry.unregisterDevice(mac);
         std::string handle = DeviceRegistry::deriveHandle(mac);
         std::lock_guard<std::mutex> lock(m_devicesMutex);
         m_devicesByHandle.erase(handle);
+    }
+    if (filtered) {
+        LOGINFO("BtSdkAdapterImpl::onAdapterEvent: exit device suppressed by legacy scan filter");
+        return;
     }
     if (m_eventBridge) m_eventBridge->onAdapterEvent(event, std::move(data));
     LOGINFO("BtSdkAdapterImpl::onAdapterEvent: exit successfully");
@@ -479,53 +507,87 @@ void BtSdkAdapterImpl::unregisterDeviceEvents(std::shared_ptr<bluetooth::Device>
     LOGINFO("BtSdkAdapterImpl::unregisterDeviceEvents: exit successfully");
 }
 
-bluetooth::ScanFilter BtSdkAdapterImpl::buildScanFilter(const std::string& profile) const {
-    LOGINFO("BtSdkAdapterImpl::buildScanFilter: entry profile=%s", profile.c_str());
+bluetooth::ScanFilter BtSdkAdapterImpl::buildScanFilter(ScanFilterPolicy::Mode mode) const {
+    LOGINFO("BtSdkAdapterImpl::buildScanFilter: entry mode=%d", static_cast<int>(mode));
     // Mirrors the legacy BTMgr/btrCore discovery mapping (BTRMGR_DEVICE_OP_TYPE_* -> BlueZ SetDiscoveryFilter):
-    //   audio + HID        -> no filter
-    //   audio only         -> Transport=bredr
-    //   smartphone/tablet  -> Transport=bredr
-    //   HID only           -> no filter
-    //   LE                 -> Transport=le + LE service UUIDs
-    //   anything else      -> no filter
+    //   audio output, audio input -> Transport=bredr
+    //   LE                        -> Transport=le + LE service UUIDs
+    //   audio + HID, HID, default -> no filter
     // Classic and HID discovery must not filter on service UUIDs: most devices don't advertise them
-    // in inquiry/advertising data, so BlueZ would silently drop them.
+    // in inquiry/advertising data, so BlueZ would silently drop them. Whatever BlueZ can't be asked
+    // to exclude is removed afterwards by isFilteredFromDiscovery().
     bluetooth::ScanFilter filter;
-    const bool hasAudio = profile.find("LOUDSPEAKER") != std::string::npos
-                       || profile.find("HEADPHONES")  != std::string::npos
-                       || profile.find("WEARABLE HEADSET") != std::string::npos
-                       || profile.find("HIFI AUDIO DEVICE") != std::string::npos;
-    const bool hasHid   = profile.find("KEYBOARD") != std::string::npos
-                       || profile.find("MOUSE")    != std::string::npos
-                       || profile.find("JOYSTICK") != std::string::npos;
-    const bool hasPhone = profile.find("SMARTPHONE") != std::string::npos
-                       || profile.find("TABLET")     != std::string::npos;
-    const bool hasLe    = profile.find("LE TILE") != std::string::npos
-                       || profile == "LE"
-                       || profile.find(", LE") != std::string::npos
-                       || profile.find("LE,") != std::string::npos;
-
-    if (hasAudio && hasHid) {
-        filter.type = bluetooth::ScanType::AllDevices;
-    } else if (hasAudio || hasPhone) {
-        filter.type = bluetooth::ScanType::ClassicOnly;
-    } else if (hasHid) {
-        filter.type = bluetooth::ScanType::AllDevices;
-    } else if (hasLe) {
-        filter.type = bluetooth::ScanType::LeOnly;
-        // Same UUIDs btrCore filters LE discovery on: XBB (gdbus_bluez5 build) and Tile (dbus_bluez5 build).
-        filter.uuids = {
-            bluetooth::Uuid(0x0a18),
-            bluetooth::Uuid(0xfeed),
-            bluetooth::Uuid(0xfeec),
-            bluetooth::Uuid(0xfebe),
-        };
-    } else {
-        filter.type = bluetooth::ScanType::AllDevices;
+    switch (mode) {
+        case ScanFilterPolicy::Mode::AudioOutput:
+        case ScanFilterPolicy::Mode::AudioInput:
+            filter.type = bluetooth::ScanType::ClassicOnly;
+            break;
+        case ScanFilterPolicy::Mode::Le:
+            filter.type = bluetooth::ScanType::LeOnly;
+            // Same UUIDs btrCore filters LE discovery on: XBB (gdbus_bluez5 build) and Tile (dbus_bluez5 build).
+            filter.uuids = {
+                bluetooth::Uuid(0x0a18),
+                bluetooth::Uuid(0xfeed),
+                bluetooth::Uuid(0xfeec),
+                bluetooth::Uuid(0xfebe),
+            };
+            break;
+        case ScanFilterPolicy::Mode::AudioAndHid:
+        case ScanFilterPolicy::Mode::Hid:
+        case ScanFilterPolicy::Mode::Default:
+        default:
+            filter.type = bluetooth::ScanType::AllDevices;
+            break;
     }
     LOGINFO("BtSdkAdapterImpl::buildScanFilter: exit type=%d uuidCount=%zu",
             static_cast<int>(filter.type), filter.uuids.size());
     return filter;
+}
+
+void BtSdkAdapterImpl::pruneDiscoveredDevices() {
+    // BlueZ reports the removals asynchronously, so record them before pruning
+    // so the resulting DeviceDisappeared events can be recognised and swallowed.
+    {
+        std::lock_guard<std::mutex> lock(m_suppressedMutex);
+        for (auto& d : m_adapter->getDevices(bluetooth::DeviceState::Discovered)) {
+            std::string mac;
+            d->address(mac);
+            m_suppressedMacs.insert(mac);
+        }
+    }
+    m_adapter->pruneDiscoveredDevices(nullptr, 0);
+}
+
+bool BtSdkAdapterImpl::isFilteredFromDiscovery(const std::shared_ptr<bluetooth::Device>& device) const {
+    if (!device) return false;
+
+    // Paired/connected devices are not scan results; they are never hidden.
+    const bluetooth::DeviceState state = device->state();
+    if (state == bluetooth::DeviceState::Paired || state == bluetooth::DeviceState::Connected) return false;
+
+    std::string mac;
+    std::string name;
+    device->address(mac);
+    device->name(name);
+
+    uint16_t appearance = 0;
+    uint32_t classOfDevice = 0;
+    std::vector<std::string> uuids;
+    bluetooth::DeviceProperties props;
+    if (device->getAllProperties(props)) {
+        appearance    = props.appearance.value_or(0);
+        classOfDevice = props.classOfDevice.value_or(0);
+        uuids         = props.uuids.value_or(std::vector<std::string>{});
+    }
+
+    // Classify afresh: the type cached in the registry can predate the device's properties being populated.
+    const bool skip = ScanFilterPolicy::shouldSkipDiscovered(m_scanMode.load(), mac, name, appearance,
+                                                             DeviceTypeClassifier::classify(appearance, classOfDevice, uuids));
+    if (skip) {
+        LOGINFO("BtSdkAdapterImpl::isFilteredFromDiscovery: skipping mac=%s name=%s appearance=0x%04x",
+                mac.c_str(), name.c_str(), appearance);
+    }
+    return skip;
 }
 
 } // namespace Plugin

@@ -41,6 +41,7 @@ set(BLUETOOTH_PLUGIN_SOURCES
         EventBridge.cpp
         AuthBridge.cpp
         DeviceTypeClassifier.cpp
+        ScanFilterPolicy.cpp
 )
 
 # FindBTMGR.cmake / FindBLUETOOTH_SDK.cmake live here; must be on the module path

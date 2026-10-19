@@ -25,6 +25,7 @@
 #include <cstdlib>
 #include <sys/stat.h>
 #include "Bluetooth.h"
+#include "ScanFilterPolicy.h"
 #include "StoreMock.h"
 #include "btmgrMock.h"
 #include "FactoriesImplementation.h"
@@ -2157,3 +2158,52 @@ TEST_F(BluetoothTest, featureGateCompileCoverage_BaselinePersistenceFunctionalWh
     EXPECT_TRUE(response.find("\"autoconnect\":true") != string::npos);
 }
 #endif
+
+TEST(ScanFilterPolicyTest, modeFromProfile_MapsLegacyProfiles)
+{
+    using Mode = ScanFilterPolicy::Mode;
+    EXPECT_EQ(Mode::Default,     ScanFilterPolicy::modeFromProfile(""));
+    EXPECT_EQ(Mode::Default,     ScanFilterPolicy::modeFromProfile("DEFAULT"));
+    EXPECT_EQ(Mode::AudioOutput, ScanFilterPolicy::modeFromProfile("HEADPHONES"));
+    EXPECT_EQ(Mode::AudioInput,  ScanFilterPolicy::modeFromProfile("SMARTPHONE"));
+    EXPECT_EQ(Mode::Hid,         ScanFilterPolicy::modeFromProfile("KEYBOARD"));
+    EXPECT_EQ(Mode::AudioAndHid, ScanFilterPolicy::modeFromProfile("LOUDSPEAKER,JOYSTICK"));
+    EXPECT_EQ(Mode::Le,          ScanFilterPolicy::modeFromProfile("LE TILE"));
+}
+
+TEST(ScanFilterPolicyTest, shouldSkipDiscovered_RemoteControlsAlwaysSkipped)
+{
+    using Mode = ScanFilterPolicy::Mode;
+    EXPECT_TRUE(ScanFilterPolicy::shouldSkipDiscovered(Mode::Default, "11:22:33:44:55:66", "RCU", 0x0180, "UNKNOWN DEVICE"));
+    EXPECT_TRUE(ScanFilterPolicy::shouldSkipDiscovered(Mode::Default, "e8:0f:c8:01:02:03", "RCU", 0, "UNKNOWN DEVICE"));
+    EXPECT_TRUE(ScanFilterPolicy::shouldSkipDiscovered(Mode::Le, "B4:CB:B8:01:02:03", "RCU", 0, "UNKNOWN DEVICE"));
+    EXPECT_FALSE(ScanFilterPolicy::shouldSkipDiscovered(Mode::Default, "11:22:33:44:55:66", "Phone", 0, "SMARTPHONE"));
+}
+
+TEST(ScanFilterPolicyTest, shouldSkipDiscovered_DefaultScanKeepsUnknownAndAudio)
+{
+    using Mode = ScanFilterPolicy::Mode;
+    EXPECT_FALSE(ScanFilterPolicy::shouldSkipDiscovered(Mode::Default, "11:22:33:44:55:66", "Thing", 0, "UNKNOWN DEVICE"));
+    EXPECT_FALSE(ScanFilterPolicy::shouldSkipDiscovered(Mode::Default, "11:22:33:44:55:66", "Speaker", 0, "LOUDSPEAKER"));
+}
+
+TEST(ScanFilterPolicyTest, shouldSkipDiscovered_HidScanSkipsAudio)
+{
+    using Mode = ScanFilterPolicy::Mode;
+    EXPECT_TRUE(ScanFilterPolicy::shouldSkipDiscovered(Mode::Hid, "11:22:33:44:55:66", "Speaker", 0, "LOUDSPEAKER"));
+    EXPECT_TRUE(ScanFilterPolicy::shouldSkipDiscovered(Mode::Hid, "11:22:33:44:55:66", "Buds", 0, "HEADPHONES"));
+    EXPECT_TRUE(ScanFilterPolicy::shouldSkipDiscovered(Mode::Hid, "11:22:33:44:55:66", "Headset", 0, "WEARABLE HEADSET"));
+    EXPECT_FALSE(ScanFilterPolicy::shouldSkipDiscovered(Mode::Hid, "11:22:33:44:55:66", "Pad", 0, "HUMAN INTERFACE DEVICE"));
+    EXPECT_FALSE(ScanFilterPolicy::shouldSkipDiscovered(Mode::Hid, "11:22:33:44:55:66", "Thing", 0, "UNKNOWN DEVICE"));
+}
+
+TEST(ScanFilterPolicyTest, shouldSkipDiscovered_AudioScansSkipUnknownTypes)
+{
+    using Mode = ScanFilterPolicy::Mode;
+    EXPECT_TRUE(ScanFilterPolicy::shouldSkipDiscovered(Mode::AudioOutput, "11:22:33:44:55:66", "Thing", 0, "UNKNOWN DEVICE"));
+    EXPECT_TRUE(ScanFilterPolicy::shouldSkipDiscovered(Mode::AudioAndHid, "11:22:33:44:55:66", "Thing", 0, "UNKNOWN DEVICE"));
+    EXPECT_FALSE(ScanFilterPolicy::shouldSkipDiscovered(Mode::AudioOutput, "11:22:33:44:55:66", "Speaker", 0, "LOUDSPEAKER"));
+    EXPECT_FALSE(ScanFilterPolicy::shouldSkipDiscovered(Mode::AudioOutput, "20:A1:71:01:02:03", "Pad", 0, "UNKNOWN DEVICE"));
+    EXPECT_FALSE(ScanFilterPolicy::shouldSkipDiscovered(Mode::AudioOutput, "11:22:33:44:55:66", "Luna Controller", 0, "UNKNOWN DEVICE"));
+    EXPECT_FALSE(ScanFilterPolicy::shouldSkipDiscovered(Mode::AudioInput, "11:22:33:44:55:66", "Thing", 0, "UNKNOWN DEVICE"));
+}

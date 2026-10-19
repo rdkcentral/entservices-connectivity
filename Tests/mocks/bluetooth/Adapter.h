@@ -73,6 +73,8 @@ public:
 
     virtual Status startScan(ScanFilter filter = ScanFilter()) = 0;
     virtual Status stopScan() = 0;
+    virtual void pruneDiscoveredDevices(const std::shared_ptr<Device>& keep = nullptr,
+                                        unsigned int graceSeconds = 0) = 0;
 
     virtual std::vector<std::shared_ptr<Device>> getDevices() = 0;
     virtual std::vector<std::shared_ptr<Device>> getDevices(DeviceState state) = 0;

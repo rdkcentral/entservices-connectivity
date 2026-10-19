@@ -59,6 +59,8 @@ public:
     MOCK_METHOD(Status, startScan,
         (bluetooth::ScanFilter), (override));
     MOCK_METHOD(Status, stopScan, (), (override));
+    MOCK_METHOD(void, pruneDiscoveredDevices,
+        (const std::shared_ptr<bluetooth::Device>&, unsigned int), (override));
 
     MOCK_METHOD(std::vector<std::shared_ptr<bluetooth::Device>>, getDevices,
         (), (override));

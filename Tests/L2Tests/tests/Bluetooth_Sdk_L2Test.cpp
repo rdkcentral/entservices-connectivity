@@ -189,6 +189,7 @@ TEST_F(Bluetooth_Sdk_L2Test, BluetoothDiscoverableUnsupportedAndScan)
               InvokeServiceMethod("org.rdk.Bluetooth.1", "setDiscoverable", params, result));
     EXPECT_FALSE(result["success"].Boolean());
 
+    EXPECT_CALL(*g_adapter, pruneDiscoveredDevices(::testing::IsNull(), 0u)).Times(1);
     EXPECT_CALL(*g_adapter, startScan(::testing::_))
         .WillOnce(::testing::Return(Status{}));
     params["profile"] = "HEADPHONES";

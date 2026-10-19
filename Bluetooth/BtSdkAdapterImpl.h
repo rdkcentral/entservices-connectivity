@@ -24,9 +24,12 @@
 // the external Bluetooth SDK package (production) or Tests/mocks/ (test
 // builds).
 
+#include <atomic>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include <bluetooth/Adapter.h>
@@ -39,6 +42,7 @@
 #include "DeviceTypeClassifier.h"
 #include "EventBridge.h"
 #include "IBtAdapter.h"
+#include "ScanFilterPolicy.h"
 
 namespace WPEFramework {
 namespace PluginHost { class IShell; }
@@ -93,7 +97,11 @@ private:
     void onAdapterEvent(bluetooth::AdapterEvent event, bluetooth::AdapterEventData data);
     void registerDeviceEvents(std::shared_ptr<bluetooth::Device> device);
     void unregisterDeviceEvents(std::shared_ptr<bluetooth::Device> device);
-    bluetooth::ScanFilter buildScanFilter(const std::string& profile) const;
+    bluetooth::ScanFilter buildScanFilter(ScanFilterPolicy::Mode mode) const;
+    // Drops unpaired devices from the previous scan, as the legacy stack did when a scan started.
+    void pruneDiscoveredDevices();
+    // True for an unpaired device the legacy BTMgr stack would not have reported for the current scan.
+    bool isFilteredFromDiscovery(const std::shared_ptr<bluetooth::Device>& device) const;
 
     BtDeviceInfo deviceToInfo(std::shared_ptr<bluetooth::Device> device) const;
 
@@ -104,6 +112,13 @@ private:
     // Device pointer map (handle → Device); parallel to DeviceRegistry metadata.
     mutable std::mutex m_devicesMutex;
     std::unordered_map<std::string, std::shared_ptr<bluetooth::Device>> m_devicesByHandle;
+
+    // MACs whose DeviceDisappeared event must not be forwarded (never announced, or pruned by us).
+    std::mutex m_suppressedMutex;
+    std::unordered_set<std::string> m_suppressedMacs;
+
+    // Mode of the most recent startScan(); retained after stopScan() so the discovered list stays consistent.
+    std::atomic<ScanFilterPolicy::Mode> m_scanMode{ScanFilterPolicy::Mode::Default};
 
     DeviceRegistry m_registry;
     std::unique_ptr<EventBridge> m_eventBridge;
