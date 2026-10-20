@@ -204,7 +204,7 @@ namespace WPEFramework {
         private: /*internal methods*/
             void getStatusSupport(string& status);
             bool isAdapterDiscoverable();
-            string startDeviceDiscovery(int timeout, const string &discProfile = "LOUDSPEAKER, HEADPHONES, WEARABLE HEADSET, HIFI AUDIO DEVICE, KEYBOARD, MOUSE, JOYSTICK");  //default behaviour is to scan audio devices and gamepads
+            string startDeviceDiscovery(int timeout, const string &discProfile = "");  //no profile: the backend applies its default scan (audio devices and gamepads on BTMgr; all devices, RCUs included, on the SDK)
             bool stopDeviceDiscovery();
             void startDiscoveryTimer(int msec);
             void stopDiscoveryTimer();

@@ -123,7 +123,8 @@ bool ScanFilterPolicy::shouldSkipDiscovered(Mode mode,
                                             uint16_t appearance,
                                             const std::string& deviceType,
                                             bool typeSettled) {
-    if (isRemoteControl(mac, appearance)) return true;
+    // A scan with no profile lists everything, RCUs included; any explicit profile excludes them.
+    if (mode != Mode::Default && isRemoteControl(mac, appearance)) return true;
 
     // HID scans skip audio devices (btrCore: HID devices have no reliable appearance, so
     // audio devices that BlueZ also reports have to be dropped explicitly).

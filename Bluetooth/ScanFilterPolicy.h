@@ -41,7 +41,7 @@ public:
 
     // Mirrors BTRMGR_DEVICE_OP_TYPE_* as selected from the startScan "profile" string.
     enum class Mode {
-        Default,        // no/unrecognised profile: no BlueZ filter, only the always-on exclusions apply
+        Default,        // no/unrecognised profile: no BlueZ filter and nothing is excluded, RCUs included
         AudioOutput,
         AudioInput,     // SMARTPHONE / TABLET
         Hid,
@@ -51,7 +51,7 @@ public:
 
     static Mode modeFromProfile(const std::string& profile);
 
-    // RDK remote controls (GAP appearance 0x0180 or a known RCU OUI) are never reported by a scan.
+    // RDK remote controls (GAP appearance 0x0180 or a known RCU OUI) are not reported by a scan with an explicit profile.
     static bool isRemoteControl(const std::string& mac, uint16_t appearance);
 
     // Best-effort device type from BlueZ's Icon property (derived by BlueZ from class, appearance and UUIDs),

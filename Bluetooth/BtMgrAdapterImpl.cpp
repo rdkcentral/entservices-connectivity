@@ -143,8 +143,11 @@ bool BtMgrAdapterImpl::startScan(const std::string& profile) {
         return false;
     }
 
-    BTRMGR_DeviceOperationType_t opType =
-        static_cast<BTRMGR_DeviceOperationType_t>(deviceOpTypeFromProfile(profile));
+    // The legacy plugin defaulted an unspecified profile to audio devices and gamepads.
+    static const std::string kLegacyDefaultProfile =
+        "LOUDSPEAKER, HEADPHONES, WEARABLE HEADSET, HIFI AUDIO DEVICE, KEYBOARD, MOUSE, JOYSTICK";
+    BTRMGR_DeviceOperationType_t opType = static_cast<BTRMGR_DeviceOperationType_t>(
+        deviceOpTypeFromProfile(profile.empty() ? kLegacyDefaultProfile : profile));
     if (BTRMGR_StartDeviceDiscovery(0, opType) != BTRMGR_RESULT_SUCCESS) {
         LOGERR("Failed to start the discovery..!");
     }

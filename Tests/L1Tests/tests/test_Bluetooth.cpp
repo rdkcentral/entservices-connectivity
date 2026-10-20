@@ -2171,13 +2171,20 @@ TEST(ScanFilterPolicyTest, modeFromProfile_MapsLegacyProfiles)
     EXPECT_EQ(Mode::Le,          ScanFilterPolicy::modeFromProfile("LE TILE"));
 }
 
-TEST(ScanFilterPolicyTest, shouldSkipDiscovered_RemoteControlsAlwaysSkipped)
+TEST(ScanFilterPolicyTest, shouldSkipDiscovered_ExplicitProfileSkipsRemoteControls)
 {
     using Mode = ScanFilterPolicy::Mode;
-    EXPECT_TRUE(ScanFilterPolicy::shouldSkipDiscovered(Mode::Default, "11:22:33:44:55:66", "RCU", 0x0180, "UNKNOWN DEVICE"));
-    EXPECT_TRUE(ScanFilterPolicy::shouldSkipDiscovered(Mode::Default, "e8:0f:c8:01:02:03", "RCU", 0, "UNKNOWN DEVICE"));
+    EXPECT_TRUE(ScanFilterPolicy::shouldSkipDiscovered(Mode::AudioAndHid, "11:22:33:44:55:66", "RCU", 0x0180, "UNKNOWN DEVICE"));
+    EXPECT_TRUE(ScanFilterPolicy::shouldSkipDiscovered(Mode::Hid, "e8:0f:c8:01:02:03", "RCU", 0, "UNKNOWN DEVICE"));
     EXPECT_TRUE(ScanFilterPolicy::shouldSkipDiscovered(Mode::Le, "B4:CB:B8:01:02:03", "RCU", 0, "UNKNOWN DEVICE"));
-    EXPECT_FALSE(ScanFilterPolicy::shouldSkipDiscovered(Mode::Default, "11:22:33:44:55:66", "Phone", 0, "SMARTPHONE"));
+    EXPECT_FALSE(ScanFilterPolicy::shouldSkipDiscovered(Mode::AudioInput, "11:22:33:44:55:66", "Phone", 0, "SMARTPHONE"));
+}
+
+TEST(ScanFilterPolicyTest, shouldSkipDiscovered_DefaultScanKeepsRemoteControls)
+{
+    using Mode = ScanFilterPolicy::Mode;
+    EXPECT_FALSE(ScanFilterPolicy::shouldSkipDiscovered(Mode::Default, "11:22:33:44:55:66", "RCU", 0x0180, "UNKNOWN DEVICE"));
+    EXPECT_FALSE(ScanFilterPolicy::shouldSkipDiscovered(Mode::Default, "e8:0f:c8:01:02:03", "RCU", 0, "UNKNOWN DEVICE"));
 }
 
 TEST(ScanFilterPolicyTest, shouldSkipDiscovered_DefaultScanKeepsUnknownAndAudio)
