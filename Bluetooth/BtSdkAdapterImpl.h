@@ -25,9 +25,12 @@
 // builds).
 
 #include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <memory>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -40,6 +43,7 @@
 #include "AuthBridge.h"
 #include "DeviceRegistry.h"
 #include "DeviceTypeClassifier.h"
+#include "DiscoveryNameGate.h"
 #include "EventBridge.h"
 #include "IBtAdapter.h"
 #include "ScanFilterPolicy.h"
@@ -51,7 +55,7 @@ namespace Plugin {
 class BtSdkAdapterImpl : public IBtAdapter {
 public:
     BtSdkAdapterImpl()  = default;
-    ~BtSdkAdapterImpl() override = default;
+    ~BtSdkAdapterImpl() override;
 
     std::string init(PluginHost::IShell* service,
                      BtEventCallbacks&& eventCallbacks,
@@ -105,6 +109,23 @@ private:
 
     BtDeviceInfo deviceToInfo(std::shared_ptr<bluetooth::Device> device) const;
 
+    // Discovery name gate (see DiscoveryNameGate): unpaired devices BlueZ has not named yet are held back
+    // from clients, and re-read by a worker thread until they are named or their wait runs out.
+    struct PendingDevice {
+        bluetooth::AdapterEventData        event;
+        std::chrono::steady_clock::time_point since;
+        bool                               timed{false};   // has a wait that expires by itself (audio, controller)
+    };
+    // Reads the device's properties; true if it can be reported now.
+    bool isReadyToReport(const std::shared_ptr<bluetooth::Device>& device, const std::string& mac,
+                         int heldMs, DiscoveryNameGate::Kind& kind) const;
+    void holdDevice(const std::string& mac, bluetooth::AdapterEventData&& event);
+    bool isHeld(const std::string& mac) const;
+    void clearHeldDevices();
+    void pendingWorker();
+    void stopPendingWorker();
+    void releaseDevice(bluetooth::AdapterEventData&& event);
+
     // Keep SDK objects unset until init(); this type is constructed at plugin load.
     std::unique_ptr<bluetooth::Manager> m_manager;
     std::shared_ptr<bluetooth::Adapter> m_adapter;
@@ -119,6 +140,13 @@ private:
 
     // Mode of the most recent startScan(); retained after stopScan() so the discovered list stays consistent.
     std::atomic<ScanFilterPolicy::Mode> m_scanMode{ScanFilterPolicy::Mode::Default};
+    std::atomic<bool> m_scanning{false};
+
+    mutable std::mutex                       m_pendingMutex;
+    std::condition_variable                  m_pendingCv;
+    std::unordered_map<std::string, PendingDevice> m_pending;   // keyed by MAC
+    std::thread                              m_pendingThread;
+    bool                                     m_pendingStop{false};
 
     DeviceRegistry m_registry;
     std::unique_ptr<EventBridge> m_eventBridge;

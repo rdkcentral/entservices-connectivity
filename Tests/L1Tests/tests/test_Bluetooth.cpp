@@ -25,6 +25,7 @@
 #include <cstdlib>
 #include <sys/stat.h>
 #include "Bluetooth.h"
+#include "DiscoveryNameGate.h"
 #include "ScanFilterPolicy.h"
 #include "StoreMock.h"
 #include "btmgrMock.h"
@@ -2229,4 +2230,72 @@ TEST(ScanFilterPolicyTest, shouldSkipDiscovered_AudioScansSkipUnknownTypes)
     EXPECT_FALSE(ScanFilterPolicy::shouldSkipDiscovered(Mode::AudioOutput, "20:A1:71:01:02:03", "Pad", 0, "UNKNOWN DEVICE"));
     EXPECT_FALSE(ScanFilterPolicy::shouldSkipDiscovered(Mode::AudioOutput, "11:22:33:44:55:66", "Luna Controller", 0, "UNKNOWN DEVICE"));
     EXPECT_FALSE(ScanFilterPolicy::shouldSkipDiscovered(Mode::AudioInput, "11:22:33:44:55:66", "Thing", 0, "UNKNOWN DEVICE"));
+}
+
+TEST(DiscoveryNameGateTest, isNameSameAsAddress_MatchesBluezAliasFallback)
+{
+    const std::string mac = "E8:FB:E9:0C:2C:80";
+    EXPECT_TRUE(DiscoveryNameGate::isNameSameAsAddress("E8-FB-E9-0C-2C-80", mac));
+    EXPECT_TRUE(DiscoveryNameGate::isNameSameAsAddress("e8:fb:e9:0c:2c:80", mac));
+    EXPECT_FALSE(DiscoveryNameGate::isNameSameAsAddress("Eleven", mac));
+    EXPECT_FALSE(DiscoveryNameGate::isNameSameAsAddress("E8-FB-E9-0C-2C-81", mac));
+    EXPECT_FALSE(DiscoveryNameGate::isNameSameAsAddress("", mac));
+}
+
+TEST(DiscoveryNameGateTest, kindFor_ClassifiesLikeBtrCore)
+{
+    using Kind = DiscoveryNameGate::Kind;
+    EXPECT_EQ(Kind::Audio,      DiscoveryNameGate::kindFor("LOUDSPEAKER", 0));
+    EXPECT_EQ(Kind::Audio,      DiscoveryNameGate::kindFor("WEARABLE HEADSET", 0));
+    EXPECT_EQ(Kind::Controller, DiscoveryNameGate::kindFor("HUMAN INTERFACE DEVICE", 0x508));
+    EXPECT_EQ(Kind::Controller, DiscoveryNameGate::kindFor("HUMAN INTERFACE DEVICE", 0x504));
+    EXPECT_EQ(Kind::Other,      DiscoveryNameGate::kindFor("HUMAN INTERFACE DEVICE", 0x540)); // keyboard
+    EXPECT_EQ(Kind::Other,      DiscoveryNameGate::kindFor("UNKNOWN DEVICE", 0));
+}
+
+TEST(DiscoveryNameGateTest, shouldRelease_RealNameIsReportedAtOnce)
+{
+    EXPECT_TRUE(DiscoveryNameGate::shouldRelease("Eleven", "Eleven", "E8:FB:E9:0C:2C:80", "UNKNOWN DEVICE", 0, 0));
+    EXPECT_TRUE(DiscoveryNameGate::shouldRelease("Eleven", "", "E8:FB:E9:0C:2C:80", "UNKNOWN DEVICE", 0, 0));
+}
+
+TEST(DiscoveryNameGateTest, shouldRelease_AliasTakesPrecedenceOverName)
+{
+    const std::string mac = "E8:FB:E9:0C:2C:80";
+    // A custom alias counts as a name even when BlueZ has no Name.
+    EXPECT_TRUE(DiscoveryNameGate::shouldRelease("", "Living Room", mac, "UNKNOWN DEVICE", 0, 0));
+    // The alias wins over a real Name, so a MAC-style alias still counts as unnamed.
+    EXPECT_FALSE(DiscoveryNameGate::shouldRelease("Eleven", "E8-FB-E9-0C-2C-80", mac, "UNKNOWN DEVICE", 0, 0));
+    EXPECT_EQ("Living Room", DiscoveryNameGate::effectiveName("Eleven", "Living Room"));
+    EXPECT_EQ("Eleven", DiscoveryNameGate::effectiveName("Eleven", ""));
+}
+
+TEST(DiscoveryNameGateTest, shouldRelease_UnnamedOtherDevicesAreNeverReleased)
+{
+    EXPECT_FALSE(DiscoveryNameGate::shouldRelease("", "", "E8:FB:E9:0C:2C:80", "UNKNOWN DEVICE", 0, 600000));
+    EXPECT_FALSE(DiscoveryNameGate::shouldRelease("", "E8-FB-E9-0C-2C-80", "E8:FB:E9:0C:2C:80", "LE TILE", 0, 600000));
+}
+
+TEST(DiscoveryNameGateTest, shouldRelease_UnnamedAudioWaitsThenIsReleased)
+{
+    const std::string mac = "E8:FB:E9:0C:2C:80";
+    EXPECT_FALSE(DiscoveryNameGate::shouldRelease("", "E8-FB-E9-0C-2C-80", mac, "HEADPHONES", 0, DiscoveryNameGate::kAudioWaitMs - 1));
+    EXPECT_TRUE(DiscoveryNameGate::shouldRelease("", "E8-FB-E9-0C-2C-80", mac, "HEADPHONES", 0, DiscoveryNameGate::kAudioWaitMs));
+}
+
+TEST(DiscoveryNameGateTest, shouldRelease_UnnamedControllerWaitsSevenSeconds)
+{
+    const std::string mac = "E8:FB:E9:0C:2C:80";
+    EXPECT_FALSE(DiscoveryNameGate::shouldRelease("", "", mac, "HUMAN INTERFACE DEVICE", 0x508, DiscoveryNameGate::kControllerWaitMs - 1));
+    EXPECT_TRUE(DiscoveryNameGate::shouldRelease("", "", mac, "HUMAN INTERFACE DEVICE", 0x508, DiscoveryNameGate::kControllerWaitMs));
+}
+
+TEST(DiscoveryNameGateTest, fallbackName_ControllerGetsDefaultNameOthersKeepAlias)
+{
+    const std::string mac = "E8:FB:E9:0C:2C:80";
+    EXPECT_EQ("Game Controller",     DiscoveryNameGate::fallbackName("E8-FB-E9-0C-2C-80", mac, 0x508));
+    EXPECT_EQ("Game Controller",     DiscoveryNameGate::fallbackName("", mac, 0x508));
+    EXPECT_EQ("E8-FB-E9-0C-2C-80",   DiscoveryNameGate::fallbackName("E8-FB-E9-0C-2C-80", mac, 0));
+    EXPECT_EQ("E8-FB-E9-0C-2C-80",   DiscoveryNameGate::fallbackName("", mac, 0));
+    EXPECT_EQ("My Pad",              DiscoveryNameGate::fallbackName("My Pad", mac, 0x508));
 }

@@ -21,6 +21,8 @@
 
 #include <UtilsLogging.h>
 
+#include "DeviceDisplayName.h"
+
 namespace WPEFramework {
 namespace Plugin {
 
@@ -35,7 +37,7 @@ void populateDeviceFields(std::shared_ptr<bluetooth::Device> device,
     outId = registry.getHandleForMac(mac);
     if (outId.empty()) outId = DeviceRegistry::deriveHandle(mac);
 
-    device->name(outName);
+    outName = deviceDisplayName(device);
 
     outType = registry.getDeviceType(outId);
     if (outType.empty()) {

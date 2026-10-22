@@ -27,8 +27,14 @@
 #include <UtilsLogging.h>
 #include <LogRedirect.h>
 
+#include "DeviceDisplayName.h"
+
 namespace WPEFramework {
 namespace Plugin {
+
+BtSdkAdapterImpl::~BtSdkAdapterImpl() {
+    stopPendingWorker();
+}
 
 std::string BtSdkAdapterImpl::init(PluginHost::IShell* /* service */,
                                         BtEventCallbacks&& eventCallbacks,
@@ -93,6 +99,8 @@ std::string BtSdkAdapterImpl::init(PluginHost::IShell* /* service */,
 
 void BtSdkAdapterImpl::deinit() {
     LOGINFO("BtSdkAdapterImpl::deinit: entry");
+    // The worker emits through the event bridge and reads devices, so it must stop first.
+    stopPendingWorker();
     if (m_adapter) {
         for (auto& device : m_adapter->getDevices()) {
             unregisterDeviceEvents(device);
@@ -179,6 +187,7 @@ bool BtSdkAdapterImpl::startScan(const std::string& profile) {
     }
     const ScanFilterPolicy::Mode mode = ScanFilterPolicy::modeFromProfile(profile);
     // Each legacy scan starts from an empty discovered list.
+    clearHeldDevices();
     pruneDiscoveredDevices();
     // Set before the scan starts so early discovery events are judged against the new mode.
     m_scanMode = mode;
@@ -187,6 +196,7 @@ bool BtSdkAdapterImpl::startScan(const std::string& profile) {
         LOGERR("BtSdkAdapterImpl::startScan: exit with error: %s", status.get_message().c_str());
         return false;
     }
+    m_scanning = true;
     LOGINFO("BtSdkAdapterImpl::startScan: exit successfully");
     return true;
 }
@@ -196,6 +206,7 @@ bool BtSdkAdapterImpl::stopScan() {
         LOGERR("BtSdkAdapterImpl::stopScan: exit with error: adapter is unavailable");
         return false;
     }
+    m_scanning = false;
     Status status = m_adapter->stopScan();
     if (!status) {
         LOGERR("BtSdkAdapterImpl::stopScan: exit with error: %s", status.get_message().c_str());
@@ -216,7 +227,7 @@ IBtAdapter::BtDeviceInfo BtSdkAdapterImpl::deviceToInfo(
     device->address(mac);
     info.mac = mac;
     info.handleStr = DeviceRegistry::deriveHandle(mac);
-    device->name(info.name);
+    info.name = deviceDisplayName(device);
     info.deviceType = m_registry.getDeviceType(info.handleStr);
     info.connected  = (device->state() == bluetooth::DeviceState::Connected);
     info.paired     = (device->state() == bluetooth::DeviceState::Paired
@@ -242,6 +253,9 @@ std::vector<IBtAdapter::BtDeviceInfo> BtSdkAdapterImpl::getDiscoveredDevices() c
     }
     for (auto& d : m_adapter->getDevices(bluetooth::DeviceState::Discovered)) {
         if (isFilteredFromDiscovery(d)) continue;
+        std::string mac;
+        d->address(mac);
+        if (isHeld(mac)) continue;
         result.push_back(deviceToInfo(d));
     }
     LOGINFO("BtSdkAdapterImpl::getDiscoveredDevices: exit count=%zu", result.size());
@@ -353,7 +367,7 @@ bool BtSdkAdapterImpl::getDeviceProperties(const std::string& handleStr,
     device->address(mac);
     props.handleStr = handleStr;
     props.mac = std::move(mac);
-    device->name(props.name);
+    props.name = deviceDisplayName(device);
     props.deviceType = m_registry.getDeviceType(handleStr);
     bluetooth::DeviceProperties sdkProps;
     if (!device->getAllProperties(sdkProps)) {
@@ -444,6 +458,17 @@ void BtSdkAdapterImpl::onAdapterEvent(bluetooth::AdapterEvent event,
             std::lock_guard<std::mutex> lock(m_suppressedMutex);
             m_suppressedMacs.insert(mac);
         }
+        if (!filtered) {
+            std::string mac;
+            data.device->address(mac);
+            DiscoveryNameGate::Kind kind = DiscoveryNameGate::Kind::Other;
+            if (!isReadyToReport(data.device, mac, 0, kind)) {
+                // BlueZ has not named it yet; the worker reports it once it has a name or its wait expires.
+                LOGINFO("BtSdkAdapterImpl::onAdapterEvent: exit device held until it is named mac=%s", mac.c_str());
+                holdDevice(mac, std::move(data));
+                return;
+            }
+        }
     } else if (event == bluetooth::AdapterEvent::DeviceDisappeared && data.device) {
         std::string mac;
         data.device->address(mac);
@@ -451,6 +476,11 @@ void BtSdkAdapterImpl::onAdapterEvent(bluetooth::AdapterEvent event,
             // Never announced (filtered out) or removed by our own pruning: don't report it as lost.
             std::lock_guard<std::mutex> lock(m_suppressedMutex);
             filtered = (m_suppressedMacs.erase(mac) > 0);
+        }
+        {
+            // Still held by the name gate: never announced either.
+            std::lock_guard<std::mutex> lock(m_pendingMutex);
+            if (m_pending.erase(mac) > 0) filtered = true;
         }
         m_registry.unregisterDevice(mac);
         std::string handle = DeviceRegistry::deriveHandle(mac);
@@ -594,6 +624,136 @@ bool BtSdkAdapterImpl::isFilteredFromDiscovery(const std::shared_ptr<bluetooth::
                 mac.c_str(), name.c_str(), appearance, classOfDevice, icon.c_str(), deviceType.c_str());
     }
     return skip;
+}
+
+bool BtSdkAdapterImpl::isReadyToReport(const std::shared_ptr<bluetooth::Device>& device, const std::string& mac,
+                                       int heldMs, DiscoveryNameGate::Kind& kind) const {
+    kind = DiscoveryNameGate::Kind::Other;
+    const bluetooth::DeviceState state = device->state();
+    // Paired/connected devices are not scan results, and already have a name.
+    if (state == bluetooth::DeviceState::Paired || state == bluetooth::DeviceState::Connected) return true;
+
+    bluetooth::DeviceProperties props;
+    if (!device->getAllProperties(props)) {
+        // Nothing to judge the device by; do not hold it back.
+        return true;
+    }
+    const uint32_t classOfDevice = props.classOfDevice.value_or(0);
+    const std::string deviceType = DeviceTypeClassifier::classify(props.appearance.value_or(0), classOfDevice,
+                                                                  props.uuids.value_or(std::vector<std::string>{}));
+    kind = DiscoveryNameGate::kindFor(deviceType, classOfDevice);
+    return DiscoveryNameGate::shouldRelease(props.name.value_or(""), props.alias.value_or(""), mac,
+                                            deviceType, classOfDevice, heldMs);
+}
+
+void BtSdkAdapterImpl::holdDevice(const std::string& mac, bluetooth::AdapterEventData&& event) {
+    std::lock_guard<std::mutex> lock(m_pendingMutex);
+    auto it = m_pending.find(mac);
+    if (it == m_pending.end()) {
+        m_pending.emplace(mac, PendingDevice{std::move(event), std::chrono::steady_clock::now(), false});
+    } else {
+        it->second.event = std::move(event);
+    }
+    if (!m_pendingThread.joinable()) {
+        m_pendingStop = false;
+        m_pendingThread = std::thread(&BtSdkAdapterImpl::pendingWorker, this);
+    }
+    m_pendingCv.notify_all();
+}
+
+bool BtSdkAdapterImpl::isHeld(const std::string& mac) const {
+    std::lock_guard<std::mutex> lock(m_pendingMutex);
+    return m_pending.find(mac) != m_pending.end();
+}
+
+void BtSdkAdapterImpl::clearHeldDevices() {
+    std::lock_guard<std::mutex> lock(m_pendingMutex);
+    m_pending.clear();
+}
+
+void BtSdkAdapterImpl::stopPendingWorker() {
+    {
+        std::lock_guard<std::mutex> lock(m_pendingMutex);
+        m_pendingStop = true;
+        m_pending.clear();
+    }
+    m_pendingCv.notify_all();
+    if (m_pendingThread.joinable()) m_pendingThread.join();
+}
+
+// BlueZ updates a device's properties after announcing it, and the SDK does not report property changes,
+// so re-read the held devices periodically instead of waiting for btrCore's name-change event.
+void BtSdkAdapterImpl::pendingWorker() {
+    const auto pollInterval = std::chrono::milliseconds(DiscoveryNameGate::kPollIntervalMs);
+    for (;;) {
+        std::vector<std::pair<std::string, PendingDevice>> snapshot;
+        {
+            std::unique_lock<std::mutex> lock(m_pendingMutex);
+            m_pendingCv.wait(lock, [this] { return m_pendingStop || !m_pending.empty(); });
+            if (m_pendingStop) return;
+            if (m_pendingCv.wait_for(lock, pollInterval, [this] { return m_pendingStop; })) return;
+            snapshot.assign(m_pending.begin(), m_pending.end());
+        }
+
+        struct Polled { std::string mac; std::shared_ptr<bluetooth::Device> device; bool ready; bool timed; };
+        std::vector<Polled> polled;
+        const auto now = std::chrono::steady_clock::now();
+        const bool scanning = m_scanning.load();
+        for (auto& entry : snapshot) {
+            // With no scan running BlueZ learns nothing new; only the waits that expire by themselves matter.
+            if (!scanning && !entry.second.timed) continue;
+            const auto heldMs = static_cast<int>(
+                std::chrono::duration_cast<std::chrono::milliseconds>(now - entry.second.since).count());
+            DiscoveryNameGate::Kind kind = DiscoveryNameGate::Kind::Other;
+            const bool ready = isReadyToReport(entry.second.event.device, entry.first, heldMs, kind);
+            polled.push_back({entry.first, entry.second.event.device, ready, kind != DiscoveryNameGate::Kind::Other});
+        }
+
+        std::vector<bluetooth::AdapterEventData> released;
+        {
+            std::lock_guard<std::mutex> lock(m_pendingMutex);
+            for (auto& p : polled) {
+                auto it = m_pending.find(p.mac);
+                // Gone, or replaced by a newer discovery of the same MAC, while it was being read.
+                if (it == m_pending.end() || it->second.event.device != p.device) continue;
+                if (p.ready) {
+                    released.push_back(std::move(it->second.event));
+                    m_pending.erase(it);
+                } else {
+                    it->second.timed = p.timed;
+                }
+            }
+        }
+        for (auto& event : released) releaseDevice(std::move(event));
+    }
+}
+
+void BtSdkAdapterImpl::releaseDevice(bluetooth::AdapterEventData&& event) {
+    const std::shared_ptr<bluetooth::Device> device = event.device;
+    // Removed from BlueZ while it was being released.
+    if (!device || device->state() == bluetooth::DeviceState::Invalid) return;
+
+    std::string mac;
+    device->address(mac);
+
+    // The type cached when the device was first seen predates its properties; classify again now they are populated.
+    bluetooth::DeviceProperties props;
+    if (device->getAllProperties(props)) {
+        const std::string type = DeviceTypeClassifier::classify(props.appearance.value_or(0),
+                                                                props.classOfDevice.value_or(0),
+                                                                props.uuids.value_or(std::vector<std::string>{}));
+        if (type != "UNKNOWN DEVICE") m_registry.setDeviceType(DeviceRegistry::deriveHandle(mac), type);
+    }
+
+    // The scan filter could not judge the type yet when the device was first seen.
+    if (isFilteredFromDiscovery(device, /*typeSettled=*/true)) {
+        std::lock_guard<std::mutex> lock(m_suppressedMutex);
+        m_suppressedMacs.insert(mac);
+        return;
+    }
+
+    LOGINFO("BtSdkAdapterImpl::releaseDevice: reporting held device mac=%s", mac.c_str());
+    if (m_eventBridge) m_eventBridge->onAdapterEvent(bluetooth::AdapterEvent::DeviceDiscovered, std::move(event));
 }
 
 } // namespace Plugin
