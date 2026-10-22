@@ -19,6 +19,9 @@
 
 #include "EventBridge.h"
 
+#include <core/core.h>
+#include <sys/syscall.h>
+#include <unistd.h>
 #include <UtilsLogging.h>
 
 #include "DeviceDisplayName.h"
