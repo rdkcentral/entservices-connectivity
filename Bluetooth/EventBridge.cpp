@@ -136,13 +136,44 @@ void EventBridge::onAdapterEvent(bluetooth::AdapterEvent event, bluetooth::Adapt
     }
 }
 
+void EventBridge::noteDeviceEvent(bluetooth::DeviceEvent event, const std::shared_ptr<bluetooth::Device>& device) {
+    std::string mac;
+    device->address(mac);
+    std::lock_guard<std::mutex> lock(m_seenMutex);
+    m_seenEvents[mac] |= 1u << static_cast<unsigned>(event);
+}
+
+void EventBridge::beginDeviceOperation(const std::string& mac) {
+    std::lock_guard<std::mutex> lock(m_seenMutex);
+    m_seenEvents[mac] = 0;
+}
+
+void EventBridge::completeDeviceOperation(bluetooth::DeviceEvent event, std::shared_ptr<bluetooth::Device> device) {
+    if (!device) return;
+    std::string mac;
+    device->address(mac);
+    {
+        std::lock_guard<std::mutex> lock(m_seenMutex);
+        auto it = m_seenEvents.find(mac);
+        bool seen = (it != m_seenEvents.end()) && (it->second & (1u << static_cast<unsigned>(event)));
+        if (seen) return;
+    }
+    LOGINFO("EventBridge::completeDeviceOperation: SDK reported no event for event=%d mac=%s, emitting it",
+            static_cast<int>(event), mac.c_str());
+    onDeviceEvent(event, std::move(device));
+}
+
 void EventBridge::onDeviceEvent(bluetooth::DeviceEvent event, std::shared_ptr<bluetooth::Device> device) {
     if (!device) return;
+    noteDeviceEvent(event, device);
 
     switch (event) {
-        case bluetooth::DeviceEvent::Paired:
-            emitDeviceStatusChanged("PAIRING_CHANGE", std::move(device), true, false);
+        case bluetooth::DeviceEvent::Paired: {
+            // BlueZ may already have connected the device while pairing (e.g. headphones).
+            const bool connected = (device->state() == bluetooth::DeviceState::Connected);
+            emitDeviceStatusChanged("PAIRING_CHANGE", std::move(device), true, connected);
             break;
+        }
 
         case bluetooth::DeviceEvent::Unpaired:
             emitDeviceStatusChanged("PAIRING_CHANGE", std::move(device), false, false);

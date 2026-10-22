@@ -290,17 +290,26 @@ std::vector<IBtAdapter::BtDeviceInfo> BtSdkAdapterImpl::getConnectedDevices() co
 
 bool BtSdkAdapterImpl::pairDevice(const std::string& handleStr) {
     LOGINFO("BtSdkAdapterImpl::pairDevice: entry handle=%s", handleStr.c_str());
-    std::lock_guard<std::mutex> lock(m_devicesMutex);
-    auto it = m_devicesByHandle.find(handleStr);
-    if (it == m_devicesByHandle.end()) {
+    // Don't hold the lock across the blocking SDK call: device events fire while it runs.
+    std::shared_ptr<bluetooth::Device> device;
+    {
+        std::lock_guard<std::mutex> lock(m_devicesMutex);
+        auto it = m_devicesByHandle.find(handleStr);
+        if (it != m_devicesByHandle.end()) device = it->second;
+    }
+    if (!device) {
         LOGERR("BtSdkAdapterImpl::pairDevice: exit with error: device handle was not found");
         return false;
     }
-    Status status = it->second->pair(true);
+    std::string mac;
+    device->address(mac);
+    if (m_eventBridge) m_eventBridge->beginDeviceOperation(mac);
+    Status status = device->pair(true);
     if (!status) {
         LOGERR("BtSdkAdapterImpl::pairDevice: exit with error: %s", status.get_message().c_str());
         return false;
     }
+    if (m_eventBridge) m_eventBridge->completeDeviceOperation(bluetooth::DeviceEvent::Paired, device);
     LOGINFO("BtSdkAdapterImpl::pairDevice: exit successfully");
     return true;
 }
@@ -322,17 +331,26 @@ bool BtSdkAdapterImpl::unpairDevice(const std::string& handleStr) {
 }
 bool BtSdkAdapterImpl::connectDevice(const std::string& handleStr, const std::string& /*deviceType*/) {
     LOGINFO("BtSdkAdapterImpl::connectDevice: entry handle=%s", handleStr.c_str());
-    std::lock_guard<std::mutex> lock(m_devicesMutex);
-    auto it = m_devicesByHandle.find(handleStr);
-    if (it == m_devicesByHandle.end()) {
+    std::shared_ptr<bluetooth::Device> device;
+    {
+        std::lock_guard<std::mutex> lock(m_devicesMutex);
+        auto it = m_devicesByHandle.find(handleStr);
+        if (it != m_devicesByHandle.end()) device = it->second;
+    }
+    if (!device) {
         LOGERR("BtSdkAdapterImpl::connectDevice: exit with error: device handle was not found");
         return false;
     }
-    Status status = it->second->connect(true);
+    std::string mac;
+    device->address(mac);
+    if (m_eventBridge) m_eventBridge->beginDeviceOperation(mac);
+    Status status = device->connect(true);
     if (!status) {
         LOGERR("BtSdkAdapterImpl::connectDevice: exit with error: %s", status.get_message().c_str());
         return false;
     }
+    // A device BlueZ connected while pairing is already connected, so no new SDK event arrives.
+    if (m_eventBridge) m_eventBridge->completeDeviceOperation(bluetooth::DeviceEvent::Connected, device);
     LOGINFO("BtSdkAdapterImpl::connectDevice: exit successfully");
     return true;
 }
