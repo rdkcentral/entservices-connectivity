@@ -116,6 +116,8 @@ void BtSdkAdapterImpl::deinit() {
     LOGINFO("BtSdkAdapterImpl::deinit: entry");
     // The worker emits through the event bridge and reads devices, so it must stop first.
     stopPendingWorker();
+    // The bridge's worker also uses SDK devices; stop it before they are released.
+    if (m_eventBridge) m_eventBridge->stop();
     if (m_adapter) {
         for (auto& device : m_adapter->getDevices()) {
             unregisterDeviceEvents(device);
@@ -316,15 +318,15 @@ bool BtSdkAdapterImpl::pairDevice(const std::string& handleStr) {
         LOGERR("BtSdkAdapterImpl::pairDevice: exit with error: device handle was not found");
         return false;
     }
-    std::string mac;
-    device->address(mac);
-    if (m_eventBridge) m_eventBridge->beginDeviceOperation(mac);
+    // Hold this device's status changes so the PAIRING_CHANGE reaches the client after the pair response.
+    if (m_eventBridge) m_eventBridge->beginDeviceOperation(device);
     Status status = device->pair(true);
+    // Called before the error check: a failed request must release its held changes too.
+    if (m_eventBridge) m_eventBridge->completeDeviceOperation(bluetooth::DeviceEvent::Paired, device, bool(status));
     if (!status) {
         LOGERR("BtSdkAdapterImpl::pairDevice: exit with error: %s", status.get_message().c_str());
         return false;
     }
-    if (m_eventBridge) m_eventBridge->completeDeviceOperation(bluetooth::DeviceEvent::Paired, device);
     LOGINFO("BtSdkAdapterImpl::pairDevice: exit successfully");
     return true;
 }
@@ -356,16 +358,16 @@ bool BtSdkAdapterImpl::connectDevice(const std::string& handleStr, const std::st
         LOGERR("BtSdkAdapterImpl::connectDevice: exit with error: device handle was not found");
         return false;
     }
-    std::string mac;
-    device->address(mac);
-    if (m_eventBridge) m_eventBridge->beginDeviceOperation(mac);
+    // Hold this device's status changes so the CONNECTION_CHANGE reaches the client after the connect response.
+    if (m_eventBridge) m_eventBridge->beginDeviceOperation(device);
     Status status = device->connect(true);
+    // A device BlueZ connected while pairing is already connected, so no new SDK event arrives.
+    // Called before the error check: a failed request must release its held changes too.
+    if (m_eventBridge) m_eventBridge->completeDeviceOperation(bluetooth::DeviceEvent::Connected, device, bool(status));
     if (!status) {
         LOGERR("BtSdkAdapterImpl::connectDevice: exit with error: %s", status.get_message().c_str());
         return false;
     }
-    // A device BlueZ connected while pairing is already connected, so no new SDK event arrives.
-    if (m_eventBridge) m_eventBridge->completeDeviceOperation(bluetooth::DeviceEvent::Connected, device);
     LOGINFO("BtSdkAdapterImpl::connectDevice: exit successfully");
     return true;
 }
