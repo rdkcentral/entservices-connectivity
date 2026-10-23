@@ -50,11 +50,26 @@ std::string BtSdkAdapterImpl::init(PluginHost::IShell* /* service */,
     // };
     // </pca>
 
+    // <pca> debug - Strip-out noise for now
+    // auto logRedirect = std::make_unique<LogRedirect>(
+    //     [](std::string& msg) { LOGINFO("%s", msg.c_str()); },
+    //     [](std::string& msg) { LOGINFO("%s", msg.c_str()); },
+    //     [](std::string& msg) { LOGWARN("%s", msg.c_str()); },
+    //     [](std::string& msg) { LOGERR("%s", msg.c_str()); });
     auto logRedirect = std::make_unique<LogRedirect>(
         [](std::string& msg) { LOGINFO("%s", msg.c_str()); },
         [](std::string& msg) { LOGINFO("%s", msg.c_str()); },
-        [](std::string& msg) { LOGWARN("%s", msg.c_str()); },
-        [](std::string& msg) { LOGERR("%s", msg.c_str()); });
+        [](std::string& msg) {
+            if (msg.find("D-Bus battery read failed") == std::string::npos) {
+                LOGWARN("%s", msg.c_str());
+            }
+        },
+        [](std::string& msg) {
+            if (msg.find("Unable to read battery level") == std::string::npos) {
+                LOGERR("%s", msg.c_str());
+            }
+        });
+    // </pca>
 
     try {
         // <pca> debug - This is throwing, simplify for now to narrow-down the problem
