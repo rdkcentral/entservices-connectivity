@@ -202,7 +202,10 @@ bool BtSdkAdapterImpl::startScan(const std::string& profile) {
         LOGERR("BtSdkAdapterImpl::startScan: exit with error: adapter is unavailable");
         return false;
     }
-    const ScanFilterPolicy::Mode mode = ScanFilterPolicy::modeFromProfile(profile);
+    // <pca> debug - Just AudioOutput for now to reduce discovery noise
+    //const ScanFilterPolicy::Mode mode = ScanFilterPolicy::modeFromProfile(profile);
+    const ScanFilterPolicy::Mode mode = ScanFilterPolicy::Mode::AudioOutput
+    // </pca>
     // Each legacy scan starts from an empty discovered list.
     clearHeldDevices();
     pruneDiscoveredDevices();
