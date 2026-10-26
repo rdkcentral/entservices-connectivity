@@ -204,7 +204,7 @@ bool BtSdkAdapterImpl::startScan(const std::string& profile) {
     }
     // <pca> debug - Just AudioOutput for now to reduce discovery noise
     //const ScanFilterPolicy::Mode mode = ScanFilterPolicy::modeFromProfile(profile);
-    const ScanFilterPolicy::Mode mode = ScanFilterPolicy::Mode::AudioOutput
+    const ScanFilterPolicy::Mode mode = ScanFilterPolicy::Mode::AudioOutput;
     // </pca>
     // Each legacy scan starts from an empty discovered list.
     clearHeldDevices();
