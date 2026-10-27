@@ -338,8 +338,10 @@ bool BtSdkAdapterImpl::unpairDevice(const std::string& handleStr) {
     std::lock_guard<std::mutex> lock(m_devicesMutex);
     auto it = m_devicesByHandle.find(handleStr);
     if (it == m_devicesByHandle.end()) {
-        LOGERR("BtSdkAdapterImpl::unpairDevice: exit with error: device handle was not found");
-        return false;
+        // BlueZ has no object for this device, so there is nothing to unpair. Succeed so the caller
+        // still drops its own paired-device record instead of leaving it stuck.
+        LOGWARN("BtSdkAdapterImpl::unpairDevice: exit successfully: device handle was not found, treating as already unpaired");
+        return true;
     }
     Status status = it->second->unpair();
     if (!status) {
