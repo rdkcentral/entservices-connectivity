@@ -335,15 +335,21 @@ bool BtSdkAdapterImpl::pairDevice(const std::string& handleStr) {
 }
 bool BtSdkAdapterImpl::unpairDevice(const std::string& handleStr) {
     LOGINFO("BtSdkAdapterImpl::unpairDevice: entry handle=%s", handleStr.c_str());
-    std::lock_guard<std::mutex> lock(m_devicesMutex);
-    auto it = m_devicesByHandle.find(handleStr);
-    if (it == m_devicesByHandle.end()) {
+    std::shared_ptr<bluetooth::Device> device;
+    {
+        std::lock_guard<std::mutex> lock(m_devicesMutex);
+        auto it = m_devicesByHandle.find(handleStr);
+        if (it != m_devicesByHandle.end()) device = it->second;
+    }
+    if (!device) {
         // BlueZ has no object for this device, so there is nothing to unpair. Succeed so the caller
         // still drops its own paired-device record instead of leaving it stuck.
         LOGWARN("BtSdkAdapterImpl::unpairDevice: exit successfully: device handle was not found, treating as already unpaired");
         return true;
     }
-    Status status = it->second->unpair();
+    // Not under m_devicesMutex: the SDK emits DeviceDisappeared synchronously from unpair(), and
+    // onAdapterEvent takes that mutex.
+    Status status = device->unpair();
     if (!status) {
         LOGERR("BtSdkAdapterImpl::unpairDevice: exit with error: %s", status.get_message().c_str());
         return false;
@@ -378,13 +384,17 @@ bool BtSdkAdapterImpl::connectDevice(const std::string& handleStr, const std::st
 }
 bool BtSdkAdapterImpl::disconnectDevice(const std::string& handleStr, const std::string& /*deviceType*/) {
     LOGINFO("BtSdkAdapterImpl::disconnectDevice: entry handle=%s", handleStr.c_str());
-    std::lock_guard<std::mutex> lock(m_devicesMutex);
-    auto it = m_devicesByHandle.find(handleStr);
-    if (it == m_devicesByHandle.end()) {
+    std::shared_ptr<bluetooth::Device> device;
+    {
+        std::lock_guard<std::mutex> lock(m_devicesMutex);
+        auto it = m_devicesByHandle.find(handleStr);
+        if (it != m_devicesByHandle.end()) device = it->second;
+    }
+    if (!device) {
         LOGERR("BtSdkAdapterImpl::disconnectDevice: exit with error: device handle was not found");
         return false;
     }
-    Status status = it->second->disconnect(true);
+    Status status = device->disconnect(true);
     if (!status) {
         LOGERR("BtSdkAdapterImpl::disconnectDevice: exit with error: %s", status.get_message().c_str());
         return false;
