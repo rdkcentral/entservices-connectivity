@@ -11,7 +11,7 @@ Use this file to capture raw outputs for tasks 5.1 through 5.4.
 
 ## Preconditions
 
-- Required dependencies available (WPEFramework, CmakeHelperFunctions, toolchain paths).
+- Required dependencies available (Thunder, CmakeHelperFunctions, toolchain paths).
 - Any AS test file setup path access documented.
 
 ## 5.1 PersistentStore Present Scenario

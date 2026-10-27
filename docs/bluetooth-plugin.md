@@ -4,7 +4,7 @@
 
 ### Role in ENT / RDK infrastructure
 
-The Bluetooth plugin is a Thunder/WPEFramework JSON-RPC plugin registered as `org.rdk.Bluetooth` with API version `1.1.0`.
+The Bluetooth plugin is a Thunder JSON-RPC plugin registered as `org.rdk.Bluetooth` with API version `1.1.0`.
 
 Evidence:
 - [`Bluetooth/Bluetooth.cpp`](../Bluetooth/Bluetooth.cpp)
@@ -71,7 +71,7 @@ flowchart LR
 
 ## 4. Class & Interface Documentation
 
-### `WPEFramework::Plugin::Bluetooth`
+### `Thunder::Plugin::Bluetooth`
 
 Responsibilities:
 - Plugin lifecycle + RPC dispatcher.
@@ -92,7 +92,7 @@ Register(METHOD_GET_AUTO_CONNECT_STATUS, &Bluetooth::getAutoConnectWrapper, this
 
 Source: [`Bluetooth/Bluetooth.cpp`](../Bluetooth/Bluetooth.cpp)
 
-### `WPEFramework::Plugin::BluetoothDeviceManager`
+### `Thunder::Plugin::BluetoothDeviceManager`
 
 Responsibilities:
 - Cache paired device metadata in `_pairedDeviceCache`.

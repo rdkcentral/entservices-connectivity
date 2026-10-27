@@ -28,7 +28,7 @@
 
 #include "BluetoothDeviceManager.h"
 
-namespace WPEFramework {
+namespace Thunder {
 namespace Plugin {
 
 class BluetoothPersistenceAdapter {
@@ -45,4 +45,4 @@ private:
 };
 
 } // namespace Plugin
-} // namespace WPEFramework
+} // namespace Thunder

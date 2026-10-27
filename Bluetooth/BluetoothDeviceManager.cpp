@@ -31,7 +31,7 @@
 #endif
 
 
-namespace WPEFramework {
+namespace Thunder {
     namespace Plugin {
 
         namespace {
@@ -886,4 +886,4 @@ namespace WPEFramework {
         }
 
     } // Plugin
-} // WPEFramework
+} // Thunder

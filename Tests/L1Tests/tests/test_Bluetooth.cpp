@@ -46,7 +46,7 @@
 #define TEST_LOG(x, ...) fprintf(stderr, "\033[1;32m[%s:%d](%s)<PID:%d><TID:%d>" x "\n\033[0m", __FILE__, __LINE__, __FUNCTION__, getpid(), gettid(), ##__VA_ARGS__); fflush(stderr);
 
 using ::testing::NiceMock;
-using namespace WPEFramework;
+using namespace Thunder;
 
 namespace {
 const string callSign = _T("Bluetooth");
@@ -1029,10 +1029,10 @@ protected:
         EXPECT_CALL(PowerManagerMock::Mock(), GetPowerState(::testing::_, ::testing::_))
             .Times(::testing::AnyNumber())
             .WillRepeatedly(::testing::Invoke(
-                [&](WPEFramework::Exchange::IPowerManager::PowerState& currentState,
-                    WPEFramework::Exchange::IPowerManager::PowerState& previousState) -> uint32_t {
-                    currentState = WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_ON;
-                    previousState = WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_ON;
+                [&](Thunder::Exchange::IPowerManager::PowerState& currentState,
+                    Thunder::Exchange::IPowerManager::PowerState& previousState) -> uint32_t {
+                    currentState = Thunder::Exchange::IPowerManager::PowerState::POWER_STATE_ON;
+                    previousState = Thunder::Exchange::IPowerManager::PowerState::POWER_STATE_ON;
                     return Core::ERROR_NONE;
                 }));
 
@@ -1049,8 +1049,8 @@ TEST_F(BluetoothTest, onPowerModeChanged_SameState_NoAction)
     EXPECT_CALL(*p_btmgrMock, BTRMGR_SetAdapterPowerStatus(::testing::_, ::testing::_)).Times(0);
 
     plugin->onPowerModeChanged(
-        WPEFramework::Exchange::IPowerManager::POWER_STATE_ON,
-        WPEFramework::Exchange::IPowerManager::POWER_STATE_ON);
+        Thunder::Exchange::IPowerManager::POWER_STATE_ON,
+        Thunder::Exchange::IPowerManager::POWER_STATE_ON);
 }
 
 // --- onPowerModeChanged: ON → STANDBY with non-HID devices ---
@@ -1067,8 +1067,8 @@ TEST_F(BluetoothTest, onPowerModeChanged_OnToStandby_NonHidDevice_AutoConnectDis
         .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
 
     plugin->onPowerModeChanged(
-        WPEFramework::Exchange::IPowerManager::POWER_STATE_ON,
-        WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY);
+        Thunder::Exchange::IPowerManager::POWER_STATE_ON,
+        Thunder::Exchange::IPowerManager::POWER_STATE_STANDBY);
 }
 #endif // BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
 
@@ -1084,8 +1084,8 @@ TEST_F(BluetoothTest, onPowerModeChanged_UnknownToStandby_NonHidDevice_AutoConne
         .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
 
     plugin->onPowerModeChanged(
-        WPEFramework::Exchange::IPowerManager::POWER_STATE_UNKNOWN,
-        WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY);
+        Thunder::Exchange::IPowerManager::POWER_STATE_UNKNOWN,
+        Thunder::Exchange::IPowerManager::POWER_STATE_STANDBY);
 }
 #endif // BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
 
@@ -1101,8 +1101,8 @@ TEST_F(BluetoothTest, onPowerModeChanged_OnToStandbyLightSleep_NonHidDevice_Auto
         .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
 
     plugin->onPowerModeChanged(
-        WPEFramework::Exchange::IPowerManager::POWER_STATE_ON,
-        WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY_LIGHT_SLEEP);
+        Thunder::Exchange::IPowerManager::POWER_STATE_ON,
+        Thunder::Exchange::IPowerManager::POWER_STATE_STANDBY_LIGHT_SLEEP);
 }
 #endif // BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
 
@@ -1117,8 +1117,8 @@ TEST_F(BluetoothTest, onPowerModeChanged_OnToStandby_NonHidDevice_AutoConnectEna
     EXPECT_CALL(*p_btmgrMock, BTRMGR_DisconnectFromDevice(::testing::_, ::testing::_)).Times(0);
 
     plugin->onPowerModeChanged(
-        WPEFramework::Exchange::IPowerManager::POWER_STATE_ON,
-        WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY);
+        Thunder::Exchange::IPowerManager::POWER_STATE_ON,
+        Thunder::Exchange::IPowerManager::POWER_STATE_STANDBY);
 }
 
 TEST_F(BluetoothTest, onPowerModeChanged_OnToStandby_EmptyCache_NoDisconnect)
@@ -1127,8 +1127,8 @@ TEST_F(BluetoothTest, onPowerModeChanged_OnToStandby_EmptyCache_NoDisconnect)
     EXPECT_CALL(*p_btmgrMock, BTRMGR_DisconnectFromDevice(::testing::_, ::testing::_)).Times(0);
 
     plugin->onPowerModeChanged(
-        WPEFramework::Exchange::IPowerManager::POWER_STATE_ON,
-        WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY);
+        Thunder::Exchange::IPowerManager::POWER_STATE_ON,
+        Thunder::Exchange::IPowerManager::POWER_STATE_STANDBY);
 }
 
 // --- onPowerModeChanged: ON → STANDBY with HID device (should be skipped) ---
@@ -1141,8 +1141,8 @@ TEST_F(BluetoothPowerModeTest, onPowerModeChanged_OnToStandby_HidDevice_AutoConn
     EXPECT_CALL(*p_btmgrMock, BTRMGR_DisconnectFromDevice(::testing::_, ::testing::_)).Times(0);
 
     plugin->onPowerModeChanged(
-        WPEFramework::Exchange::IPowerManager::POWER_STATE_ON,
-        WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY);
+        Thunder::Exchange::IPowerManager::POWER_STATE_ON,
+        Thunder::Exchange::IPowerManager::POWER_STATE_STANDBY);
 }
 
 // --- onPowerModeChanged: X → ON ---
@@ -1159,8 +1159,8 @@ TEST_F(BluetoothTest, onPowerModeChanged_StandbyToOn_WithNonHidPairedDevices_Ena
         .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
 
     plugin->onPowerModeChanged(
-        WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY,
-        WPEFramework::Exchange::IPowerManager::POWER_STATE_ON);
+        Thunder::Exchange::IPowerManager::POWER_STATE_STANDBY,
+        Thunder::Exchange::IPowerManager::POWER_STATE_ON);
 }
 #endif // BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
 
@@ -1171,8 +1171,8 @@ TEST_F(BluetoothPowerModeTest, onPowerModeChanged_StandbyToOn_OnlyHidDevices_NoB
     EXPECT_CALL(*p_btmgrMock, BTRMGR_SetAdapterPowerStatus(::testing::_, ::testing::_)).Times(0);
 
     plugin->onPowerModeChanged(
-        WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY,
-        WPEFramework::Exchange::IPowerManager::POWER_STATE_ON);
+        Thunder::Exchange::IPowerManager::POWER_STATE_STANDBY,
+        Thunder::Exchange::IPowerManager::POWER_STATE_ON);
 }
 
 // --- onPowerModeChanged: X → DEEP_SLEEP ---
@@ -1191,8 +1191,8 @@ TEST_F(BluetoothTest, onPowerModeChanged_OnToDeepSleep_NonHidDevice_AlwaysDiscon
         .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
 
     plugin->onPowerModeChanged(
-        WPEFramework::Exchange::IPowerManager::POWER_STATE_ON,
-        WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY_DEEP_SLEEP);
+        Thunder::Exchange::IPowerManager::POWER_STATE_ON,
+        Thunder::Exchange::IPowerManager::POWER_STATE_STANDBY_DEEP_SLEEP);
 }
 #endif // BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
 
@@ -1203,8 +1203,8 @@ TEST_F(BluetoothPowerModeTest, onPowerModeChanged_OnToDeepSleep_HidDevice_NoDisc
     EXPECT_CALL(*p_btmgrMock, BTRMGR_DisconnectFromDevice(::testing::_, ::testing::_)).Times(0);
 
     plugin->onPowerModeChanged(
-        WPEFramework::Exchange::IPowerManager::POWER_STATE_ON,
-        WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY_DEEP_SLEEP);
+        Thunder::Exchange::IPowerManager::POWER_STATE_ON,
+        Thunder::Exchange::IPowerManager::POWER_STATE_STANDBY_DEEP_SLEEP);
 }
 
 // --- onPowerModeChanged: unhandled transition ---
@@ -1217,8 +1217,8 @@ TEST_F(BluetoothTest, onPowerModeChanged_UnhandledTransition_NoAction)
 
     // STANDBY → STANDBY_LIGHT_SLEEP: does not match any if/else-if branch.
     plugin->onPowerModeChanged(
-        WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY,
-        WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY_LIGHT_SLEEP);
+        Thunder::Exchange::IPowerManager::POWER_STATE_STANDBY,
+        Thunder::Exchange::IPowerManager::POWER_STATE_STANDBY_LIGHT_SLEEP);
 }
 
 #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION

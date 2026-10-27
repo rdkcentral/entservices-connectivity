@@ -31,7 +31,7 @@
 
 #include "btmgr.h" //TODO: can we move it to the module? Required by notifyEventWrapper()
 
-namespace WPEFramework {
+namespace Thunder {
     namespace Plugin {
 
         // This is a server for a JSONRPC communication channel.
@@ -102,16 +102,16 @@ namespace WPEFramework {
                 }
 
                 void Post(
-                    const WPEFramework::Exchange::IPowerManager::PowerState currentState,
-                    const WPEFramework::Exchange::IPowerManager::PowerState newState)
+                    const Thunder::Exchange::IPowerManager::PowerState currentState,
+                    const Thunder::Exchange::IPowerManager::PowerState newState)
                 {
                     _queue.Post(Transition{currentState, newState});
                 }
 
             private:
                 struct Transition {
-                    WPEFramework::Exchange::IPowerManager::PowerState currentState;
-                    WPEFramework::Exchange::IPowerManager::PowerState newState;
+                    Thunder::Exchange::IPowerManager::PowerState currentState;
+                    Thunder::Exchange::IPowerManager::PowerState newState;
                 };
 
                 uint32_t Worker() override
@@ -127,7 +127,7 @@ namespace WPEFramework {
                 Core::QueueType<Transition> _queue;
             };
 
-            class PowerManagerNotification : public WPEFramework::Exchange::IPowerManager::IModeChangedNotification {
+            class PowerManagerNotification : public Thunder::Exchange::IPowerManager::IModeChangedNotification {
 
             private:
 
@@ -144,7 +144,7 @@ namespace WPEFramework {
                 }
                 ~PowerManagerNotification() override = default;
 
-                void OnPowerModeChanged(const WPEFramework::Exchange::IPowerManager::PowerState currentState, const WPEFramework::Exchange::IPowerManager::PowerState newState) override
+                void OnPowerModeChanged(const Thunder::Exchange::IPowerManager::PowerState currentState, const Thunder::Exchange::IPowerManager::PowerState newState) override
                 {
                     // Hand off to the dedicated queue; do not call _bluetooth.onPowerModeChanged() directly from here.
                     if (_bluetooth.m_powerModeEventQueue) {
@@ -160,7 +160,7 @@ namespace WPEFramework {
                 }
 
                 BEGIN_INTERFACE_MAP(PowerManagerNotification)
-                INTERFACE_ENTRY(WPEFramework::Exchange::IPowerManager::IModeChangedNotification)
+                INTERFACE_ENTRY(Thunder::Exchange::IPowerManager::IModeChangedNotification)
                 END_INTERFACE_MAP
 
             };
@@ -298,7 +298,7 @@ namespace WPEFramework {
         public:
             static Bluetooth* _instance;
             void notifyEventWrapper (BTRMGR_EventMessage_t &eventMsg);
-            void onPowerModeChanged(const WPEFramework::Exchange::IPowerManager::PowerState currentState, const WPEFramework::Exchange::IPowerManager::PowerState newState);
+            void onPowerModeChanged(const Thunder::Exchange::IPowerManager::PowerState currentState, const Thunder::Exchange::IPowerManager::PowerState newState);
 
         private:
             static const string STATUS_NO_BLUETOOTH_HARDWARE;
@@ -351,4 +351,4 @@ namespace WPEFramework {
         };
 
     } // Plugin
-} // WPEFramework
+} // Thunder

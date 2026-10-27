@@ -11,7 +11,7 @@ Use this file to capture raw outputs for tasks 5.1 through 5.3.
 
 ## Preconditions
 
-- Required dependencies available (WPEFramework, CmakeHelperFunctions, toolchain paths).
+- Required dependencies available (Thunder, CmakeHelperFunctions, toolchain paths).
 - BLUETOOTH_ENABLE_AS_MIGRATION ON/OFF build toggles available.
 
 ## Telemetry Marker Documentation (Task 3.3)

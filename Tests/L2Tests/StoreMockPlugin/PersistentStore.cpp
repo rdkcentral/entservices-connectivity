@@ -19,7 +19,7 @@
 
 #include "PersistentStore.h"
 
-namespace WPEFramework {
+namespace Thunder {
 namespace Plugin {
 
 SERVICE_REGISTRATION(PersistentStore, 1, 0, 0);
@@ -76,4 +76,4 @@ Core::hresult PersistentStore::Unregister(Exchange::IStore::INotification* /*not
 }
 
 } // namespace Plugin
-} // namespace WPEFramework
+} // namespace Thunder

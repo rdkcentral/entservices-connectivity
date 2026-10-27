@@ -66,7 +66,7 @@ static const char* TEST_DEVICE_ADDR = "AA:BB:CC:DD:EE:FF";
 using ::testing::NiceMock;
 using ::testing::StrictMock;
 using ::testing::Invoke;
-using namespace WPEFramework;
+using namespace Thunder;
 
 namespace {
 class BluetoothSuiteHarness : public L2TestMocks {

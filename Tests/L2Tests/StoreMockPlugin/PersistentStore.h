@@ -22,7 +22,7 @@
 #include "Module.h"
 #include <interfaces/IStore.h>
 
-namespace WPEFramework {
+namespace Thunder {
 namespace Plugin {
 
 /**
@@ -66,4 +66,4 @@ public:
 };
 
 } // namespace Plugin
-} // namespace WPEFramework
+} // namespace Thunder

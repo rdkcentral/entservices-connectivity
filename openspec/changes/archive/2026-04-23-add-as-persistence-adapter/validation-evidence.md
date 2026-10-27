@@ -11,7 +11,7 @@ Use this file to capture raw command outputs for tasks 6.1, 6.2, and 6.3.
 
 ## Preconditions
 
-- Required dependencies available (WPEFramework, CmakeHelperFunctions, toolchain paths).
+- Required dependencies available (Thunder, CmakeHelperFunctions, toolchain paths).
 - Build workspace cleaned or known state documented.
 
 ## 6.1 ON-Mode Validation

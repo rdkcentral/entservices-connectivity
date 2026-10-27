@@ -36,7 +36,7 @@
 #define BLUETOOTH_MIGRATION_VERSION "1"
 #endif
 
-namespace WPEFramework {
+namespace Thunder {
     namespace Plugin {
 
         typedef enum _AutoConnectStatus {
@@ -106,4 +106,4 @@ namespace WPEFramework {
         };
 
     } // Plugin
-} // WPEFramework
+} // Thunder

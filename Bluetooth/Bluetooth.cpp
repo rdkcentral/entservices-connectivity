@@ -44,92 +44,92 @@
 #define API_VERSION_NUMBER_MINOR 1
 #define API_VERSION_NUMBER_PATCH 0
 
-const string WPEFramework::Plugin::Bluetooth::SERVICE_NAME = "org.rdk.Bluetooth";
-const string WPEFramework::Plugin::Bluetooth::METHOD_START_SCAN = "startScan";
-const string WPEFramework::Plugin::Bluetooth::METHOD_STOP_SCAN = "stopScan";
-const string WPEFramework::Plugin::Bluetooth::METHOD_IS_DISCOVERABLE = "isDiscoverable";
-const string WPEFramework::Plugin::Bluetooth::METHOD_GET_DISCOVERED_DEVICES = "getDiscoveredDevices";
-const string WPEFramework::Plugin::Bluetooth::METHOD_GET_PAIRED_DEVICES = "getPairedDevices";
-const string WPEFramework::Plugin::Bluetooth::METHOD_GET_CONNECTED_DEVICES = "getConnectedDevices";
-const string WPEFramework::Plugin::Bluetooth::METHOD_CONNECT = "connect";
-const string WPEFramework::Plugin::Bluetooth::METHOD_DISCONNECT = "disconnect";
-const string WPEFramework::Plugin::Bluetooth::METHOD_SET_AUDIO_STREAM = "setAudioStream";
-const string WPEFramework::Plugin::Bluetooth::METHOD_PAIR = "pair";
-const string WPEFramework::Plugin::Bluetooth::METHOD_UNPAIR = "unpair";
-const string WPEFramework::Plugin::Bluetooth::METHOD_ENABLE = "enable";
-const string WPEFramework::Plugin::Bluetooth::METHOD_DISABLE = "disable";
-const string WPEFramework::Plugin::Bluetooth::METHOD_SET_DISCOVERABLE = "setDiscoverable";
-const string WPEFramework::Plugin::Bluetooth::METHOD_GET_NAME = "getName";
-const string WPEFramework::Plugin::Bluetooth::METHOD_SET_NAME = "setName";
-const string WPEFramework::Plugin::Bluetooth::METHOD_SET_AUDIO_PLAYBACK_COMMAND = "sendAudioPlaybackCommand";
-const string WPEFramework::Plugin::Bluetooth::METHOD_SET_EVENT_RESPONSE = "respondToEvent";
-const string WPEFramework::Plugin::Bluetooth::METHOD_GET_DEVICE_INFO = "getDeviceInfo";
-const string WPEFramework::Plugin::Bluetooth::METHOD_GET_AUDIO_INFO = "getAudioInfo";
-const string WPEFramework::Plugin::Bluetooth::METHOD_GET_API_VERSION_NUMBER = "getApiVersionNumber";
-const string WPEFramework::Plugin::Bluetooth::METHOD_GET_DEVICE_VOLUME_MUTE_INFO = "getDeviceVolumeMuteInfo";
-const string WPEFramework::Plugin::Bluetooth::METHOD_SET_DEVICE_VOLUME_MUTE_INFO = "setDeviceVolumeMuteInfo";
-const string WPEFramework::Plugin::Bluetooth::METHOD_SET_AUTO_CONNECT = "setAutoConnect";
-const string WPEFramework::Plugin::Bluetooth::METHOD_GET_AUTO_CONNECT_STATUS = "getAutoConnect";
+const string Thunder::Plugin::Bluetooth::SERVICE_NAME = "org.rdk.Bluetooth";
+const string Thunder::Plugin::Bluetooth::METHOD_START_SCAN = "startScan";
+const string Thunder::Plugin::Bluetooth::METHOD_STOP_SCAN = "stopScan";
+const string Thunder::Plugin::Bluetooth::METHOD_IS_DISCOVERABLE = "isDiscoverable";
+const string Thunder::Plugin::Bluetooth::METHOD_GET_DISCOVERED_DEVICES = "getDiscoveredDevices";
+const string Thunder::Plugin::Bluetooth::METHOD_GET_PAIRED_DEVICES = "getPairedDevices";
+const string Thunder::Plugin::Bluetooth::METHOD_GET_CONNECTED_DEVICES = "getConnectedDevices";
+const string Thunder::Plugin::Bluetooth::METHOD_CONNECT = "connect";
+const string Thunder::Plugin::Bluetooth::METHOD_DISCONNECT = "disconnect";
+const string Thunder::Plugin::Bluetooth::METHOD_SET_AUDIO_STREAM = "setAudioStream";
+const string Thunder::Plugin::Bluetooth::METHOD_PAIR = "pair";
+const string Thunder::Plugin::Bluetooth::METHOD_UNPAIR = "unpair";
+const string Thunder::Plugin::Bluetooth::METHOD_ENABLE = "enable";
+const string Thunder::Plugin::Bluetooth::METHOD_DISABLE = "disable";
+const string Thunder::Plugin::Bluetooth::METHOD_SET_DISCOVERABLE = "setDiscoverable";
+const string Thunder::Plugin::Bluetooth::METHOD_GET_NAME = "getName";
+const string Thunder::Plugin::Bluetooth::METHOD_SET_NAME = "setName";
+const string Thunder::Plugin::Bluetooth::METHOD_SET_AUDIO_PLAYBACK_COMMAND = "sendAudioPlaybackCommand";
+const string Thunder::Plugin::Bluetooth::METHOD_SET_EVENT_RESPONSE = "respondToEvent";
+const string Thunder::Plugin::Bluetooth::METHOD_GET_DEVICE_INFO = "getDeviceInfo";
+const string Thunder::Plugin::Bluetooth::METHOD_GET_AUDIO_INFO = "getAudioInfo";
+const string Thunder::Plugin::Bluetooth::METHOD_GET_API_VERSION_NUMBER = "getApiVersionNumber";
+const string Thunder::Plugin::Bluetooth::METHOD_GET_DEVICE_VOLUME_MUTE_INFO = "getDeviceVolumeMuteInfo";
+const string Thunder::Plugin::Bluetooth::METHOD_SET_DEVICE_VOLUME_MUTE_INFO = "setDeviceVolumeMuteInfo";
+const string Thunder::Plugin::Bluetooth::METHOD_SET_AUTO_CONNECT = "setAutoConnect";
+const string Thunder::Plugin::Bluetooth::METHOD_GET_AUTO_CONNECT_STATUS = "getAutoConnect";
 #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
-const string WPEFramework::Plugin::Bluetooth::METHOD_PERFORM_MIGRATION = "performMigration";
-const string WPEFramework::Plugin::Bluetooth::METHOD_CLEAR_MIGRATION = "clearMigration";
+const string Thunder::Plugin::Bluetooth::METHOD_PERFORM_MIGRATION = "performMigration";
+const string Thunder::Plugin::Bluetooth::METHOD_CLEAR_MIGRATION = "clearMigration";
 #endif
 
-const string WPEFramework::Plugin::Bluetooth::EVT_STATUS_CHANGED = "onStatusChanged";
-const string WPEFramework::Plugin::Bluetooth::EVT_PAIRING_REQUEST = "onPairingRequest";
-const string WPEFramework::Plugin::Bluetooth::EVT_REQUEST_FAILED = "onRequestFailed";
-const string WPEFramework::Plugin::Bluetooth::EVT_CONNECTION_REQUEST = "onConnectionRequest";
-const string WPEFramework::Plugin::Bluetooth::EVT_PLAYBACK_REQUEST = "onPlaybackRequest";
+const string Thunder::Plugin::Bluetooth::EVT_STATUS_CHANGED = "onStatusChanged";
+const string Thunder::Plugin::Bluetooth::EVT_PAIRING_REQUEST = "onPairingRequest";
+const string Thunder::Plugin::Bluetooth::EVT_REQUEST_FAILED = "onRequestFailed";
+const string Thunder::Plugin::Bluetooth::EVT_CONNECTION_REQUEST = "onConnectionRequest";
+const string Thunder::Plugin::Bluetooth::EVT_PLAYBACK_REQUEST = "onPlaybackRequest";
 
-const string WPEFramework::Plugin::Bluetooth::EVT_PLAYBACK_STARTED = "onPlaybackChange"; // action: started
-const string WPEFramework::Plugin::Bluetooth::EVT_PLAYBACK_PAUSED = "onPlaybackChange";  // action: paused
-const string WPEFramework::Plugin::Bluetooth::EVT_PLAYBACK_STOPPED = "onPlaybackChange"; // action: stopped
-const string WPEFramework::Plugin::Bluetooth::EVT_PLAYBACK_ENDED = "onPlaybackChange";   // action: paused
+const string Thunder::Plugin::Bluetooth::EVT_PLAYBACK_STARTED = "onPlaybackChange"; // action: started
+const string Thunder::Plugin::Bluetooth::EVT_PLAYBACK_PAUSED = "onPlaybackChange";  // action: paused
+const string Thunder::Plugin::Bluetooth::EVT_PLAYBACK_STOPPED = "onPlaybackChange"; // action: stopped
+const string Thunder::Plugin::Bluetooth::EVT_PLAYBACK_ENDED = "onPlaybackChange";   // action: paused
 
-const string WPEFramework::Plugin::Bluetooth::EVT_PLAYBACK_POSITION = "onPlaybackProgress";
-const string WPEFramework::Plugin::Bluetooth::EVT_PLAYBACK_NEW_TRACK = "onPlaybackNewTrack";
-const string WPEFramework::Plugin::Bluetooth::EVT_DEVICE_FOUND = "onDeviceFound";
-const string WPEFramework::Plugin::Bluetooth::EVT_DEVICE_LOST_OR_OUT_OF_RANGE = "onDeviceLost";
-const string WPEFramework::Plugin::Bluetooth::EVT_DEVICE_DISCOVERY_UPDATE = "onDiscoveredDevice";
-const string WPEFramework::Plugin::Bluetooth::EVT_DEVICE_MEDIA_STATUS = "onDeviceMediaStatus";
+const string Thunder::Plugin::Bluetooth::EVT_PLAYBACK_POSITION = "onPlaybackProgress";
+const string Thunder::Plugin::Bluetooth::EVT_PLAYBACK_NEW_TRACK = "onPlaybackNewTrack";
+const string Thunder::Plugin::Bluetooth::EVT_DEVICE_FOUND = "onDeviceFound";
+const string Thunder::Plugin::Bluetooth::EVT_DEVICE_LOST_OR_OUT_OF_RANGE = "onDeviceLost";
+const string Thunder::Plugin::Bluetooth::EVT_DEVICE_DISCOVERY_UPDATE = "onDiscoveredDevice";
+const string Thunder::Plugin::Bluetooth::EVT_DEVICE_MEDIA_STATUS = "onDeviceMediaStatus";
 
-const string WPEFramework::Plugin::Bluetooth::STATUS_NO_BLUETOOTH_HARDWARE = "NO_BLUETOOTH_HARDWARE";
-const string WPEFramework::Plugin::Bluetooth::STATUS_SOFTWARE_DISABLED = "SOFTWARE_DISABLED";
-const string WPEFramework::Plugin::Bluetooth::STATUS_AVAILABLE = "AVAILABLE";
-const string WPEFramework::Plugin::Bluetooth::ENABLE_CONNECT = "CONNECT";
-const string WPEFramework::Plugin::Bluetooth::ENABLE_DISCONNECT = "DISCONNECT";
-const string WPEFramework::Plugin::Bluetooth::ENABLE_BLUETOOTH_ENABLED = "BLUETOOTH_ENABLED";
-const string WPEFramework::Plugin::Bluetooth::ENABLE_BLUETOOTH_DISABLED = "BLUETOOTH_DISABLED";
-const string WPEFramework::Plugin::Bluetooth::ENABLE_BLUETOOTH_INPUT_ENABLED = "BLUETOOTH_INPUT_ENABLED";
+const string Thunder::Plugin::Bluetooth::STATUS_NO_BLUETOOTH_HARDWARE = "NO_BLUETOOTH_HARDWARE";
+const string Thunder::Plugin::Bluetooth::STATUS_SOFTWARE_DISABLED = "SOFTWARE_DISABLED";
+const string Thunder::Plugin::Bluetooth::STATUS_AVAILABLE = "AVAILABLE";
+const string Thunder::Plugin::Bluetooth::ENABLE_CONNECT = "CONNECT";
+const string Thunder::Plugin::Bluetooth::ENABLE_DISCONNECT = "DISCONNECT";
+const string Thunder::Plugin::Bluetooth::ENABLE_BLUETOOTH_ENABLED = "BLUETOOTH_ENABLED";
+const string Thunder::Plugin::Bluetooth::ENABLE_BLUETOOTH_DISABLED = "BLUETOOTH_DISABLED";
+const string Thunder::Plugin::Bluetooth::ENABLE_BLUETOOTH_INPUT_ENABLED = "BLUETOOTH_INPUT_ENABLED";
 
-const string WPEFramework::Plugin::Bluetooth::ENABLE_PRIMARY_AUDIO = "PRIMARY";
-const string WPEFramework::Plugin::Bluetooth::ENABLE_AUXILIARY_AUDIO = "AUXILIARY";
-const string WPEFramework::Plugin::Bluetooth::STATUS_HARDWARE_AVAILABLE = "HARDWARE_AVAILABLE";
-const string WPEFramework::Plugin::Bluetooth::STATUS_HARDWARE_DISABLED = "HARDWARE_DISABLED";
-const string WPEFramework::Plugin::Bluetooth::STATUS_SOFTWARE_ENABLED = "SOFTWARE_ENABLED";
-const string WPEFramework::Plugin::Bluetooth::STATUS_SOFTWARE_INPUT_ENABLED = "SOFTWARE_INPUT_ENABLED";
-const string WPEFramework::Plugin::Bluetooth::STATUS_PAIRING_CHANGE = "PAIRING_CHANGE";
-const string WPEFramework::Plugin::Bluetooth::STATUS_CONNECTION_CHANGE = "CONNECTION_CHANGE";
-const string WPEFramework::Plugin::Bluetooth::STATUS_DISCOVERY_STARTED = "DISCOVERY_STARTED";
-const string WPEFramework::Plugin::Bluetooth::STATUS_DISCOVERY_COMPLETED = "DISCOVERY_COMPLETED";
-const string WPEFramework::Plugin::Bluetooth::STATUS_PAIRING_FAILED = "PAIRING_FAILED";
-const string WPEFramework::Plugin::Bluetooth::STATUS_CONNECTION_FAILED= "CONNECTION_FAILED";
-const string WPEFramework::Plugin::Bluetooth::STATUS_AUTOCONNECT_STATUS_CHANGE= "AUTOCONNECT_STATUS_CHANGE";
+const string Thunder::Plugin::Bluetooth::ENABLE_PRIMARY_AUDIO = "PRIMARY";
+const string Thunder::Plugin::Bluetooth::ENABLE_AUXILIARY_AUDIO = "AUXILIARY";
+const string Thunder::Plugin::Bluetooth::STATUS_HARDWARE_AVAILABLE = "HARDWARE_AVAILABLE";
+const string Thunder::Plugin::Bluetooth::STATUS_HARDWARE_DISABLED = "HARDWARE_DISABLED";
+const string Thunder::Plugin::Bluetooth::STATUS_SOFTWARE_ENABLED = "SOFTWARE_ENABLED";
+const string Thunder::Plugin::Bluetooth::STATUS_SOFTWARE_INPUT_ENABLED = "SOFTWARE_INPUT_ENABLED";
+const string Thunder::Plugin::Bluetooth::STATUS_PAIRING_CHANGE = "PAIRING_CHANGE";
+const string Thunder::Plugin::Bluetooth::STATUS_CONNECTION_CHANGE = "CONNECTION_CHANGE";
+const string Thunder::Plugin::Bluetooth::STATUS_DISCOVERY_STARTED = "DISCOVERY_STARTED";
+const string Thunder::Plugin::Bluetooth::STATUS_DISCOVERY_COMPLETED = "DISCOVERY_COMPLETED";
+const string Thunder::Plugin::Bluetooth::STATUS_PAIRING_FAILED = "PAIRING_FAILED";
+const string Thunder::Plugin::Bluetooth::STATUS_CONNECTION_FAILED= "CONNECTION_FAILED";
+const string Thunder::Plugin::Bluetooth::STATUS_AUTOCONNECT_STATUS_CHANGE= "AUTOCONNECT_STATUS_CHANGE";
 
-const string WPEFramework::Plugin::Bluetooth::CMD_AUDIO_CTRL_PLAY = "PLAY";
-const string WPEFramework::Plugin::Bluetooth::CMD_AUDIO_CTRL_STOP = "STOP";
-const string WPEFramework::Plugin::Bluetooth::CMD_AUDIO_CTRL_PAUSE = "PAUSE";
-const string WPEFramework::Plugin::Bluetooth::CMD_AUDIO_CTRL_RESUME = "RESUME";
-const string WPEFramework::Plugin::Bluetooth::CMD_AUDIO_CTRL_SKIP_NEXT = "SKIP_NEXT";
-const string WPEFramework::Plugin::Bluetooth::CMD_AUDIO_CTRL_SKIP_PREV = "SKIP_PREV";
-const string WPEFramework::Plugin::Bluetooth::CMD_AUDIO_CTRL_RESTART = "RESTART";
-const string WPEFramework::Plugin::Bluetooth::CMD_AUDIO_CTRL_VOLUME_UP = "VOLUME_UP";
-const string WPEFramework::Plugin::Bluetooth::CMD_AUDIO_CTRL_VOLUME_DOWN = "VOLUME_DOWN";
-const string WPEFramework::Plugin::Bluetooth::CMD_AUDIO_CTRL_MUTE = "AUDIO_MUTE";
-const string WPEFramework::Plugin::Bluetooth::CMD_AUDIO_CTRL_UNMUTE = "AUDIO_UNMUTE";
-const string WPEFramework::Plugin::Bluetooth::CMD_AUDIO_CTRL_UNKNOWN = "CMD_UNKNOWN";
+const string Thunder::Plugin::Bluetooth::CMD_AUDIO_CTRL_PLAY = "PLAY";
+const string Thunder::Plugin::Bluetooth::CMD_AUDIO_CTRL_STOP = "STOP";
+const string Thunder::Plugin::Bluetooth::CMD_AUDIO_CTRL_PAUSE = "PAUSE";
+const string Thunder::Plugin::Bluetooth::CMD_AUDIO_CTRL_RESUME = "RESUME";
+const string Thunder::Plugin::Bluetooth::CMD_AUDIO_CTRL_SKIP_NEXT = "SKIP_NEXT";
+const string Thunder::Plugin::Bluetooth::CMD_AUDIO_CTRL_SKIP_PREV = "SKIP_PREV";
+const string Thunder::Plugin::Bluetooth::CMD_AUDIO_CTRL_RESTART = "RESTART";
+const string Thunder::Plugin::Bluetooth::CMD_AUDIO_CTRL_VOLUME_UP = "VOLUME_UP";
+const string Thunder::Plugin::Bluetooth::CMD_AUDIO_CTRL_VOLUME_DOWN = "VOLUME_DOWN";
+const string Thunder::Plugin::Bluetooth::CMD_AUDIO_CTRL_MUTE = "AUDIO_MUTE";
+const string Thunder::Plugin::Bluetooth::CMD_AUDIO_CTRL_UNMUTE = "AUDIO_UNMUTE";
+const string Thunder::Plugin::Bluetooth::CMD_AUDIO_CTRL_UNKNOWN = "CMD_UNKNOWN";
 
-namespace WPEFramework
+namespace Thunder
 {
     namespace {
 
@@ -267,7 +267,7 @@ namespace WPEFramework
             if (m_powerManagerPlugin) {
                 m_powerManagerPlugin->Register(&m_powerManagerNotification);
 
-                WPEFramework::Exchange::IPowerManager::PowerState currentState, prevState;
+                Thunder::Exchange::IPowerManager::PowerState currentState, prevState;
                 if (Core::ERROR_NONE == m_powerManagerPlugin->GetPowerState(currentState, prevState)) {
                     onPowerModeChanged(prevState, currentState);
                 } else {
@@ -2085,7 +2085,7 @@ namespace WPEFramework
         }
 #endif
 
-        void Bluetooth::onPowerModeChanged(const WPEFramework::Exchange::IPowerManager::PowerState currentState, const WPEFramework::Exchange::IPowerManager::PowerState newState)
+        void Bluetooth::onPowerModeChanged(const Thunder::Exchange::IPowerManager::PowerState currentState, const Thunder::Exchange::IPowerManager::PowerState newState)
         {
             #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
                 if (!m_bluetoothDeviceManager.isMigrated()) {
@@ -2116,11 +2116,11 @@ namespace WPEFramework
             }
 
             // ON --> OFF
-            if ((WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_ON == currentState ||
-                WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_UNKNOWN == currentState) &&
-                (WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_OFF == newState ||
-                    WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_STANDBY == newState ||
-                    WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_STANDBY_LIGHT_SLEEP == newState)) {
+            if ((Thunder::Exchange::IPowerManager::PowerState::POWER_STATE_ON == currentState ||
+                Thunder::Exchange::IPowerManager::PowerState::POWER_STATE_UNKNOWN == currentState) &&
+                (Thunder::Exchange::IPowerManager::PowerState::POWER_STATE_OFF == newState ||
+                    Thunder::Exchange::IPowerManager::PowerState::POWER_STATE_STANDBY == newState ||
+                    Thunder::Exchange::IPowerManager::PowerState::POWER_STATE_STANDBY_LIGHT_SLEEP == newState)) {
 
                 std::unordered_map<std::string, BluetoothDeviceInfo> pairedDeviceInfos = m_bluetoothDeviceManager.getPairedDeviceInfos();
 
@@ -2148,7 +2148,7 @@ namespace WPEFramework
                 }
             }
             // X --> ON
-            else if (WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_ON == newState ) {
+            else if (Thunder::Exchange::IPowerManager::PowerState::POWER_STATE_ON == newState ) {
                 std::unordered_map<std::string, BluetoothDeviceInfo> pairedDeviceInfos = m_bluetoothDeviceManager.getPairedDeviceInfos();
 
                 LOGINFO("pairedDeviceInfos.size()=%zu\n", pairedDeviceInfos.size());
@@ -2171,7 +2171,7 @@ namespace WPEFramework
                 }
             }
             // X --> DEEP_SLEEP
-            else if (WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_STANDBY_DEEP_SLEEP == newState ) {
+            else if (Thunder::Exchange::IPowerManager::PowerState::POWER_STATE_STANDBY_DEEP_SLEEP == newState ) {
 
                 std::unordered_map<std::string, BluetoothDeviceInfo> pairedDeviceInfos = m_bluetoothDeviceManager.getPairedDeviceInfos();
 
@@ -2217,4 +2217,4 @@ namespace WPEFramework
             return(result);
         }
     } // Plugin
-} // WPEFramework
+} // Thunder

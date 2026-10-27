@@ -37,7 +37,7 @@
 #define BLUETOOTH_PERSISTENT_FILE_PATH "/tmp/paired_bluetooth_devices.json"
 #endif
 
-namespace WPEFramework {
+namespace Thunder {
 namespace Plugin {
 
 namespace {
@@ -69,12 +69,12 @@ bool tryGetNumericAsInt64(const JsonObject& object, const char* fieldName, long 
     }
 
     const auto& value = object[fieldName];
-    if (value.Content() == WPEFramework::Core::JSON::Variant::type::NUMBER) {
+    if (value.Content() == Thunder::Core::JSON::Variant::type::NUMBER) {
         output = static_cast<long long>(value.Number());
         return true;
     }
 
-    if (value.Content() == WPEFramework::Core::JSON::Variant::type::STRING) {
+    if (value.Content() == Thunder::Core::JSON::Variant::type::STRING) {
         return tryParseInt64(value.String(), output);
     }
 
@@ -88,17 +88,17 @@ bool tryGetBoolean(const JsonObject& object, const char* fieldName, bool& output
     }
 
     const auto& value = object[fieldName];
-    if (value.Content() == WPEFramework::Core::JSON::Variant::type::BOOLEAN) {
+    if (value.Content() == Thunder::Core::JSON::Variant::type::BOOLEAN) {
         output = value.Boolean();
         return true;
     }
 
-    if (value.Content() == WPEFramework::Core::JSON::Variant::type::NUMBER) {
+    if (value.Content() == Thunder::Core::JSON::Variant::type::NUMBER) {
         output = (value.Number() != 0);
         return true;
     }
 
-    if (value.Content() == WPEFramework::Core::JSON::Variant::type::STRING) {
+    if (value.Content() == Thunder::Core::JSON::Variant::type::STRING) {
         std::string lowered = value.String();
         for (char& c : lowered) {
             c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
@@ -137,7 +137,7 @@ Core::hresult BluetoothPersistenceAdapter::Parse(const std::string& payload, std
     }
 
     if (!root.HasLabel("pairedDevices") ||
-        root["pairedDevices"].Content() != WPEFramework::Core::JSON::Variant::type::ARRAY) {
+        root["pairedDevices"].Content() != Thunder::Core::JSON::Variant::type::ARRAY) {
         LOGWARN("filesystem persistence file missing pairedDevices array, treating as default empty content");
         return Core::ERROR_NONE;
     }
@@ -158,7 +158,7 @@ Core::hresult BluetoothPersistenceAdapter::Parse(const std::string& payload, std
         }
 
         if (entry.HasLabel("friendlyName") &&
-            entry["friendlyName"].Content() == WPEFramework::Core::JSON::Variant::type::STRING) {
+            entry["friendlyName"].Content() == Thunder::Core::JSON::Variant::type::STRING) {
             info.friendlyName = entry["friendlyName"].String();
         }
 
@@ -294,7 +294,7 @@ Core::hresult BluetoothPersistenceAdapter::Write(const std::unordered_map<std::s
                 JsonObject existingRoot;
                 if (existingRoot.FromString(buffer.str()) &&
                     existingRoot.HasLabel("pairedDevices") &&
-                    existingRoot["pairedDevices"].Content() == WPEFramework::Core::JSON::Variant::type::ARRAY) {
+                    existingRoot["pairedDevices"].Content() == Thunder::Core::JSON::Variant::type::ARRAY) {
                     JsonArray pairedDevices = existingRoot["pairedDevices"].Array();
                     for (uint16_t i = 0; i < pairedDevices.Length(); ++i) {
                         JsonObject existing = pairedDevices[i].Object();
@@ -424,4 +424,4 @@ Core::hresult BluetoothPersistenceAdapter::Write(const std::unordered_map<std::s
 }
 
 } // namespace Plugin
-} // namespace WPEFramework
+} // namespace Thunder
