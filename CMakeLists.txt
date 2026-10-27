@@ -19,8 +19,6 @@
 
 cmake_minimum_required(VERSION 3.15)
 
-find_package(Thunder)
-
 find_package(Thunder QUIET)
 
 if(NOT Thunder_FOUND)
