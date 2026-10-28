@@ -1089,36 +1089,6 @@ namespace WPEFramework
             returnResponse(successFlag);
         }
 
-        // <pca> debug - Temp succeed always to avoid broken IUI state
-        // uint32_t Bluetooth::unpairWrapper(const JsonObject& parameters, JsonObject& response)
-        // {
-        //     LOGINFOMETHOD();
-        //     bool successFlag;
-        //     string deviceIDStr;
-        //     long long int deviceID = 0;
-        //     bool deviceIDDefined = false;
-        //     bool pair = false;
-
-        //     if (parameters.HasLabel("deviceID")) {
-        //         getStringParameter("deviceID", deviceIDStr);
-		// 		if (!parseDeviceID(deviceIDStr, deviceID))
-		// 		{
-		// 			successFlag = false;
-		// 			returnResponse(successFlag);
-		// 		}
-        //         deviceIDDefined = true;
-        //     }
-
-        //     if(deviceIDDefined)
-        //     {
-        //         LOGINFO("Making a call with deviceID=%llu pair=%s", deviceID, pair?"true":"false");
-        //         successFlag = setDevicePairing(deviceID, pair);
-        //     } else {
-        //         LOGERR("Please specify parameters. Example: \"params\": {\"deviceID\": \"271731989589742\"}");
-        //         successFlag = false;
-        //     }
-        //     returnResponse(successFlag);
-        // }
         uint32_t Bluetooth::unpairWrapper(const JsonObject& parameters, JsonObject& response)
         {
             LOGINFOMETHOD();
@@ -1146,7 +1116,6 @@ namespace WPEFramework
             }
             returnResponse(successFlag);
         }
-        // </pca>
 
         uint32_t Bluetooth::enableWrapper(const JsonObject& parameters, JsonObject& response)
         {

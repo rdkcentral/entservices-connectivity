@@ -44,10 +44,10 @@ std::string BtSdkAdapterImpl::init(PluginHost::IShell* /* service */,
     m_authBridge  = std::make_unique<AuthBridge>(m_registry, std::move(authCallbacks));
 
     // <pca> debug
-    // auto authCb = [this](bluetooth::AuthorisationType type,
-    //                      std::shared_ptr<bluetooth::Device> device) -> bool {
-    //     return m_authBridge->onAuthRequest(type, std::move(device));
-    // };
+    auto authCb = [this](bluetooth::AuthorisationType type,
+                         std::shared_ptr<bluetooth::Device> device) -> bool {
+        return m_authBridge->onAuthRequest(type, std::move(device));
+    };
     // </pca>
 
     // <pca> debug - Strip-out noise for now
@@ -73,18 +73,18 @@ std::string BtSdkAdapterImpl::init(PluginHost::IShell* /* service */,
 
     try {
         // <pca> debug - This is throwing, simplify for now to narrow-down the problem
-        // m_manager = std::make_unique<bluetooth::Manager>(
-        //     bluetooth::AuthorisationMode::ExternalAuthorisation,
-        //     std::move(authCb),
-        //     LogLocation::LogRedirect,
-        //     std::move(logRedirect)
-        // );
         m_manager = std::make_unique<bluetooth::Manager>(
-            bluetooth::AuthorisationMode::AutoAccept,
-            nullptr,
+            bluetooth::AuthorisationMode::ExternalAuthorisation,
+            std::move(authCb),
             LogLocation::LogRedirect,
             std::move(logRedirect)
         );
+        // m_manager = std::make_unique<bluetooth::Manager>(
+        //     bluetooth::AuthorisationMode::AutoAccept,
+        //     nullptr,
+        //     LogLocation::LogRedirect,
+        //     std::move(logRedirect)
+        //);
         // </pca>
     } catch (const std::exception& e) {
         const std::string error = std::string("Failed to construct Bluetooth Manager: ") + e.what();
