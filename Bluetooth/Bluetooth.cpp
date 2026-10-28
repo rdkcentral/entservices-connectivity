@@ -434,11 +434,14 @@ namespace WPEFramework
                 .withRetryCount(25)
                 .createInterface();
 
+            bool powerOnOrUnknown = true;
+
             if (m_powerManagerPlugin) {
                 m_powerManagerPlugin->Register(&m_powerManagerNotification);
 
                 WPEFramework::Exchange::IPowerManager::PowerState currentState, prevState;
                 if (Core::ERROR_NONE == m_powerManagerPlugin->GetPowerState(currentState, prevState)) {
+                    powerOnOrUnknown = (WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_ON == currentState);
                     onPowerModeChanged(prevState, currentState);
                 } else {
                     LOGERR("Failed to get current power state");
@@ -456,11 +459,18 @@ namespace WPEFramework
 
             disconnectExternallyConnectedDevices();
 
+            // The SDK has no daemon doing the boot-time reconnect that BTMgr does, so do it here.
+            m_startupComplete = true;
+            if (powerOnOrUnknown) {
+                m_btAdapter.startAutoConnect();
+            }
+
             return message;
         }
 
         void Bluetooth::Deinitialize(PluginHost::IShell* service)
         {
+            m_startupComplete = false;
             // Revoke unconditionally: m_discoveryTimer is scheduled on the shared,
             // process-wide static _discoveryTimer and outlives this instance otherwise,
             // firing into a destroyed Bluetooth object.
@@ -1457,11 +1467,23 @@ namespace WPEFramework
 
         void Bluetooth::onPowerModeChanged(const WPEFramework::Exchange::IPowerManager::PowerState currentState, const WPEFramework::Exchange::IPowerManager::PowerState newState)
         {
+            // BTMgr reconnects the previous audio device whenever the box powers on, independent of migration.
+            // Runs after the adapter has been powered on, so it is invoked from each return path below.
+            const auto reconnectOnPowerOn = [&]() {
+                if (m_startupComplete &&
+                    WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_ON == newState &&
+                    currentState != newState) {
+                    m_btAdapter.startAutoConnect();
+                }
+            };
+
             #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
                 if (!m_bluetoothDeviceManager.isMigrated()) {
+                    reconnectOnPowerOn();
                     return;
                 }
             #else
+                reconnectOnPowerOn();
                 return;
             #endif
 
@@ -1539,6 +1561,7 @@ namespace WPEFramework
                 if (pairedDevicesCount > 0) {
                     setBluetoothEnabled(ENABLE_BLUETOOTH_ENABLED);
                 }
+                reconnectOnPowerOn();
             }
             // X --> DEEP_SLEEP
             else if (WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_STANDBY_DEEP_SLEEP == newState ) {

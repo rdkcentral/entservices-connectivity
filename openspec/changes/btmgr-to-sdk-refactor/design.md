@@ -243,7 +243,14 @@ AuthorisationType::PairingRequest          AuthorisationType::ConnectionRequest
                                                                   Return bool
 ```
 
-**Audio device auto-accept conditions** (mirrors `btrMgr_ConnectionInAuthenticationCb`):
+**Audio device connection policy** (supersedes the earlier "auto-accept paired audio device" rule; mirrors the BTMgr plugin behaviour):
+- Once migrated, the persisted autoconnect status resolves the request (`BtAuthCallbacks::getConnectAutoResponse`): enabled → accept, disabled/unset → reject, with no client notification.
+- Not migrated: emit `onConnectionRequest` and wait for `respondToEvent`. Audio output devices only wait 200 ms (BTMgr behaviour); other types wait 30 s. The device type is re-classified from current BlueZ properties if the cached type is unknown (paired devices at boot).
+- Paired HID devices that are not in cooldown are still auto-accepted.
+
+**Startup / power-on reconnect:** BTMgr itself asks about the previously used audio output device at startup and on power-on (`BTRMGR_StartAudioStreamingOut_StartUp`). The SDK has no such daemon, so `BtSdkAdapterImpl::startAutoConnect()` does it: for each paired audio output device (when none is connected and the adapter is powered) it applies the same decision as above. Auto-accepted devices are connected by the plugin; devices accepted by the client are connected by the client. If the client does not answer in time, the pass is retried once after 40 s.
+
+**Audio device auto-accept conditions** (legacy, HID only now):
 - Device is in Paired state
 - Device is not in cooldown (SDK already checks this)
 - Device was not the last disconnected device within hold-off window

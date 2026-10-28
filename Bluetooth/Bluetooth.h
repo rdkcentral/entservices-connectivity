@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <thread>
 #include <memory>
 
@@ -346,6 +347,8 @@ namespace WPEFramework {
             std::unique_ptr<PowerModeEventQueue> m_powerModeEventQueue;
             BluetoothDeviceManager m_bluetoothDeviceManager;
             BtAdapter m_btAdapter;
+            // Set once Initialize() has finished; the power-on reconnect only runs from notifications after that.
+            std::atomic<bool> m_startupComplete{false};
         };
 
     } // Plugin

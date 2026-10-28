@@ -111,3 +111,30 @@ When `BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION` is enabled and migration has been 
 #### Scenario: Autoconnect not explicitly set
 - **WHEN** an external connect request arrives for a device with no explicit autoconnect setting
 - **THEN** the plugin treats the device as autoconnect-disabled and rejects the connection without emitting an `onConnectionRequest` event
+
+### Requirement: SDK backend SHALL reconnect the previous audio output device at startup and power-on
+With the bluetooth-sdk backend there is no BTMgr daemon to ask about the previously used audio output device after boot, so the plugin SHALL do so itself, after `Initialize()` and when the platform transitions to power ON. Each paired audio output device SHALL be run through the same connect-request decision as an incoming connection (autoconnect status when migrated, otherwise `onConnectionRequest` to the client with a 200 ms wait). Devices auto-accepted from the autoconnect status SHALL be connected by the plugin; devices accepted by the client are connected by the client. If the client does not answer, the plugin SHALL retry once after 40 seconds.
+
+#### Scenario: Migrated, autoconnect enabled
+- **WHEN** the platform starts, migration has been performed and a paired audio output device has autoconnect enabled
+- **THEN** the plugin connects the device without emitting `onConnectionRequest`
+
+#### Scenario: Not migrated
+- **WHEN** the platform starts and migration has not been performed
+- **THEN** the plugin emits `onConnectionRequest` for the paired audio output device and does not connect it itself
+
+#### Scenario: Client not ready
+- **WHEN** the client does not answer within 200 ms
+- **THEN** the plugin asks again once after 40 seconds
+
+#### Scenario: Several paired audio output devices
+- **WHEN** more than one paired audio output device exists and last-connect times are known
+- **THEN** only devices with a known last-connect time are asked about, most recent first, and a device that does not answer a ping is skipped
+
+#### Scenario: Gamepad connected at startup or connecting later
+- **WHEN** a gamepad (not an RDK remote control) is connected at startup or connects, and the connect-request decision rejects it or the client does not answer within 20 seconds
+- **THEN** the plugin disconnects it and does not report it to clients; if accepted, an already connected gamepad is reported with `onDeviceFound`
+
+#### Scenario: Plugin-initiated pairing or connection
+- **WHEN** the plugin is itself pairing or connecting a device and that device's connection arrives for authorization
+- **THEN** the plugin accepts it without consulting autoconnect or the client

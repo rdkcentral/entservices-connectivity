@@ -128,6 +128,10 @@ public:
     virtual BtDeviceVolumeMute getDeviceVolumeMute(long long int deviceID,
                                                    const std::string& profile) const = 0;
     virtual BtMediaTrackInfo   getMediaTrackInfo(long long int deviceID) const = 0;
+
+    // Reconnects the previously used audio output device at startup / power-on, as BTMgr does internally.
+    // Backends that do this themselves (BTMgr) keep the default no-op.
+    virtual void startAutoConnect() {}
 };
 
 } // namespace Plugin

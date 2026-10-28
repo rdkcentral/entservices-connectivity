@@ -87,6 +87,8 @@ public:
                                                        const std::string& profile) const;
     IBtAdapter::BtMediaTrackInfo   getMediaTrackInfo(long long int deviceID) const;
 
+    void startAutoConnect();
+
     // Derive the stable numeric handle string from a MAC address.
     static std::string handleForMac(const std::string& mac);
 

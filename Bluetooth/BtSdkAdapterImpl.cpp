@@ -33,6 +33,7 @@ namespace WPEFramework {
 namespace Plugin {
 
 BtSdkAdapterImpl::~BtSdkAdapterImpl() {
+    stopAutoConnectWorker();
     stopPendingWorker();
 }
 
@@ -115,6 +116,7 @@ std::string BtSdkAdapterImpl::init(PluginHost::IShell* /* service */,
 void BtSdkAdapterImpl::deinit() {
     LOGINFO("BtSdkAdapterImpl::deinit: entry");
     // The worker emits through the event bridge and reads devices, so it must stop first.
+    stopAutoConnectWorker();
     stopPendingWorker();
     // The bridge's worker also uses SDK devices; stop it before they are released.
     if (m_eventBridge) m_eventBridge->stop();
@@ -491,6 +493,112 @@ IBtAdapter::BtMediaTrackInfo BtSdkAdapterImpl::getMediaTrackInfo(long long int d
     LOGINFO("BtSdkAdapterImpl::getMediaTrackInfo: entry deviceID=%lld", deviceID);
     LOGERR("BtSdkAdapterImpl::getMediaTrackInfo: exit with error: audio support is unavailable");
     return {};
+}
+
+// ── Startup auto-connect ─────────────────────────────────────────────────────
+
+// Mirrors BTRMGR_StartAudioStreamingOut_StartUp: BTMgr asks for each previously used audio output device
+// (RECEIVED_EXTERNAL_CONNECT_REQUEST), waits briefly for the answer and, if the client is not up yet,
+// asks again once after kAutoConnectRetrySeconds.
+namespace { constexpr int kAutoConnectRetrySeconds = 40; }
+
+void BtSdkAdapterImpl::startAutoConnect() {
+    LOGINFO("BtSdkAdapterImpl::startAutoConnect: entry");
+    std::lock_guard<std::mutex> lock(m_autoConnectMutex);
+    if (!m_adapter || !m_authBridge) {
+        LOGERR("BtSdkAdapterImpl::startAutoConnect: exit with error: adapter is unavailable");
+        return;
+    }
+    if (m_autoConnectRunning) {
+        LOGINFO("BtSdkAdapterImpl::startAutoConnect: exit, a pass is already running");
+        return;
+    }
+    if (m_autoConnectThread.joinable()) m_autoConnectThread.join();
+    m_autoConnectStop    = false;
+    m_autoConnectRunning = true;
+    m_autoConnectThread  = std::thread([this] { autoConnectWorker(); });
+    LOGINFO("BtSdkAdapterImpl::startAutoConnect: exit successfully");
+}
+
+void BtSdkAdapterImpl::stopAutoConnectWorker() {
+    {
+        std::lock_guard<std::mutex> lock(m_autoConnectMutex);
+        m_autoConnectStop = true;
+    }
+    m_autoConnectCv.notify_all();
+    if (m_autoConnectThread.joinable()) m_autoConnectThread.join();
+    std::lock_guard<std::mutex> lock(m_autoConnectMutex);
+    m_autoConnectRunning = false;
+}
+
+void BtSdkAdapterImpl::autoConnectWorker() {
+    if (runAutoConnectPass(false)) {
+        std::unique_lock<std::mutex> lock(m_autoConnectMutex);
+        const bool stopped = m_autoConnectCv.wait_for(lock, std::chrono::seconds(kAutoConnectRetrySeconds),
+                                                      [this] { return m_autoConnectStop; });
+        lock.unlock();
+        if (!stopped) runAutoConnectPass(true);
+    }
+    std::lock_guard<std::mutex> lock(m_autoConnectMutex);
+    m_autoConnectRunning = false;
+}
+
+bool BtSdkAdapterImpl::runAutoConnectPass(bool secondAttempt) {
+    LOGINFO("BtSdkAdapterImpl::runAutoConnectPass: entry secondAttempt=%d", secondAttempt);
+    auto stopRequested = [this] {
+        std::lock_guard<std::mutex> lock(m_autoConnectMutex);
+        return m_autoConnectStop;
+    };
+    if (!m_adapter || !m_authBridge) return false;
+
+    bool powered = false;
+    Status powerStatus = m_adapter->getPowered(powered);
+    if (powerStatus && !powered) {
+        LOGINFO("BtSdkAdapterImpl::runAutoConnectPass: exit, adapter is powered off");
+        return false;
+    }
+
+    // Like BTMgr (nothing is streaming), skip when an audio output device is already connected.
+    for (auto& device : m_adapter->getDevices(bluetooth::DeviceState::Connected)) {
+        std::string mac;
+        device->address(mac);
+        const std::string handle = DeviceRegistry::deriveHandle(mac);
+        if (AuthBridge::isAudioOutputType(m_authBridge->resolveDeviceType(device, handle))) {
+            LOGINFO("BtSdkAdapterImpl::runAutoConnectPass: exit, an audio output device is already connected");
+            return false;
+        }
+    }
+
+    for (auto& device : m_adapter->getDevices(bluetooth::DeviceState::Paired)) {
+        if (stopRequested()) return false;
+
+        std::string mac;
+        device->address(mac);
+        const std::string handle = DeviceRegistry::deriveHandle(mac);
+        const std::string type = m_authBridge->resolveDeviceType(device, handle);
+        if (!AuthBridge::isAudioOutputType(type)) continue;
+
+        const auto decision = m_authBridge->decideConnection(
+            device, std::chrono::milliseconds(AuthBridge::AUDIO_AUTH_TIMEOUT_MS));
+        switch (decision) {
+            case AuthBridge::ConnectDecision::AcceptedAuto:
+                if (connectDevice(handle, type)) return false;
+                break;
+            case AuthBridge::ConnectDecision::AcceptedByClient:
+                // The client connects the device, as with BTMgr.
+                return false;
+            case AuthBridge::ConnectDecision::TimedOut:
+                if (!secondAttempt) {
+                    LOGINFO("BtSdkAdapterImpl::runAutoConnectPass: exit, no response from the client for %s, retrying later", mac.c_str());
+                    return true;
+                }
+                break;
+            case AuthBridge::ConnectDecision::Rejected:
+                break;
+        }
+    }
+    LOGINFO("BtSdkAdapterImpl::runAutoConnectPass: exit, nothing to connect");
+    return false;
 }
 
 // ── Private helpers ──────────────────────────────────────────────────────────

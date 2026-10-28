@@ -97,8 +97,15 @@ public:
                                            const std::string& profile) const override;
     BtMediaTrackInfo   getMediaTrackInfo(long long int deviceID) const override;
 
+    // Reconnects the previously used audio output device (see runAutoConnectPass). Runs on a worker thread.
+    void startAutoConnect() override;
+
 private:
     void onAdapterEvent(bluetooth::AdapterEvent event, bluetooth::AdapterEventData data);
+    void autoConnectWorker();
+    // Returns true if the client did not answer and the pass should be retried later.
+    bool runAutoConnectPass(bool secondAttempt);
+    void stopAutoConnectWorker();
     void registerDeviceEvents(std::shared_ptr<bluetooth::Device> device);
     void unregisterDeviceEvents(std::shared_ptr<bluetooth::Device> device);
     bluetooth::ScanFilter buildScanFilter(ScanFilterPolicy::Mode mode) const;
@@ -147,6 +154,13 @@ private:
     std::unordered_map<std::string, PendingDevice> m_pending;   // keyed by MAC
     std::thread                              m_pendingThread;
     bool                                     m_pendingStop{false};
+
+    // Startup auto-connect worker.
+    std::mutex                               m_autoConnectMutex;
+    std::condition_variable                  m_autoConnectCv;
+    std::thread                              m_autoConnectThread;
+    bool                                     m_autoConnectRunning{false};
+    bool                                     m_autoConnectStop{false};
 
     DeviceRegistry m_registry;
     std::unique_ptr<EventBridge> m_eventBridge;

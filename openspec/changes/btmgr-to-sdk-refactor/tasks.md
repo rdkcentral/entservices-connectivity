@@ -165,7 +165,9 @@ Depends on: T-9a
 - `DeviceEvent::Disconnected` → `onStatusChanged(CONNECTION_CHANGE, connected=false)`
 
 *AuthBridge tests:*
-- `onConnectionRequest` for paired HEADPHONES device → no notification, auto-accepted
+- `onConnectionRequest` for paired HEADPHONES device, migrated, autoconnect enabled → no notification, auto-accepted
+- `onConnectionRequest` for paired HEADPHONES device, migrated, autoconnect disabled/unset → no notification, rejected
+- `onConnectionRequest` for paired HEADPHONES device, not migrated → `onConnectionRequest` notification emitted; no client response within 200 ms → rejected
 - `onConnectionRequest` for paired HID device → no notification, auto-accepted
 - `onConnectionRequest` for SMARTPHONE → `onConnectionRequest` notification emitted
 - Client calls `respondToEvent(ACCEPTED)` → auth resolves true

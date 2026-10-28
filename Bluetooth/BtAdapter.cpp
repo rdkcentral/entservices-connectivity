@@ -179,5 +179,7 @@ bool BtAdapter::setDeviceVolumeMute(long long int d, const std::string& p, uint8
 IBtAdapter::BtDeviceVolumeMute BtAdapter::getDeviceVolumeMute(long long int d, const std::string& p) const { return getImpl().getDeviceVolumeMute(d, p); }
 IBtAdapter::BtMediaTrackInfo   BtAdapter::getMediaTrackInfo(long long int d) const    { return getImpl().getMediaTrackInfo(d); }
 
+void BtAdapter::startAutoConnect() { getImpl().startAutoConnect(); }
+
 } // namespace Plugin
 } // namespace WPEFramework
