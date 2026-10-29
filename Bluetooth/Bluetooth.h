@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <thread>
 #include <memory>
 
@@ -27,9 +28,8 @@
 #include "PowerManagerInterface.h"
 #include "UtilsThreadRAII.h"
 #include "BluetoothDeviceManager.h"
+#include "BtAdapter.h"
 #include <type_traits>
-
-#include "btmgr.h" //TODO: can we move it to the module? Required by notifyEventWrapper()
 
 namespace WPEFramework {
     namespace Plugin {
@@ -205,7 +205,7 @@ namespace WPEFramework {
         private: /*internal methods*/
             void getStatusSupport(string& status);
             bool isAdapterDiscoverable();
-            string startDeviceDiscovery(int timeout, const string &discProfile = "LOUDSPEAKER, HEADPHONES, WEARABLE HEADSET, HIFI AUDIO DEVICE, KEYBOARD, MOUSE, JOYSTICK");  //default behaviour is to scan audio devices and gamepads
+            string startDeviceDiscovery(int timeout, const string &discProfile = "");  //no profile: the backend applies its default scan (audio devices and gamepads on BTMgr; all devices, RCUs included, on the SDK)
             bool stopDeviceDiscovery();
             void startDiscoveryTimer(int msec);
             void stopDiscoveryTimer();
@@ -229,7 +229,6 @@ namespace WPEFramework {
             JsonObject getMediaTrackInfo(long long int deviceID);
             bool setDeviceVolumeMuteProperties(long long int  deviceID, const string &deviceProfile, unsigned char ui8volume, unsigned char mute);
             JsonObject getDeviceVolumeMuteProperties(long long int  deviceID, const string &deviceProfile);
-            BTRMGR_DeviceOperationType_t btmgrDeviceOperationTypeFromString(const string &deviceProfile);
             void notifyAutoConnectStatusChanged(const string& deviceID, const bool enable);
 
         public:
@@ -297,7 +296,6 @@ namespace WPEFramework {
 
         public:
             static Bluetooth* _instance;
-            void notifyEventWrapper (BTRMGR_EventMessage_t &eventMsg);
             void onPowerModeChanged(const WPEFramework::Exchange::IPowerManager::PowerState currentState, const WPEFramework::Exchange::IPowerManager::PowerState newState);
 
         private:
@@ -348,6 +346,9 @@ namespace WPEFramework {
             Core::Sink<PowerManagerNotification> m_powerManagerNotification;
             std::unique_ptr<PowerModeEventQueue> m_powerModeEventQueue;
             BluetoothDeviceManager m_bluetoothDeviceManager;
+            BtAdapter m_btAdapter;
+            // Set once Initialize() has finished; the power-on reconnect only runs from notifications after that.
+            std::atomic<bool> m_startupComplete{false};
         };
 
     } // Plugin
