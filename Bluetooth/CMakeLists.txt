@@ -147,6 +147,17 @@ target_link_libraries(${MODULE_NAME} PRIVATE
         ${NAMESPACE}Plugins::${NAMESPACE}Plugins
         ${NAMESPACE}::${NAMESPACE}Helpers)
 
+# UtilsTelemetry.h (entservices-helpers) calls t2_event_s()/t2_event_d() when ENABLE_TELEMETRY_LOGGING is set.
+if (BUILD_ENABLE_TELEMETRY_LOGGING)
+    if (RDK_SERVICES_L1_TEST OR RDK_SERVICE_L2_TEST)
+        # No telemetry library or headers in test builds.
+        target_compile_options(${MODULE_NAME} PRIVATE -UENABLE_TELEMETRY_LOGGING)
+    else()
+        target_compile_definitions(${MODULE_NAME} PRIVATE ENABLE_TELEMETRY_LOGGING)
+        target_link_libraries(${MODULE_NAME} PRIVATE -ltelemetry_msgsender)
+    endif()
+endif()
+
 if(BLUETOOTH_AUDIO_SUPPORT)
     target_compile_definitions(${MODULE_NAME} PRIVATE BLUETOOTH_AUDIO_SUPPORT=1)
 endif()

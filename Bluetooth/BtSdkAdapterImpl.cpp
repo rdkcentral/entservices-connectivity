@@ -24,13 +24,62 @@
 #include <core/core.h>
 #include <sys/syscall.h>
 #include <unistd.h>
+#include <cstdarg>
+#include <cstdio>
+#include <cstring>
 #include <UtilsLogging.h>
+#include <UtilsTelemetry.h>
 #include <LogRedirect.h>
 
 #include "DeviceDisplayName.h"
 
 namespace WPEFramework {
 namespace Plugin {
+
+// T2 markers matching the legacy BTMgr stack; the telemetry configuration on the server depends on these
+// names and on the "name,class,appearance,modalias" value format.
+namespace {
+
+void sendTelemetry(const char* marker) {
+    Utils::Telemetry::SendEvent(const_cast<char*>(marker), 1);
+}
+
+void sendTelemetry(const char* marker, const std::string& value) {
+    Utils::Telemetry::SendEvent(const_cast<char*>(marker), const_cast<char*>(value.c_str()));
+}
+
+// "name,class,appearance,vVVVVpPPPPdDDDD", as built by BTMgr from the device details.
+std::string telemetryDeviceInfo(const std::shared_ptr<bluetooth::Device>& device) {
+    bluetooth::DeviceProperties props;
+    device->getAllProperties(props);
+
+    unsigned int vendor = 0, product = 0, version = 0;
+    const std::string modalias = props.modalias.value_or("");
+    if (std::sscanf(modalias.c_str(), "usb:v%4Xp%4Xd%4X", &vendor, &product, &version) != 3) {
+        std::sscanf(modalias.c_str(), "bluetooth:v%4Xp%4Xd%4X", &vendor, &product, &version);
+    }
+
+    char buffer[256];
+    std::snprintf(buffer, sizeof(buffer), "%s,%u,%u,v%04Xp%04Xd%04X",
+                  deviceDisplayName(device).c_str(),
+                  static_cast<unsigned int>(props.classOfDevice.value_or(0)),
+                  static_cast<unsigned int>(props.appearance.value_or(0)),
+                  vendor, product, version);
+    return buffer;
+}
+
+// The SDK Manager constructor both enumerates the adapter and registers the agent, so a throw does not
+// say which one failed. Retry without an agent: if that works, agent activation was the failure.
+void reportManagerConstructionFailure() {
+    try {
+        bluetooth::Manager probe(bluetooth::AuthorisationMode::NoAuthorisation);
+        sendTelemetry("BT_ERR_AgentActFailed");
+    } catch (const std::exception&) {
+        sendTelemetry("BT_ERR_AdaptorNotFound");
+    }
+}
+
+} // namespace
 
 BtSdkAdapterImpl::~BtSdkAdapterImpl() {
     stopAutoConnectWorker();
@@ -89,6 +138,7 @@ std::string BtSdkAdapterImpl::init(PluginHost::IShell* /* service */,
         // </pca>
     } catch (const std::exception& e) {
         const std::string error = std::string("Failed to construct Bluetooth Manager: ") + e.what();
+        reportManagerConstructionFailure();
         LOGERR("BtSdkAdapterImpl::init: exit with error: %s", error.c_str());
         return error;
     }
@@ -96,6 +146,7 @@ std::string BtSdkAdapterImpl::init(PluginHost::IShell* /* service */,
     Status s = m_manager->getDefaultAdapter(m_adapter);
     if (!s) {
         const std::string error = std::string("No Bluetooth adapter found: ") + s.get_message();
+        sendTelemetry("BT_ERR_GetBTAdapterFail");
         LOGERR("BtSdkAdapterImpl::init: exit with error: %s", error.c_str());
         return error;
     }
@@ -215,6 +266,7 @@ bool BtSdkAdapterImpl::startScan(const std::string& profile) {
     m_scanMode = mode;
     Status status = m_adapter->startScan(buildScanFilter(mode));
     if (!status) {
+        sendTelemetry("BT_ERR_DiscStartFail");
         LOGERR("BtSdkAdapterImpl::startScan: exit with error: %s", status.get_message().c_str());
         return false;
     }
@@ -231,6 +283,7 @@ bool BtSdkAdapterImpl::stopScan() {
     m_scanning = false;
     Status status = m_adapter->stopScan();
     if (!status) {
+        sendTelemetry("BT_ERR_DiscStopFail");
         LOGERR("BtSdkAdapterImpl::stopScan: exit with error: %s", status.get_message().c_str());
         return false;
     }
@@ -270,6 +323,7 @@ std::vector<IBtAdapter::BtDeviceInfo> BtSdkAdapterImpl::getDiscoveredDevices() c
     LOGINFO("BtSdkAdapterImpl::getDiscoveredDevices: entry");
     std::vector<BtDeviceInfo> result;
     if (!m_adapter) {
+        sendTelemetry("BT_ERR_GetDiscListFail");
         LOGERR("BtSdkAdapterImpl::getDiscoveredDevices: exit with error: adapter is unavailable");
         return result;
     }
@@ -329,9 +383,11 @@ bool BtSdkAdapterImpl::pairDevice(const std::string& handleStr) {
     // Called before the error check: a failed request must release its held changes too.
     if (m_eventBridge) m_eventBridge->completeDeviceOperation(bluetooth::DeviceEvent::Paired, device, bool(status));
     if (!status) {
+        sendTelemetry("BTPairFail_split", telemetryDeviceInfo(device));
         LOGERR("BtSdkAdapterImpl::pairDevice: exit with error: %s", status.get_message().c_str());
         return false;
     }
+    sendTelemetry("BTPairSucc_split", telemetryDeviceInfo(device));
     LOGINFO("BtSdkAdapterImpl::pairDevice: exit successfully");
     return true;
 }
@@ -351,11 +407,15 @@ bool BtSdkAdapterImpl::unpairDevice(const std::string& handleStr) {
     }
     // Not under m_devicesMutex: the SDK emits DeviceDisappeared synchronously from unpair(), and
     // onAdapterEvent takes that mutex.
+    // Read before unpair(): the device is gone from BlueZ afterwards.
+    const std::string telemetryInfo = telemetryDeviceInfo(device);
     Status status = device->unpair();
     if (!status) {
+        sendTelemetry("BTUnpairFail_split", telemetryInfo);
         LOGERR("BtSdkAdapterImpl::unpairDevice: exit with error: %s", status.get_message().c_str());
         return false;
     }
+    sendTelemetry("BTUnpairSucc_split", telemetryInfo);
     LOGINFO("BtSdkAdapterImpl::unpairDevice: exit successfully");
     return true;
 }
@@ -378,9 +438,11 @@ bool BtSdkAdapterImpl::connectDevice(const std::string& handleStr, const std::st
     // Called before the error check: a failed request must release its held changes too.
     if (m_eventBridge) m_eventBridge->completeDeviceOperation(bluetooth::DeviceEvent::Connected, device, bool(status));
     if (!status) {
+        sendTelemetry("BTConnFail_split", telemetryDeviceInfo(device));
         LOGERR("BtSdkAdapterImpl::connectDevice: exit with error: %s", status.get_message().c_str());
         return false;
     }
+    sendTelemetry("BTConnSucc_split", telemetryDeviceInfo(device));
     LOGINFO("BtSdkAdapterImpl::connectDevice: exit successfully");
     return true;
 }
@@ -398,9 +460,11 @@ bool BtSdkAdapterImpl::disconnectDevice(const std::string& handleStr, const std:
     }
     Status status = device->disconnect(true);
     if (!status) {
+        sendTelemetry("BTDiscFail_split", telemetryDeviceInfo(device));
         LOGERR("BtSdkAdapterImpl::disconnectDevice: exit with error: %s", status.get_message().c_str());
         return false;
     }
+    sendTelemetry("BTDiscSucc_split", telemetryDeviceInfo(device));
     LOGINFO("BtSdkAdapterImpl::disconnectDevice: exit successfully");
     return true;
 }
