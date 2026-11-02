@@ -418,6 +418,10 @@ namespace WPEFramework
                 return message;
             }
 
+            // The adapter must be set first: init() uses it to populate the paired-device cache
+            // when persistence migration is disabled.
+            m_bluetoothDeviceManager.setBtAdapter(&m_btAdapter);
+
             // Must run before the PowerManager registration/initial onPowerModeChanged() call below:
             // that call needs the migration state and paired-device cache already restored.
             if (Core::ERROR_NONE != m_bluetoothDeviceManager.init(service)) {
@@ -448,13 +452,6 @@ namespace WPEFramework
                 }
             } else {
                 LOGERR("Failed to get PowerManager interface");
-            }
-
-            m_bluetoothDeviceManager.setBtAdapter(&m_btAdapter);
-            if (Core::ERROR_NONE != m_bluetoothDeviceManager.init(service)) {
-                message = "Failed to initialize BluetoothDeviceManager";
-                LOGERR("%s", message.c_str());
-                return message;
             }
 
             disconnectExternallyConnectedDevices();

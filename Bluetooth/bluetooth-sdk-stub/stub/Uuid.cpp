@@ -59,7 +59,9 @@ Uuid::Uuid(const std::string& id) {
 }
 
 bool Uuid::isWellKnown() const {
-  return std::equal(kBluetoothBaseUuidBytes.begin() + 2, kBluetoothBaseUuidBytes.end(), m_uuid + 2);
+  // Bytes 2-3 carry the 16-bit id; only the 0000xxxx-0000-1000-8000-00805F9B34FB tail must match.
+  return m_uuid[0] == 0 && m_uuid[1] == 0 &&
+         std::equal(kBluetoothBaseUuidBytes.begin() + 4, kBluetoothBaseUuidBytes.end(), m_uuid + 4);
 }
 
 std::string Uuid::toString(bool shortForm) const {

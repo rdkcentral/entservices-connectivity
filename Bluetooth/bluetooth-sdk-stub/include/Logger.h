@@ -46,7 +46,7 @@ class Logger {
     } else if (m_output == LogOutput::File) {
       m_logFile << currentTime() << " - " << level << ": ";
       (m_logFile << ... << args) << std::endl;
-    } else if (m_output == LogOutput::LogRedirect)
+    } else if (m_output == LogOutput::LogRedirect && m_logRedirect)
     {
       //convert args to string
       std::ostringstream oss;
@@ -71,35 +71,42 @@ class Logger {
     }
   }
   bool setLogOutput(LogOutput output, std::variant<std::string, std::unique_ptr<LogRedirect>> outputParam) {
-    // Reset previous output if changing
-    if (m_output == LogOutput::File && output != LogOutput::File)
-    {
-      if (m_logFile.is_open())
-      {
-        m_logFile.close();
-      }
-    }
-    if (m_output == LogOutput::LogRedirect && output != LogOutput::LogRedirect)
-    {
-      m_logRedirect.reset();
-    }
-    // Set new output
-    if (output == LogOutput::File && m_output != LogOutput::File) {
-      m_logFile.open(std::get<std::string>(outputParam), std::ios::app);
-      if (!m_logFile.is_open()) {
+    // The new sink is validated before the previous one is released, so a failure leaves the
+    // current output untouched.
+    if (output == LogOutput::File) {
+      const std::string* path = std::get_if<std::string>(&outputParam);
+      if (path == nullptr) {
         return false;
       }
+      std::ofstream file(*path, std::ios::app);
+      if (!file.is_open()) {
+        return false;
+      }
+      if (m_logFile.is_open()) {
+        m_logFile.close();
+      }
+      m_logFile = std::move(file);
+      m_logRedirect.reset();
       m_output = LogOutput::File;
-      return true;
     }
-    else if (output == LogOutput::LogRedirect && m_output != LogOutput::LogRedirect)
+    else if (output == LogOutput::LogRedirect)
     {
-      m_logRedirect = std::move(std::get<std::unique_ptr<LogRedirect>>(outputParam));
+      auto* redirect = std::get_if<std::unique_ptr<LogRedirect>>(&outputParam);
+      if (redirect == nullptr || !*redirect) {
+        return false;
+      }
+      if (m_logFile.is_open()) {
+        m_logFile.close();
+      }
+      m_logRedirect = std::move(*redirect);
       m_output = LogOutput::LogRedirect;
-      return true;
     }
-    else if (output == LogOutput::Stdout && m_output != LogOutput::Stdout)
+    else
     {
+      if (m_logFile.is_open()) {
+        m_logFile.close();
+      }
+      m_logRedirect.reset();
       m_output = LogOutput::Stdout;
     }
     return true;
