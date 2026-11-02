@@ -215,9 +215,9 @@ class Server {
    * @brief Constructs a new GATT Server instance
    * 
    * @param adapter Shared pointer to the Bluetooth adapter to use for this server
-   * @param connections Maximum number of concurrent client connections (default: unlimited)
+   * @param connections Maximum number of concurrent client connections (default: 0xFF, meaning no limit requested; the limit is not currently enforced)
    */
-  explicit Server(std::shared_ptr<Adapter> adapter, uint8_t connections = -1);
+  explicit Server(std::shared_ptr<Adapter> adapter, uint8_t connections = 0xFF);
   
   /**
    * @brief Destroys the GATT Server and cleans up resources

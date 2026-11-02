@@ -448,6 +448,10 @@ namespace WPEFramework {
 
         Core::hresult BluetoothDeviceManager::writeStorageFromCache()
         {
+            // Serializes snapshot + persist so an older snapshot can never overwrite a newer one.
+            // Lock order: _migrationLock -> _persistLock -> _adminLock; never take _persistLock while holding _adminLock.
+            Core::SafeSyncType<Core::CriticalSection> persistLock(_persistLock);
+
             PluginHost::IShell* service = AcquireService();
             if (service == nullptr) {
                 LOGERR("Service is null");
@@ -696,26 +700,21 @@ namespace WPEFramework {
 
         void BluetoothDeviceManager::setLastConnectTimeUtc(const std::string& deviceID)
         {
-            BluetoothDeviceInfo deviceInfo;
-            _adminLock.Lock();
-            Core::hresult result = getPairedDeviceInfo(deviceID, deviceInfo);
-            _adminLock.Unlock();
-
-            if (Core::ERROR_NONE != result) {
-                LOGERR("Device info is not found in cache for deviceID: %s", deviceID.c_str());
-                return;
-            }
-
             auto now = std::chrono::system_clock::now();
             std::time_t now_c = std::chrono::system_clock::to_time_t(now);
             const std::string currentUtcTime = std::to_string(static_cast<long long>(now_c));
 
+            _adminLock.Lock();
+            auto it = _pairedDeviceCache.find(deviceID);
+            if (it == _pairedDeviceCache.end()) {
+                _adminLock.Unlock();
+                LOGERR("Device info is not found in cache for deviceID: %s", deviceID.c_str());
+                return;
+            }
+
             LOGINFO("deviceID=%s, time=%s\n", deviceID.c_str(), currentUtcTime.c_str());
 
-            deviceInfo.lastConnectTimeUtc = std::move(currentUtcTime);
-
-            _adminLock.Lock();
-            _pairedDeviceCache[deviceID] = std::move(deviceInfo);
+            it->second.lastConnectTimeUtc = currentUtcTime;
             _adminLock.Unlock();
 
 #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
@@ -724,7 +723,7 @@ namespace WPEFramework {
                 return;
             }
 #endif
-            result = writeStorageFromCache();
+            const Core::hresult result = writeStorageFromCache();
             if (Core::ERROR_NONE != result) {
                 LOGERR("Failed to update storage from cache after setting lastConnectTimeUtc for deviceID=%s", deviceID.c_str());
             }

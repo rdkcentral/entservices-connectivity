@@ -145,9 +145,9 @@ class Audio : public EventEmitter<AudioEvent, AudioEventData> {
     };
 
     std::string m_deviceMacAddress; /**< MAC address of the Bluetooth device. */
-    WpCore* m_core; /**< Pointer to the WirePlumber core instance. */
-    WpNode* m_node; /**< Pointer to the WirePlumber node instance. */
-    WpProxy* m_device; /**< Pointer to the WirePlumber device proxy (for Route params). */
+    WpCore* m_core{nullptr}; /**< Pointer to the WirePlumber core instance. */
+    WpNode* m_node{nullptr}; /**< Pointer to the WirePlumber node instance. */
+    WpProxy* m_device{nullptr}; /**< Pointer to the WirePlumber device proxy (for Route params). */
     int m_routeIndex{0}; /**< PipeWire Route index for the audio sink. */
     int m_routeDevice{0}; /**< PipeWire Route device index. */
     std::map<std::string, std::tuple<float, bool, uint32_t>> m_audioSettings; /**< Map to store audio settings (volume, mute state, delay compensation) for each device. */

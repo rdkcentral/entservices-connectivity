@@ -44,7 +44,7 @@ inline std::string deviceDisplayName(const std::shared_ptr<bluetooth::Device>& d
     }
 
     std::string name;
-    if (device->name(name) && !DiscoveryNameGate::isNameSameAsAddress(name, mac)) return name;
+    if (device->name(name) && !name.empty() && !DiscoveryNameGate::isNameSameAsAddress(name, mac)) return name;
     return DiscoveryNameGate::fallbackName("", mac, 0);
 }
 

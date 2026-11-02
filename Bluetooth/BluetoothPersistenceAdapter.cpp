@@ -362,7 +362,11 @@ Core::hresult BluetoothPersistenceAdapter::Write(const std::unordered_map<std::s
 
     const std::string tmpPath = _filesystemPersistencePath + ".tmp";
     {
-        const int fd = open(tmpPath.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        // Remove any stale/attacker-planted temp file, then create exclusively without following symlinks.
+        if ((::unlink(tmpPath.c_str()) != 0) && (errno != ENOENT)) {
+            LOGWARN("Failed to unlink stale filesystem persistence temp file: %s", tmpPath.c_str());
+        }
+        const int fd = open(tmpPath.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0644);
         if (fd < 0) {
             LOGERR("Failed to open filesystem persistence temp file for write: %s", tmpPath.c_str());
             return Core::ERROR_GENERAL;
@@ -409,7 +413,7 @@ Core::hresult BluetoothPersistenceAdapter::Write(const std::unordered_map<std::s
     {
         const std::string::size_type slashPos = _filesystemPersistencePath.rfind('/');
         const std::string dirPath = (slashPos != std::string::npos) ? _filesystemPersistencePath.substr(0, slashPos) : std::string(".");
-        const int dirFd = open(dirPath.c_str(), O_RDONLY);
+        const int dirFd = open(dirPath.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
         if (dirFd < 0) {
             LOGWARN("Failed to open parent directory for fsync: %s", dirPath.c_str());
         } else {

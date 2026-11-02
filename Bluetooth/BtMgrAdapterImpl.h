@@ -21,6 +21,7 @@
 
 // BTMgr implementation of IBtAdapter.
 
+#include <atomic>
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -105,7 +106,7 @@ private:
     mutable std::unordered_map<std::string, std::string>    m_handleToMac;  // handle → MAC
     mutable std::unordered_map<std::string, std::string>    m_macToHandle;  // MAC → handle
 
-    static BtMgrAdapterImpl* s_instance;
+    static std::atomic<BtMgrAdapterImpl*> s_instance;
 };
 
 } // namespace Plugin

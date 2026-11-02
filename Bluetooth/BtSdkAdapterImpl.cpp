@@ -83,6 +83,7 @@ void reportManagerConstructionFailure() {
 } // namespace
 
 BtSdkAdapterImpl::~BtSdkAdapterImpl() {
+    deinit();
     stopAutoConnectWorker();
     stopPendingWorker();
 }
@@ -91,6 +92,8 @@ std::string BtSdkAdapterImpl::init(PluginHost::IShell* /* service */,
                                         BtEventCallbacks&& eventCallbacks,
                                         BtAuthCallbacks&& authCallbacks) {
     LOGINFO("BtSdkAdapterImpl::init: entry");
+    // Cleared before the SDK callbacks are registered below, so events from this init are not dropped.
+    m_shuttingDown = false;
     m_eventBridge = std::make_unique<EventBridge>(m_registry, std::move(eventCallbacks));
     m_authBridge  = std::make_unique<AuthBridge>(m_registry, std::move(authCallbacks));
 
@@ -167,18 +170,21 @@ std::string BtSdkAdapterImpl::init(PluginHost::IShell* /* service */,
 
 void BtSdkAdapterImpl::deinit() {
     LOGINFO("BtSdkAdapterImpl::deinit: entry");
-    // The worker emits through the event bridge and reads devices, so it must stop first.
-    stopAutoConnectWorker();
-    stopPendingWorker();
-    // The bridge's worker also uses SDK devices; stop it before they are released.
-    if (m_eventBridge) m_eventBridge->stop();
+    m_shuttingDown = true;
+    // Unregister the SDK callbacks first: a late DeviceDiscovered event would otherwise restart the
+    // pending worker (holdDevice) while the bridge and registry are being torn down.
     if (m_adapter) {
         for (auto& device : m_adapter->getDevices()) {
             unregisterDeviceEvents(device);
         }
         m_adapter->unregisterForEvents();
-        m_adapter.reset();
     }
+    // The workers emit through the event bridge and read devices, so they must stop before it and the adapter go.
+    stopAutoConnectWorker();
+    stopPendingWorker();
+    // The bridge's worker also uses SDK devices; stop it before they are released.
+    if (m_eventBridge) m_eventBridge->stop();
+    m_adapter.reset();
     m_manager.reset();
     m_eventBridge.reset();
     m_authBridge.reset();
@@ -473,13 +479,16 @@ bool BtSdkAdapterImpl::disconnectDevice(const std::string& handleStr, const std:
 bool BtSdkAdapterImpl::getDeviceProperties(const std::string& handleStr,
                                                  BtDeviceProperties& props) const {
     LOGINFO("BtSdkAdapterImpl::getDeviceProperties: entry handle=%s", handleStr.c_str());
-    std::lock_guard<std::mutex> lock(m_devicesMutex);
-    auto it = m_devicesByHandle.find(handleStr);
-    if (it == m_devicesByHandle.end()) {
+    std::shared_ptr<bluetooth::Device> device;
+    {
+        std::lock_guard<std::mutex> lock(m_devicesMutex);
+        auto it = m_devicesByHandle.find(handleStr);
+        if (it != m_devicesByHandle.end()) device = it->second;
+    }
+    if (!device) {
         LOGERR("BtSdkAdapterImpl::getDeviceProperties: exit with error: device handle was not found");
         return false;
     }
-    auto device = it->second;
     std::string mac;
     device->address(mac);
     props.handleStr = handleStr;
@@ -671,6 +680,10 @@ bool BtSdkAdapterImpl::runAutoConnectPass(bool secondAttempt) {
 void BtSdkAdapterImpl::onAdapterEvent(bluetooth::AdapterEvent event,
                                             bluetooth::AdapterEventData data) {
     LOGINFO("BtSdkAdapterImpl::onAdapterEvent: entry event=%d hasDevice=%d", static_cast<int>(event), data.device != nullptr);
+    if (m_shuttingDown) {
+        LOGINFO("BtSdkAdapterImpl::onAdapterEvent: exit event dropped, shutting down");
+        return;
+    }
     bool filtered = false;
     if (event == bluetooth::AdapterEvent::DeviceDiscovered && data.device) {
         registerDeviceEvents(data.device);
@@ -871,6 +884,8 @@ bool BtSdkAdapterImpl::isReadyToReport(const std::shared_ptr<bluetooth::Device>&
 
 void BtSdkAdapterImpl::holdDevice(const std::string& mac, bluetooth::AdapterEventData&& event) {
     std::lock_guard<std::mutex> lock(m_pendingMutex);
+    // Checked under m_pendingMutex, which stopPendingWorker() also takes, so the worker cannot restart after deinit() stops it.
+    if (m_shuttingDown) return;
     auto it = m_pending.find(mac);
     if (it == m_pending.end()) {
         m_pending.emplace(mac, PendingDevice{std::move(event), std::chrono::steady_clock::now(), false});

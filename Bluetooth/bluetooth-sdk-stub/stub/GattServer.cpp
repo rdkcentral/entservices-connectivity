@@ -25,6 +25,9 @@
 #include <bluetooth/GattServer.h>
 
 #include <algorithm>
+#include <atomic>
+#include <cstdint>
+#include <memory>
 #include <utility>
 
 namespace bluetooth {
@@ -44,9 +47,9 @@ class PathGenerator {
 
  private:
   PathGenerator() = default;
-  uint16_t m_descriptorIndex = 1;
-  uint16_t m_characteristicIndex = 1;
-  uint16_t m_serviceIndex = 1;
+  std::atomic<uint32_t> m_descriptorIndex{1};
+  std::atomic<uint32_t> m_characteristicIndex{1};
+  std::atomic<uint32_t> m_serviceIndex{1};
 };
 }  // namespace
 
@@ -80,7 +83,8 @@ class Descriptor::Impl {
   std::function<std::vector<uint8_t>()> m_readCb;
   std::function<void(std::vector<uint8_t>)> m_writeCb;
   std::vector<uint8_t> m_currentValue;
-  std::shared_ptr<gattServer::Characteristic> m_characteristic;
+  // Weak: the characteristic owns its descriptors, so a strong back-link would form a cycle.
+  std::weak_ptr<gattServer::Characteristic> m_characteristic;
 };
 
 Descriptor::Descriptor(std::string UUID, std::vector<uint8_t> value, uint16_t handle)
@@ -139,7 +143,8 @@ class Characteristic::Impl {
   std::function<std::vector<uint8_t>()> m_readCb;
   std::function<void(std::vector<uint8_t>)> m_writeCb;
   std::vector<uint8_t> m_currentValue;
-  std::shared_ptr<gattServer::Service> m_service;
+  // Weak: the service owns its characteristics, so a strong back-link would form a cycle.
+  std::weak_ptr<gattServer::Service> m_service;
   std::map<std::string, std::shared_ptr<Descriptor>> m_descriptors;
   GattProperties m_gattProperties;
   uint16_t m_mtu;

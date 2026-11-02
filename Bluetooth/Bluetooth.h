@@ -20,6 +20,8 @@
 #pragma once
 
 #include <atomic>
+#include <cstdint>
+#include <mutex>
 #include <thread>
 #include <memory>
 
@@ -78,7 +80,7 @@ namespace WPEFramework {
             // time) so BTMgr calls never block Thunder's notification thread, rapid transitions
             // can't run concurrently or out of order, and the shared Core::IWorkerPool can't be
             // starved by a stuck BTMgr call. Deinitialize() destroys this before tearing down
-            // any other member, which joins the thread and guarantees no handler is in flight.
+            // any other member; its destructor waits for the thread to stop, which guarantees no handler is in flight.
             class EXTERNAL PowerModeEventQueue : public Core::Thread {
 
             public:
@@ -96,9 +98,11 @@ namespace WPEFramework {
 
                 ~PowerModeEventQueue() override
                 {
-                    // Unblocks a thread parked in _queue.Extract() so Stop()/~Thread() can join it.
+                    // Disable() unblocks a thread parked in _queue.Extract(); Wait() must complete here,
+                    // before _queue/_bluetooth are destroyed, since ~Core::Thread runs after the members.
                     Stop();
                     _queue.Disable();
+                    Wait(Core::Thread::STOPPED | Core::Thread::BLOCKED, Core::infinite);
                 }
 
                 void Post(
@@ -207,7 +211,7 @@ namespace WPEFramework {
             bool isAdapterDiscoverable();
             string startDeviceDiscovery(int timeout, const string &discProfile = "");  //no profile: the backend applies its default scan (audio devices and gamepads on BTMgr; all devices, RCUs included, on the SDK)
             bool stopDeviceDiscovery();
-            void startDiscoveryTimer(int msec);
+            void startDiscoveryTimer(uint32_t msec);
             void stopDiscoveryTimer();
             void onDiscoveryTimer();
             JsonArray getDiscoveredDevices();
@@ -339,12 +343,17 @@ namespace WPEFramework {
             // Assuming that there will be only one threaded call at a time (which is the case for Bluetooth)
             // Otherwise we might need a thread for each async command for better performance
             Utils::ThreadRAII m_executionThread;
+            // Guards m_discoveryRunning and the scan start/stop sequence; recursive because
+            // startDeviceDiscovery()/onDiscoveryTimer() call stopDeviceDiscovery().
+            Core::CriticalSection m_discoveryLock;
             bool m_discoveryRunning;
             DiscoveryTimer m_discoveryTimer;
             friend class DiscoveryTimer;
             PowerManagerInterfaceRef m_powerManagerPlugin;
             Core::Sink<PowerManagerNotification> m_powerManagerNotification;
             std::unique_ptr<PowerModeEventQueue> m_powerModeEventQueue;
+            // Serializes onPowerModeChanged() between the queue thread and Initialize()'s initial call.
+            std::mutex m_powerModeLock;
             BluetoothDeviceManager m_bluetoothDeviceManager;
             BtAdapter m_btAdapter;
             // Set once Initialize() has finished; the power-on reconnect only runs from notifications after that.

@@ -17,6 +17,8 @@
 * limitations under the License.
 **/
 
+#include <algorithm>
+#include <cstdint>
 #include <fstream>
 
 #include "Bluetooth.h"
@@ -370,7 +372,7 @@ namespace WPEFramework
                 params["supportedProfile"] = profile;
                 params["pinRequired"]      = pinRequired ? "true" : "false";
                 if (pinRequired) params["pinValue"] = std::to_string(pinValue);
-                sendNotify(C_STR(EVT_PAIRING_REQUEST), params);
+                sendNotifyMaskParameters(C_STR(EVT_PAIRING_REQUEST), params);
             };
             authCbs.onConnectionRequest = [this](const std::string& deviceId, const std::string& name,
                                                  const std::string& deviceType, uint32_t vendorId,
@@ -467,12 +469,47 @@ namespace WPEFramework
 
         void Bluetooth::Deinitialize(PluginHost::IShell* service)
         {
+            Unregister(METHOD_GET_API_VERSION_NUMBER);
+            Unregister(METHOD_START_SCAN);
+            Unregister(METHOD_STOP_SCAN);
+            Unregister(METHOD_IS_DISCOVERABLE);
+            Unregister(METHOD_GET_DISCOVERED_DEVICES);
+            Unregister(METHOD_GET_PAIRED_DEVICES);
+            Unregister(METHOD_GET_CONNECTED_DEVICES);
+            Unregister(METHOD_CONNECT);
+            Unregister(METHOD_DISCONNECT);
+            Unregister(METHOD_SET_AUDIO_STREAM);
+            Unregister(METHOD_PAIR);
+            Unregister(METHOD_UNPAIR);
+            Unregister(METHOD_ENABLE);
+            Unregister(METHOD_DISABLE);
+            Unregister(METHOD_SET_DISCOVERABLE);
+            Unregister(METHOD_GET_NAME);
+            Unregister(METHOD_SET_NAME);
+            Unregister(METHOD_SET_AUDIO_PLAYBACK_COMMAND);
+            Unregister(METHOD_SET_EVENT_RESPONSE);
+            Unregister(METHOD_GET_DEVICE_INFO);
+            Unregister(METHOD_GET_AUDIO_INFO);
+            Unregister(METHOD_GET_DEVICE_VOLUME_MUTE_INFO);
+            Unregister(METHOD_SET_DEVICE_VOLUME_MUTE_INFO);
+            Unregister(METHOD_SET_AUTO_CONNECT);
+            Unregister(METHOD_GET_AUTO_CONNECT_STATUS);
+#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+            Unregister(METHOD_PERFORM_MIGRATION);
+            Unregister(METHOD_CLEAR_MIGRATION);
+#endif
+
             m_startupComplete = false;
             // Revoke unconditionally: m_discoveryTimer is scheduled on the shared,
             // process-wide static _discoveryTimer and outlives this instance otherwise,
             // firing into a destroyed Bluetooth object.
             stopDiscoveryTimer();
-            m_discoveryRunning = false;
+            {
+                // Revoke() does not wait for an in-flight Timed(); taking the lock lets it finish,
+                // and any later onDiscoveryTimer() sees false and returns without touching m_btAdapter.
+                Core::SafeSyncType<Core::CriticalSection> lock(m_discoveryLock);
+                m_discoveryRunning = false;
+            }
 
             if (m_powerManagerPlugin) {
                 m_powerManagerPlugin->Unregister(&m_powerManagerNotification);
@@ -521,6 +558,7 @@ namespace WPEFramework
 
         string Bluetooth::startDeviceDiscovery(int timeout, const string &discProfile)
         {
+            Core::SafeSyncType<Core::CriticalSection> lock(m_discoveryLock);
             if (m_discoveryRunning) {
                 LOGWARN("Discovery is in progress..!");
                 return STATUS_AVAILABLE;
@@ -537,7 +575,8 @@ namespace WPEFramework
             if (timeout <= 0) {
                 stopDeviceDiscovery();
             } else {
-                startDiscoveryTimer(timeout * 1000);
+                const uint64_t msec = static_cast<uint64_t>(timeout) * 1000;
+                startDiscoveryTimer(static_cast<uint32_t>(std::min<uint64_t>(msec, UINT32_MAX)));
             }
 
             return STATUS_AVAILABLE;
@@ -545,6 +584,7 @@ namespace WPEFramework
 
         bool Bluetooth::stopDeviceDiscovery()
         {
+            Core::SafeSyncType<Core::CriticalSection> lock(m_discoveryLock);
             if (m_discoveryRunning) {
                 stopDiscoveryTimer();
                 bool ok = m_btAdapter.stopScan();
@@ -556,7 +596,7 @@ namespace WPEFramework
             return false;
         }
 
-        void Bluetooth::startDiscoveryTimer(int msec)
+        void Bluetooth::startDiscoveryTimer(uint32_t msec)
         {
             stopDiscoveryTimer();
             _discoveryTimer.Schedule(Core::Time::Now().Add(msec), m_discoveryTimer);
@@ -569,6 +609,7 @@ namespace WPEFramework
 
         void Bluetooth::onDiscoveryTimer()
         {
+            Core::SafeSyncType<Core::CriticalSection> lock(m_discoveryLock);
             stopDeviceDiscovery();
         }
 
@@ -1464,6 +1505,7 @@ namespace WPEFramework
 
         void Bluetooth::onPowerModeChanged(const WPEFramework::Exchange::IPowerManager::PowerState currentState, const WPEFramework::Exchange::IPowerManager::PowerState newState)
         {
+            std::lock_guard<std::mutex> lock(m_powerModeLock);
             // BTMgr reconnects the previous audio device whenever the box powers on, independent of migration.
             // Runs after the adapter has been powered on, so it is invoked from each return path below.
             const auto reconnectOnPowerOn = [&]() {

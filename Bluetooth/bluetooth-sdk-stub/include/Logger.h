@@ -26,6 +26,7 @@
 #include <sstream>
 #include <string>
 #include <map>
+#include <mutex>
 #include <variant>
 
 #include "LogRedirect.h"
@@ -40,18 +41,17 @@ class Logger {
   }
   template <typename... Args>
   void log(std::string level, Args... args) {
+    // Format outside the lock; the lock is recursive because a redirect callback may log.
+    std::ostringstream oss;
+    (oss << ... << args);
+    std::string logMsg = oss.str();
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
     if (m_output == LogOutput::Stdout) {
-      std::cout << currentTime() << " - " << level << ": ";
-      (std::cout << ... << args) << std::endl;
+      std::cout << currentTime() << " - " << level << ": " << logMsg << std::endl;
     } else if (m_output == LogOutput::File) {
-      m_logFile << currentTime() << " - " << level << ": ";
-      (m_logFile << ... << args) << std::endl;
+      m_logFile << currentTime() << " - " << level << ": " << logMsg << std::endl;
     } else if (m_output == LogOutput::LogRedirect && m_logRedirect)
     {
-      //convert args to string
-      std::ostringstream oss;
-      (oss << ... << args);
-      std::string logMsg = oss.str();
       switch (level[0]) {
         case 'D':
           m_logRedirect->m_debug(logMsg);
@@ -71,6 +71,7 @@ class Logger {
     }
   }
   bool setLogOutput(LogOutput output, std::variant<std::string, std::unique_ptr<LogRedirect>> outputParam) {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
     // The new sink is validated before the previous one is released, so a failure leaves the
     // current output untouched.
     if (output == LogOutput::File) {
@@ -123,15 +124,21 @@ class Logger {
 
   Logger(const Logger&) = delete;
   Logger& operator=(const Logger&) = delete;
+  std::recursive_mutex m_mutex;
   LogOutput m_output = LogOutput::Stdout;
   std::ofstream m_logFile;
   std::unique_ptr<LogRedirect> m_logRedirect;
   std::string currentTime() {
     auto now = std::chrono::system_clock::now();
     std::time_t now_time = std::chrono::system_clock::to_time_t(now);
-    std::tm* now_tm = std::localtime(&now_time);
+    std::tm now_tm{};
+    if (localtime_r(&now_time, &now_tm) == nullptr) {
+      return "0000-00-00 00:00:00";
+    }
     char buffer[20];
-    std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", now_tm);
+    if (std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", &now_tm) == 0) {
+      return "0000-00-00 00:00:00";
+    }
     return std::string(buffer);
   }
 };

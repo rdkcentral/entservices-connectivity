@@ -33,7 +33,7 @@ class Advertisement::Impl {
   void Type(AdvertisementType type) { m_type = type; }
   void ServiceUUIDs(std::vector<Uuid> serviceUuids) { m_serviceUuids = std::move(serviceUuids); }
   void ManufacturerData(std::map<uint16_t, std::vector<uint8_t>>& data) { m_manufacturerData = data; }
-  void ServiceData(std::vector<Uuid>& serviceUuids) { m_serviceUuids = serviceUuids; }
+  void ServiceData(std::vector<Uuid>& serviceUuids) { m_serviceData = serviceUuids; }
   void Discoverable(bool discoverable) { m_discoverable = discoverable; }
   void DiscoverableTimeout(std::chrono::seconds value) { m_discoverableTimeout = value; }
   void LocalName(std::string name) { m_localName = std::move(name); }
@@ -48,6 +48,7 @@ class Advertisement::Impl {
  private:
   AdvertisementType m_type{AdvertisementType::Peripheral};
   std::vector<Uuid> m_serviceUuids;
+  std::vector<Uuid> m_serviceData;
   std::map<uint16_t, std::vector<uint8_t>> m_manufacturerData;
   bool m_discoverable{false};
   std::chrono::seconds m_discoverableTimeout{0};

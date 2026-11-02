@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cstdio>
 #include <iomanip>
 #include <sstream>
@@ -46,6 +47,18 @@ Uuid::Uuid(uint16_t id) {
 }
 
 Uuid::Uuid(const std::string& id) {
+  // Strict canonical form xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx; sscanf alone would accept loose input.
+  bool valid = id.size() == 36;
+  for (size_t i = 0; valid && i < id.size(); ++i) {
+    if (i == 8 || i == 13 || i == 18 || i == 23) {
+      valid = id[i] == '-';
+    } else {
+      valid = std::isxdigit(static_cast<unsigned char>(id[i])) != 0;
+    }
+  }
+  if (!valid) {
+    throw std::runtime_error("Invalid 128-bit uuid:" + id);
+  }
   unsigned int bytes[16];
   const int matched = std::sscanf(id.c_str(),
       "%2x%2x%2x%2x-%2x%2x-%2x%2x-%2x%2x-%2x%2x%2x%2x%2x%2x",

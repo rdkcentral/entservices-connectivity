@@ -56,7 +56,7 @@ namespace Plugin {
  * PairingRequest always escalates to client.
  *
  * Threading: for escalated cases the callback blocks the D-Bus dispatch
- * thread on a per-device condition variable (max AUTH_TIMEOUT_SECONDS).
+ * thread on a per-request condition variable (max AUTH_TIMEOUT_SECONDS).
  * Thunder JSON-RPC is D-Bus-independent so respondToEvent delivery is unaffected.
  */
 class AuthBridge {
@@ -106,9 +106,6 @@ public:
         m_isOperationInProgress = std::move(predicate);
     }
 
-    // Resolves every waiting request as rejected so blocked callers return (used on shutdown).
-    void abortPending();
-
 private:
     bool isAutoAcceptDevice(const std::string& deviceType,
                             const std::string& handleStr,
@@ -119,6 +116,9 @@ private:
         bool accepted{false};
         std::condition_variable cv;
     };
+
+    // Removes the m_pendingAuths entry for mac only if it is still this request's pending object.
+    void erasePending(const std::string& mac, const std::shared_ptr<PendingAuth>& pending);
 
     DeviceRegistry& m_registry;
     BtAuthCallbacks m_callbacks;

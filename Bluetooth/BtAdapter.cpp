@@ -22,6 +22,7 @@
 #include "BtSdkAdapterImpl.h"
 #include "BtMgrAdapterImpl.h"
 
+#include <atomic>
 #include <cassert>
 #include <cctype>
 #include <cstdlib>
@@ -67,7 +68,8 @@ bool useSdkBackend() {
 namespace WPEFramework {
 namespace Plugin {
 
-IBtAdapter* BtAdapter::impl = nullptr;
+std::atomic<IBtAdapter*> BtAdapter::impl{nullptr};
+std::atomic<bool> BtAdapter::injected{false};
 
 // Both backends are always linked/compiled in now; only one is ever selected
 // (see ensureImpl()).
@@ -76,34 +78,45 @@ static BtSdkAdapterImpl g_btSdkAdapterImpl;
 
 void BtAdapter::setImpl(IBtAdapter* newImpl) {
     // Matches the pattern used by Btmgr::setImpl in entservices-testframework.
-    assert((impl == nullptr) || (newImpl == nullptr));
-    impl = newImpl;
+    assert((impl.load(std::memory_order_acquire) == nullptr) || (newImpl == nullptr));
+    impl.store(newImpl, std::memory_order_release);
+    injected.store(newImpl != nullptr, std::memory_order_release);
 }
 
 std::string BtAdapter::ensureImpl() {
-    if (impl) {
+    if (impl.load(std::memory_order_acquire)) {
         return {};
     }
 
-    impl = useSdkBackend() ? static_cast<IBtAdapter*>(&g_btSdkAdapterImpl)
-                           : static_cast<IBtAdapter*>(&g_btMgrAdapterImpl);
+    IBtAdapter* chosen = useSdkBackend() ? static_cast<IBtAdapter*>(&g_btSdkAdapterImpl)
+                                         : static_cast<IBtAdapter*>(&g_btMgrAdapterImpl);
+    // Never overwrite an impl published concurrently (e.g. by init()).
+    IBtAdapter* expected = nullptr;
+    impl.compare_exchange_strong(expected, chosen, std::memory_order_acq_rel, std::memory_order_acquire);
     return {};
 }
 
 IBtAdapter& BtAdapter::getImpl() {
-    const std::string error = ensureImpl();
-    assert(error.empty() && impl != nullptr);
-    return *impl;
+    IBtAdapter* current = nullptr;
+    // Retry covers a concurrent deinit() clearing impl between ensureImpl() and the load.
+    while ((current = impl.load(std::memory_order_acquire)) == nullptr) {
+        const std::string error = ensureImpl();
+        assert(error.empty());
+        (void)error;
+    }
+    return *current;
 }
 
 std::string BtAdapter::init(PluginHost::IShell* service,
                             BtEventCallbacks&& evtCbs,
                             BtAuthCallbacks&& authCbs) {
     printf("*** _DEBUG: BtAdapter::init: entry\n");
-    if (impl) {
+    // Only an explicit setImpl() injection skips probing; an impl chosen lazily by ensureImpl() must not.
+    IBtAdapter* injectedImpl = injected.load(std::memory_order_acquire) ? impl.load(std::memory_order_acquire) : nullptr;
+    if (injectedImpl) {
         // setImpl() test injection already fixed the backend; skip probing.
         printf("*** _DEBUG: BtAdapter::init: impl already set\n");
-        return impl->init(service, std::move(evtCbs), std::move(authCbs));
+        return injectedImpl->init(service, std::move(evtCbs), std::move(authCbs));
     }
 
     if (useSdkBackend()) {
@@ -115,7 +128,7 @@ std::string BtAdapter::init(PluginHost::IShell* service,
         std::string sdkError = g_btSdkAdapterImpl.init(service, BtEventCallbacks(evtCbs), BtAuthCallbacks(authCbs));
         printf("*** _DEBUG: BtAdapter::init: sdkError: %s\n", sdkError.c_str());
         if (sdkError.empty()) {
-            impl = &g_btSdkAdapterImpl;
+            impl.store(&g_btSdkAdapterImpl, std::memory_order_release);
             return {};
         }
         // Release whatever the failed init partially constructed (e.g. the
@@ -123,17 +136,18 @@ std::string BtAdapter::init(PluginHost::IShell* service,
         g_btSdkAdapterImpl.deinit();
     }
 
-    impl = &g_btMgrAdapterImpl;
-    return impl->init(service, std::move(evtCbs), std::move(authCbs));
+    impl.store(&g_btMgrAdapterImpl, std::memory_order_release);
+    return g_btMgrAdapterImpl.init(service, std::move(evtCbs), std::move(authCbs));
 }
 
 void BtAdapter::deinit() {
-    if (!impl) {
+    IBtAdapter* current = impl.load(std::memory_order_acquire);
+    if (!current) {
         return;
     }
-    impl->deinit();
-    // All instances are static; no dynamic cleanup needed.
-    impl = nullptr;
+    current->deinit();
+    // All instances are static; no dynamic cleanup needed. CAS so a concurrent setImpl() is not clobbered.
+    impl.compare_exchange_strong(current, nullptr, std::memory_order_acq_rel, std::memory_order_acquire);
 }
 
 bool BtAdapter::getAdapterPowered(bool& p) const  { return getImpl().getAdapterPowered(p); }

@@ -90,6 +90,8 @@ namespace WPEFramework {
             private:
 
                 mutable Core::CriticalSection _adminLock;
+                // Serializes writeStorageFromCache(); lock order: _migrationLock -> _persistLock -> _adminLock.
+                mutable Core::CriticalSection _persistLock;
                 PluginHost::IShell* _service = nullptr;
                 std::unordered_map<std::string /* deviceID */, BluetoothDeviceInfo /* deviceInfo */> _pairedDeviceCache;
 

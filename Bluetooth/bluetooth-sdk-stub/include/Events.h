@@ -32,6 +32,8 @@ class EventEmitter {
     std::lock_guard<std::mutex> lock(m_eventMtx);
     m_eventCallback = std::move(eventCallback);
   }
+  // Does not wait for a callback already copied by emitEvent(); callers must keep any state the
+  // callback uses alive until in-flight calls have finished.
   void unregisterForEvents() {
     std::lock_guard<std::mutex> lock(m_eventMtx);
     m_eventCallback = nullptr;

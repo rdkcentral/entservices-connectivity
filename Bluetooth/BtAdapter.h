@@ -31,6 +31,8 @@
 
 #include "IBtAdapter.h"
 
+#include <atomic>
+
 namespace WPEFramework {
 namespace PluginHost { class IShell; }
 namespace Plugin {
@@ -93,7 +95,9 @@ public:
     static std::string handleForMac(const std::string& mac);
 
 private:
-    static IBtAdapter* impl;
+    static std::atomic<IBtAdapter*> impl;
+    // True only when impl was set via setImpl() (test injection); a lazily chosen impl does not count.
+    static std::atomic<bool> injected;
     static std::string ensureImpl();
     static IBtAdapter& getImpl();
 };

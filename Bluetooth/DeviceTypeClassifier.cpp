@@ -25,6 +25,17 @@
 namespace WPEFramework {
 namespace Plugin {
 
+namespace {
+
+// True only for the Bluetooth base-UUID form "<prefix>-0000-1000-8000-00805f9b34fb" (lowercase), so a
+// custom 128-bit UUID that merely contains the 16-bit value is not mistaken for the standard service.
+bool isBaseUuid(const std::string& lower, const char* prefix) {
+    return lower.compare(0, 8, prefix) == 0
+        && lower.compare(8, std::string::npos, "-0000-1000-8000-00805f9b34fb") == 0;
+}
+
+} // namespace
+
 // static
 std::string DeviceTypeClassifier::classify(uint16_t appearance, uint32_t classOfDevice,
                                             const std::vector<std::string>& uuids) {
@@ -128,15 +139,15 @@ std::string DeviceTypeClassifier::classifyByUuids(const std::vector<std::string>
     bool hasHid         = false;
 
     for (const auto& uuid : uuids) {
-        // UUIDs from BlueZ are full 128-bit strings; match on the 16-bit base portion.
+        // UUIDs from BlueZ are full 128-bit strings; match the 16-bit service in the Bluetooth base UUID.
         std::string lower = uuid;
         std::transform(lower.begin(), lower.end(), lower.begin(),
                        [](unsigned char c) { return std::tolower(c); });
 
-        if (lower.find(UUID_AUDIO_SINK) != std::string::npos)                  hasAudioSink   = true;
-        if (lower.find(UUID_AUDIO_SOURCE) != std::string::npos)                hasAudioSource = true;
-        if (lower.find(UUID_ADVANCED_AUDIO_DISTRIBUTION) != std::string::npos) hasA2dp        = true;
-        if (lower.find(UUID_HID) != std::string::npos)                         hasHid         = true;
+        if (isBaseUuid(lower, UUID_AUDIO_SINK))                  hasAudioSink   = true;
+        if (isBaseUuid(lower, UUID_AUDIO_SOURCE))                hasAudioSource = true;
+        if (isBaseUuid(lower, UUID_ADVANCED_AUDIO_DISTRIBUTION)) hasA2dp        = true;
+        if (isBaseUuid(lower, UUID_HID))                         hasHid         = true;
     }
 
     if (hasHid)                      return "HUMAN INTERFACE DEVICE";

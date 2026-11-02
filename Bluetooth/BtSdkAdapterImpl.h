@@ -154,6 +154,7 @@ private:
     std::unordered_map<std::string, PendingDevice> m_pending;   // keyed by MAC
     std::thread                              m_pendingThread;
     bool                                     m_pendingStop{false};
+    std::atomic<bool>                        m_shuttingDown{false};   // set by deinit(), cleared by init()
 
     // Startup auto-connect worker.
     std::mutex                               m_autoConnectMutex;

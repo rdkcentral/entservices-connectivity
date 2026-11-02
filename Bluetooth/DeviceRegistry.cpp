@@ -17,16 +17,31 @@
 * limitations under the License.
 **/
 
+#include "Module.h"
 #include "DeviceRegistry.h"
 
+#include <cctype>
 #include <cstdlib>
+#include <UtilsLogging.h>
 
 namespace WPEFramework {
 namespace Plugin {
 
 // static
 std::string DeviceRegistry::deriveHandle(const std::string& mac) {
-    if (mac.size() < 17) return "0";
+    // Expect "XX:XX:XX:XX:XX:XX"; "0" is the established failure value (callers require non-empty).
+    bool valid = (mac.size() == 17);
+    for (size_t i = 0; valid && i < 17; ++i) {
+        if ((i % 3) == 2) {
+            valid = (mac[i] == ':');
+        } else {
+            valid = std::isxdigit(static_cast<unsigned char>(mac[i])) != 0;
+        }
+    }
+    if (!valid) {
+        LOGWARN("Invalid MAC address for handle derivation: '%s'", mac.c_str());
+        return "0";
+    }
     char hexStr[13] = {};
     hexStr[0]  = mac[0];  hexStr[1]  = mac[1];
     hexStr[2]  = mac[3];  hexStr[3]  = mac[4];

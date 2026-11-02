@@ -98,7 +98,8 @@ bool AuthBridge::onAuthRequest(bluetooth::AuthorisationType type, std::shared_pt
         bool timedOut = !pending->cv.wait_for(lk,
             std::chrono::seconds(AUTH_TIMEOUT_SECONDS),
             [&pending]{ return pending->resolved; });
-        m_pendingAuths.erase(mac);
+        lk.unlock();
+        erasePending(mac, pending);
 
         if (timedOut) {
             LOGERR("Auth timeout for pairing request from %s, auto-rejecting", mac.c_str());
@@ -158,13 +159,21 @@ AuthBridge::ConnectDecision AuthBridge::decideConnection(std::shared_ptr<bluetoo
 
     std::unique_lock<std::mutex> lk(m_pendingMutex);
     bool timedOut = !pending->cv.wait_for(lk, clientTimeout, [&pending]{ return pending->resolved; });
-    m_pendingAuths.erase(mac);
+    lk.unlock();
+    erasePending(mac, pending);
 
     if (timedOut) {
         LOGERR("Auth timeout for connection request from %s, auto-rejecting", mac.c_str());
         return ConnectDecision::TimedOut;
     }
     return pending->accepted ? ConnectDecision::AcceptedByClient : ConnectDecision::Rejected;
+}
+
+// Erases only this request's entry: a newer request for the same MAC may have replaced it.
+void AuthBridge::erasePending(const std::string& mac, const std::shared_ptr<PendingAuth>& pending) {
+    std::lock_guard<std::mutex> lock(m_pendingMutex);
+    auto it = m_pendingAuths.find(mac);
+    if (it != m_pendingAuths.end() && it->second == pending) m_pendingAuths.erase(it);
 }
 
 bool AuthBridge::onRespondToEvent(const std::string& mac, bool accepted) {

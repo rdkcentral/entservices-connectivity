@@ -20,8 +20,10 @@
 #include "Module.h"
 #include "BtMgrAdapterImpl.h"
 
+#include <condition_variable>
 #include <cstdlib>
 #include <cstring>
+#include <mutex>
 
 #include "btmgr.h"
 #include <UtilsIarm.h>
@@ -52,11 +54,40 @@ constexpr const char* EVT_PAIRING_REQUEST        = "onPairingRequest";
 constexpr const char* EVT_CONNECTION_REQUEST     = "onConnectionRequest";
 constexpr const char* EVT_PLAYBACK_REQUEST       = "onPlaybackRequest";
 
+bool parseHandle(const std::string& handleStr, BTRMgrDeviceHandle& handle) {
+    try {
+        handle = static_cast<BTRMgrDeviceHandle>(std::stoll(handleStr));
+    }
+    catch (...) {
+        return false;
+    }
+    return true;
+}
+
+// Tracks event-thread dispatches in flight so deinit() can wait for them to drain.
+std::mutex              s_inflightMutex;
+std::condition_variable s_inflightCv;
+int                     s_inflightCount = 0;
+
+class InflightGuard {
+public:
+    InflightGuard() {
+        std::lock_guard<std::mutex> lk(s_inflightMutex);
+        ++s_inflightCount;
+    }
+    ~InflightGuard() {
+        std::lock_guard<std::mutex> lk(s_inflightMutex);
+        if (--s_inflightCount == 0) s_inflightCv.notify_all();
+    }
+    InflightGuard(const InflightGuard&) = delete;
+    InflightGuard& operator=(const InflightGuard&) = delete;
+};
+
 } // namespace
 
 // ── Static instance pointer for IARM callback ────────────────────────────────
 
-BtMgrAdapterImpl* BtMgrAdapterImpl::s_instance = nullptr;
+std::atomic<BtMgrAdapterImpl*> BtMgrAdapterImpl::s_instance{nullptr};
 
 // ── Lifecycle ────────────────────────────────────────────────────────────────
 
@@ -76,15 +107,23 @@ std::string BtMgrAdapterImpl::init(PluginHost::IShell* /* service */,
         return std::string("BTRMGR_RegisterForCallbacks failed: ") + std::to_string(rc);
     }
 
-    BTRMGR_RegisterEventCallback(
+    rc = BTRMGR_RegisterEventCallback(
         // coverity[pass_by_value] - BTRMGR_EventCallback ABI requires an event value.
         [](BTRMGR_EventMessage_t eventMsg) -> BTRMGR_Result_t {
-            if (s_instance) {
-                 s_instance->onEvent(&eventMsg, sizeof(eventMsg));
+            // Count the dispatch before loading the pointer so deinit() cannot miss it.
+            InflightGuard guard;
+            BtMgrAdapterImpl* inst = s_instance.load();
+            if (inst) {
+                 inst->onEvent(&eventMsg, sizeof(eventMsg));
                  return BTRMGR_RESULT_SUCCESS;
              }
              return BTRMGR_RESULT_INIT_FAILED;
         });
+    if (rc != BTRMGR_RESULT_SUCCESS) {
+        s_instance = nullptr;
+        BTRMGR_UnRegisterFromCallbacks(kIarmClientName);
+        return std::string("BTRMGR_RegisterEventCallback failed: ") + std::to_string(rc);
+    }
 
     return "";
 }
@@ -92,6 +131,10 @@ std::string BtMgrAdapterImpl::init(PluginHost::IShell* /* service */,
 void BtMgrAdapterImpl::deinit() {
     s_instance = nullptr;
     BTRMGR_UnRegisterFromCallbacks(kIarmClientName);
+
+    // Must not be called from the BTRMGR event thread, or this wait never completes.
+    std::unique_lock<std::mutex> lk(s_inflightMutex);
+    s_inflightCv.wait(lk, [] { return s_inflightCount == 0; });
 }
 
 // ── Adapter operations ────────────────────────────────────────────────────────
@@ -223,11 +266,7 @@ std::vector<IBtAdapter::BtDeviceInfo> BtMgrAdapterImpl::getConnectedDevices() co
 
 bool BtMgrAdapterImpl::pairDevice(const std::string& handleStr) {
     BTRMgrDeviceHandle h = 0;
-
-    try {
-        h = static_cast<BTRMgrDeviceHandle>(std::stoll(handleStr));
-    }
-    catch (...) {
+    if (!parseHandle(handleStr, h)) {
         return false;
     }
 
@@ -235,12 +274,20 @@ bool BtMgrAdapterImpl::pairDevice(const std::string& handleStr) {
 }
 
 bool BtMgrAdapterImpl::unpairDevice(const std::string& handleStr) {
-    BTRMgrDeviceHandle h = static_cast<BTRMgrDeviceHandle>(std::stoll(handleStr));
+    BTRMgrDeviceHandle h = 0;
+    if (!parseHandle(handleStr, h)) {
+        LOGERR("Invalid device handle '%s'", handleStr.c_str());
+        return false;
+    }
     return BTRMGR_UnpairDevice(0, h) == BTRMGR_RESULT_SUCCESS;
 }
 
 bool BtMgrAdapterImpl::connectDevice(const std::string& handleStr, const std::string& deviceType) {
-    BTRMgrDeviceHandle h = static_cast<BTRMgrDeviceHandle>(std::stoll(handleStr));
+    BTRMgrDeviceHandle h = 0;
+    if (!parseHandle(handleStr, h)) {
+        LOGERR("Invalid device handle '%s'", handleStr.c_str());
+        return false;
+    }
     if (Utils::String::equal(deviceType, "LE TILE")) {
         return BTRMGR_ConnectToDevice(0, h, BTRMGR_DEVICE_OP_TYPE_LE) == BTRMGR_RESULT_SUCCESS;
     }
@@ -257,7 +304,11 @@ bool BtMgrAdapterImpl::connectDevice(const std::string& handleStr, const std::st
 }
 
 bool BtMgrAdapterImpl::disconnectDevice(const std::string& handleStr, const std::string& deviceType) {
-    BTRMgrDeviceHandle h = static_cast<BTRMgrDeviceHandle>(std::stoll(handleStr));
+    BTRMgrDeviceHandle h = 0;
+    if (!parseHandle(handleStr, h)) {
+        LOGERR("Invalid device handle '%s'", handleStr.c_str());
+        return false;
+    }
     if (Utils::String::equal(deviceType, "LE TILE") ||
         Utils::String::equal(deviceType, "HUMAN INTERFACE DEVICE") ||
         Utils::String::contains(deviceType, "KEYBOARD") ||
@@ -273,7 +324,11 @@ bool BtMgrAdapterImpl::disconnectDevice(const std::string& handleStr, const std:
 
 bool BtMgrAdapterImpl::getDeviceProperties(const std::string& handleStr,
                                              BtDeviceProperties& props) const {
-    BTRMgrDeviceHandle h = static_cast<BTRMgrDeviceHandle>(std::stoll(handleStr));
+    BTRMgrDeviceHandle h = 0;
+    if (!parseHandle(handleStr, h)) {
+        LOGERR("Invalid device handle '%s'", handleStr.c_str());
+        return false;
+    }
     BTRMGR_DevicesProperty_t p;
     memset(&p, 0, sizeof(p));
     if (BTRMGR_GetDeviceProperties(0, h, &p) != BTRMGR_RESULT_SUCCESS) return false;
@@ -311,7 +366,12 @@ bool BtMgrAdapterImpl::respondToEvent(const std::string& handleStr, const std::s
     BTRMGR_EventResponse_t rsp;
     memset(&rsp, 0, sizeof(rsp));
 
-    rsp.m_deviceHandle = static_cast<BTRMgrDeviceHandle>(std::stoll(handleStr));
+    BTRMgrDeviceHandle h = 0;
+    if (!parseHandle(handleStr, h)) {
+        LOGERR("Invalid device handle '%s'", handleStr.c_str());
+        return false;
+    }
+    rsp.m_deviceHandle = h;
 
     if (eventType == EVT_PAIRING_REQUEST) {
         rsp.m_eventType = BTRMGR_EVENT_RECEIVED_EXTERNAL_PAIR_REQUEST;
@@ -320,7 +380,8 @@ bool BtMgrAdapterImpl::respondToEvent(const std::string& handleStr, const std::s
     } else if (eventType == EVT_PLAYBACK_REQUEST) {
         rsp.m_eventType = BTRMGR_EVENT_RECEIVED_EXTERNAL_PLAYBACK_REQUEST;
     } else {
-        rsp.m_eventType = BTRMGR_EVENT_MAX;
+        LOGERR("Unrecognised event type '%s'", eventType.c_str());
+        return false;
     }
     rsp.m_eventResp = accepted ? 1 : 0;
 
@@ -342,7 +403,12 @@ bool BtMgrAdapterImpl::respondToEvent(const std::string& mac,
     }
     if (handleStr.empty()) return false;
 
-    rsp.m_deviceHandle = static_cast<BTRMgrDeviceHandle>(std::stoll(handleStr));
+    BTRMgrDeviceHandle h = 0;
+    if (!parseHandle(handleStr, h)) {
+        LOGERR("Invalid device handle '%s'", handleStr.c_str());
+        return false;
+    }
+    rsp.m_deviceHandle = h;
     rsp.m_eventType    = static_cast<BTRMGR_Events_t>(eventType);
     rsp.m_eventResp    = accepted ? 1 : 0;
 
@@ -485,8 +551,8 @@ void BtMgrAdapterImpl::onEvent(void* data, size_t /*len*/) {
         const auto& d = msg.m_discoveredDevice;
         std::string handleStr = std::to_string(d.m_deviceHandle);
         const char* dt = BTRMGR_GetDeviceTypeAsString(d.m_deviceType);
-        bool hasAC = false; bool ac = false;
-        if (m_evtCbs.getAutoConnect) m_evtCbs.getAutoConnect(handleStr, ac), hasAC = true;
+        bool ac = false;
+        bool hasAC = m_evtCbs.getAutoConnect && m_evtCbs.getAutoConnect(handleStr, ac);
         if (m_evtCbs.onStatusChanged)
             m_evtCbs.onStatusChanged(EVT_STATUS_CHANGED, STATUS_PAIRING_CHANGE,
                                      handleStr, d.m_name, dt ? dt : "UNKNOWN",
@@ -518,8 +584,8 @@ void BtMgrAdapterImpl::onEvent(void* data, size_t /*len*/) {
         const auto& d = msg.m_pairedDevice;
         std::string handleStr = std::to_string(d.m_deviceHandle);
         const char* dt = BTRMGR_GetDeviceTypeAsString(d.m_deviceType);
-        bool hasAC = false; bool ac = false;
-        if (m_evtCbs.getAutoConnect) m_evtCbs.getAutoConnect(handleStr, ac), hasAC = true;
+        bool ac = false;
+        bool hasAC = m_evtCbs.getAutoConnect && m_evtCbs.getAutoConnect(handleStr, ac);
         if (m_evtCbs.onStatusChanged)
             m_evtCbs.onStatusChanged(EVT_STATUS_CHANGED, STATUS_CONNECTION_CHANGE,
                                      handleStr, d.m_name, dt ? dt : "UNKNOWN",
@@ -766,7 +832,8 @@ void BtMgrAdapterImpl::cacheHandleToMac(const std::string& handleStr,
 // static
 int BtMgrAdapterImpl::staticEventCallback(const char* /*owner*/, int /*eventId*/,
                                             void* data, size_t len) {
-    if (s_instance) s_instance->onEvent(data, len);
+    BtMgrAdapterImpl* inst = s_instance.load();
+    if (inst) inst->onEvent(data, len);
     return 0;
 }
 
