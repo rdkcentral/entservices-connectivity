@@ -32,6 +32,8 @@ namespace Plugin {
 // The name to show for a device. Like btrCore, the Alias is preferred over the Name; bluetooth::Device::name()
 // is only a fallback, as it returns the literal "Unnamed Advertisement" when BlueZ has no Name.
 inline std::string deviceDisplayName(const std::shared_ptr<bluetooth::Device>& device) {
+    if (!device) return "";
+
     std::string mac;
     device->address(mac);
 

@@ -26,7 +26,6 @@
 
 #include <map>
 #include <memory>
-#include <mutex>
 #include <string>
 #include <vector>
 
@@ -87,9 +86,9 @@ struct ScanFilter {
   /**
    * @brief Default constructor initializing filter for all devices with no pattern
    */
-  ScanFilter() : type(ScanType::AllDevices), pattern("") {}
+  ScanFilter() = default;
   
-  ScanType type;                    ///< Type of scan to perform
+  ScanType type{ScanType::AllDevices};                  ///< Type of scan to perform
   std::vector<Uuid> uuids;         ///< List of service UUIDs to filter for
   std::string pattern;             ///< Name pattern to match against device names
 };

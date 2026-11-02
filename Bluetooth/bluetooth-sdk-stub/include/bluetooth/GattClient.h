@@ -198,9 +198,6 @@ class Service {
   friend class Client;
 };
 
-using gattClient::Service;
-using gattClient::Characteristic;
-using gattClient::Descriptor;
 /**
  * @class Client
  * @brief Main GATT client class for managing services, characteristics, and descriptors

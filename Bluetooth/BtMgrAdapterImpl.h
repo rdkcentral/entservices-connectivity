@@ -80,22 +80,10 @@ public:
     BtMediaTrackInfo   getMediaTrackInfo(long long int deviceID) const override;
 
 private:
-    // Derives the stable numeric handle string from a MAC address.
-    // Mirrors DeviceRegistry::deriveHandle (strtoll base-16 over colons-stripped MAC).
-    static std::string deriveHandle(const std::string& mac);
-
     // Maps BTRMGR device operation type from a profile string.
     static int deviceOpTypeFromProfile(const std::string& profile);
 
-    // Static IARM event callback — routes to s_instance.
-    static int staticEventCallback(const char* owner, int eventId,
-                                   void* data, size_t len);
-
     void onEvent(void* data, size_t len);
-
-    // Used only for the connection-request auto-accept path in onEvent (mac-keyed,
-    // matches how the underlying BTRMGR event carries the device address).
-    bool respondToEvent(const std::string& mac, int eventType, bool accepted);
 
     void cacheHandleToMac(const std::string& handleStr, const std::string& mac) const;
 
@@ -104,7 +92,6 @@ private:
 
     mutable std::mutex                                       m_mapMutex;
     mutable std::unordered_map<std::string, std::string>    m_handleToMac;  // handle → MAC
-    mutable std::unordered_map<std::string, std::string>    m_macToHandle;  // MAC → handle
 
     static std::atomic<BtMgrAdapterImpl*> s_instance;
 };

@@ -82,10 +82,7 @@ const string WPEFramework::Plugin::Bluetooth::EVT_REQUEST_FAILED = "onRequestFai
 const string WPEFramework::Plugin::Bluetooth::EVT_CONNECTION_REQUEST = "onConnectionRequest";
 const string WPEFramework::Plugin::Bluetooth::EVT_PLAYBACK_REQUEST = "onPlaybackRequest";
 
-const string WPEFramework::Plugin::Bluetooth::EVT_PLAYBACK_STARTED = "onPlaybackChange"; // action: started
-const string WPEFramework::Plugin::Bluetooth::EVT_PLAYBACK_PAUSED = "onPlaybackChange";  // action: paused
-const string WPEFramework::Plugin::Bluetooth::EVT_PLAYBACK_STOPPED = "onPlaybackChange"; // action: stopped
-const string WPEFramework::Plugin::Bluetooth::EVT_PLAYBACK_ENDED = "onPlaybackChange";   // action: paused
+const string WPEFramework::Plugin::Bluetooth::EVT_PLAYBACK_CHANGE = "onPlaybackChange";
 
 const string WPEFramework::Plugin::Bluetooth::EVT_PLAYBACK_POSITION = "onPlaybackProgress";
 const string WPEFramework::Plugin::Bluetooth::EVT_PLAYBACK_NEW_TRACK = "onPlaybackNewTrack";
@@ -150,7 +147,6 @@ namespace WPEFramework
     {
         SERVICE_REGISTRATION(Bluetooth, API_VERSION_NUMBER_MAJOR, API_VERSION_NUMBER_MINOR, API_VERSION_NUMBER_PATCH);
 
-        Bluetooth* Bluetooth::_instance = nullptr;
         static Core::TimerType<DiscoveryTimer> _discoveryTimer(64 * 1024, "DiscoveryTimer");
 
         Bluetooth::Bluetooth()
@@ -160,7 +156,6 @@ namespace WPEFramework
         , m_discoveryTimer(this)
         , m_powerManagerNotification(*this)
         {
-            Bluetooth::_instance = this;
         }
 
         Bluetooth::~Bluetooth()
@@ -319,7 +314,7 @@ namespace WPEFramework
                     params["position"] = std::to_string(position);
                     params["Duration"] = std::to_string(duration);
                 }
-                sendNotify(C_STR(EVT_PLAYBACK_STARTED), params);
+                sendNotify(C_STR(EVT_PLAYBACK_CHANGE), params);
             };
             evtCbs.onPlaybackProgress = [this](long long int deviceId, uint32_t duration, uint32_t position) {
                 JsonObject params;
@@ -432,7 +427,10 @@ namespace WPEFramework
                 return message;
             }
 
-            m_powerModeEventQueue = std::make_unique<PowerModeEventQueue>(*this);
+            {
+                std::lock_guard<std::mutex> lock(m_powerModeQueueLock);
+                m_powerModeEventQueue = std::make_unique<PowerModeEventQueue>(*this);
+            }
 
             m_powerManagerPlugin = PowerManagerInterfaceBuilder(_T("org.rdk.PowerManager"))
                 .withIShell(service)
@@ -517,7 +515,12 @@ namespace WPEFramework
 
             // Joins the queue's dedicated thread, guaranteeing no onPowerModeChanged() call is
             // still queued or in flight before the members below are torn down.
-            m_powerModeEventQueue.reset();
+            std::unique_ptr<PowerModeEventQueue> powerModeEventQueue;
+            {
+                std::lock_guard<std::mutex> lock(m_powerModeQueueLock);
+                powerModeEventQueue = std::move(m_powerModeEventQueue);
+            }
+            powerModeEventQueue.reset();
 
             m_bluetoothDeviceManager.deinit();
 
@@ -526,8 +529,6 @@ namespace WPEFramework
             }
 
             m_btAdapter.deinit();
-
-            Bluetooth::_instance = nullptr;
         }
 
         string Bluetooth::Information() const
@@ -984,6 +985,25 @@ namespace WPEFramework
 			}
 		}
 
+        // Numeric IDs are canonicalised to match the std::to_string(deviceID) paired-device cache keys.
+        // Anything else is passed through unchanged: migrated entries may be keyed by MAC address.
+        std::string Bluetooth::toCacheKey(const std::string& deviceIDStr)
+        {
+            try
+            {
+                size_t pos = 0;
+                const long long int parsedID = std::stoll(deviceIDStr, &pos);
+                if (pos == deviceIDStr.length())
+                {
+                    return std::to_string(parsedID);
+                }
+            }
+            catch (const std::exception&)
+            {
+            }
+            return deviceIDStr;
+        }
+
         uint32_t Bluetooth::connectWrapper(const JsonObject& parameters, JsonObject& response)
         {
             LOGINFOMETHOD();
@@ -1015,10 +1035,10 @@ namespace WPEFramework
 
             if (deviceIDDefined && deviceTypeDefined)
             {
-                LOGINFO("Making a call with deviceID=%llu enable=%s deviceType=%s", deviceID, "CONNECT", deviceType.c_str());
+                LOGINFO("Making a call with deviceID=%lld enable=%s deviceType=%s", deviceID, "CONNECT", deviceType.c_str());
                 successFlag = setDeviceConnection(deviceID, true, deviceType);
             } else if (deviceIDDefined) {
-                LOGINFO("Making a call with deviceID=%llu enable=%s", deviceID, "CONNECT");
+                LOGINFO("Making a call with deviceID=%lld enable=%s", deviceID, "CONNECT");
                 successFlag = setDeviceConnection(deviceID, true);
             } else {
                 LOGERR("Please specify parameters. Example: \"params\": {\"deviceID\": \"271731989589742\"}");
@@ -1058,10 +1078,10 @@ namespace WPEFramework
 
             if (deviceIDDefined && deviceTypeDefined)
             {
-                LOGINFO("Making a call with deviceID=%llu enable=%s deviceType=%s", deviceID, "DISCONNECT", deviceType.c_str());
+                LOGINFO("Making a call with deviceID=%lld enable=%s deviceType=%s", deviceID, "DISCONNECT", deviceType.c_str());
                 successFlag = setDeviceConnection(deviceID, false, deviceType);
             } else if (deviceIDDefined) {
-                LOGINFO("Making a call with deviceID=%llu enable=%s", deviceID, "DISCONNECT");
+                LOGINFO("Making a call with deviceID=%lld enable=%s", deviceID, "DISCONNECT");
                 successFlag = setDeviceConnection(deviceID, false);
             } else {
                 LOGERR("Please specify parameters. Example: \"params\": {\"deviceID\": \"271731989589742\"}");
@@ -1098,7 +1118,7 @@ namespace WPEFramework
             }
             if (deviceIDDefined && audioStreamNameDefined)
             {
-                LOGINFO("Making a call with deviceID=%llu audioStreamName=%s", deviceID, audioStreamName.c_str());
+                LOGINFO("Making a call with deviceID=%lld audioStreamName=%s", deviceID, audioStreamName.c_str());
                 successFlag = setAudioStream(deviceID, audioStreamName);
             } else {
                 LOGERR("Please specify parameters. Example: \"params\": {\"deviceID\": \"271731989589742\", \"audioStreamName\": \"PRIMARY\"}");
@@ -1128,7 +1148,7 @@ namespace WPEFramework
 
             if(deviceIDDefined)
             {
-                LOGINFO("Making a call with deviceID=%llu pair=%s", deviceID, pair?"true":"false");
+                LOGINFO("Making a call with deviceID=%lld pair=%s", deviceID, pair?"true":"false");
                 successFlag = setDevicePairing(deviceID, pair);
             } else {
                 LOGERR("Please specify parameters. Example: \"params\": {\"deviceID\": \"271731989589742\"}");
@@ -1157,7 +1177,7 @@ namespace WPEFramework
 
             if(deviceIDDefined)
             {
-                LOGINFO("Making a call with deviceID=%llu pair=%s", deviceID, pair?"true":"false");
+                LOGINFO("Making a call with deviceID=%lld pair=%s", deviceID, pair?"true":"false");
                 setDevicePairing(deviceID, pair);
             } else {
                 LOGERR("Please specify parameters. Example: \"params\": {\"deviceID\": \"271731989589742\"}");
@@ -1228,7 +1248,7 @@ namespace WPEFramework
 
             if (deviceIDDefined && audioCtrlCmdDefined)
             {
-                LOGINFO("Making a call with deviceID=%llu audioCtrlCmd=%s", deviceID, audioCtrlCmd.c_str());
+                LOGINFO("Making a call with deviceID=%lld audioCtrlCmd=%s", deviceID, audioCtrlCmd.c_str());
                 successFlag = setAudioControlCommand(deviceID, audioCtrlCmd);
             } else {
                 LOGERR("Please specify parameters. Example: \"params\": {\"deviceID\": \"271731989589742\", \"command\": \"PLAY\"}");
@@ -1265,7 +1285,7 @@ namespace WPEFramework
             }
             if (deviceIDDefined && deviceTypeDefined)
             {
-                LOGINFO("Making a call with deviceID=%llu ", deviceID);
+                LOGINFO("Making a call with deviceID=%lld ", deviceID);
                 response ["volumeinfo"] = getDeviceVolumeMuteProperties(deviceID, deviceTypeStr);
                 successFlag = true;
             } else {
@@ -1322,10 +1342,10 @@ namespace WPEFramework
 
             if (deviceIDDefined && deviceTypeDefined && volumeDefined && muteDefined)
             {
-                LOGINFO("Making a call with deviceID=%llu ", deviceID);
+                LOGINFO("Making a call with deviceID=%lld ", deviceID);
                 successFlag = setDeviceVolumeMuteProperties(deviceID, deviceTypeStr, ui8volume, mute);
                 if (successFlag) {
-                    m_bluetoothDeviceManager.setLastVolumeSetting(deviceIDStr, static_cast<long long>(ui8volume));
+                    m_bluetoothDeviceManager.setLastVolumeSetting(std::to_string(deviceID), static_cast<long long>(ui8volume));
                 }
             } else {
                 LOGERR("Please specify parameters. Example: \"params\": {\"deviceID\": \"271731989589742\", \"deviceType\": \"HEADPHONES\", \"volume\": \"0-255\", \"mute\": \"0-1\"}");
@@ -1371,7 +1391,7 @@ namespace WPEFramework
 
             if(deviceIDDefined && responseValueDefined && eventTypeDefined)
             {
-                LOGINFO("Making a call with deviceID=%llu eventType=%s responseValue=%s", deviceID, C_STR(eventType), C_STR(responseValue));
+                LOGINFO("Making a call with deviceID=%lld eventType=%s responseValue=%s", deviceID, C_STR(eventType), C_STR(responseValue));
                 successFlag = setEventResponse(deviceID, eventType, responseValue);
             } else {
                 LOGERR("Please specify parameters. Example: \"params\": {\"deviceID\": \"271731989589742\", \"eventType\": \"pairingRequest\", \"responseValue\": \"ACCEPTED\"}");
@@ -1437,12 +1457,13 @@ namespace WPEFramework
             {
                 getStringParameter("deviceID", deviceID);
                 getBoolParameter("enable", enable);
-                Core::hresult result = m_bluetoothDeviceManager.setAutoConnect(deviceID, enable);
+                const string cacheKey = toCacheKey(deviceID);
+                Core::hresult result = m_bluetoothDeviceManager.setAutoConnect(cacheKey, enable);
                 if (Core::ERROR_NONE != result) {
-                    LOGERR("Failed to set autoConnect status for deviceID=%s, result=0x%08X", deviceID.c_str(), result);
+                    LOGERR("Failed to set autoConnect status for deviceID=%s, result=0x%08X", cacheKey.c_str(), result);
                     successFlag = false;
                 } else {
-                    notifyAutoConnectStatusChanged(deviceID, enable);
+                    notifyAutoConnectStatusChanged(cacheKey, enable);
                 }
             } else {
                 LOGERR("Please specify parameters. Example: \"params\": {\"deviceID\": \"1234567890\", \"enable\": true}");
@@ -1461,13 +1482,14 @@ namespace WPEFramework
             {
                 getStringParameter("deviceID", deviceID);
                 AutoConnectStatus status;
-                Core::hresult result = m_bluetoothDeviceManager.getAutoConnect(deviceID, status);
+                const string cacheKey = toCacheKey(deviceID);
+                Core::hresult result = m_bluetoothDeviceManager.getAutoConnect(cacheKey, status);
 
                 if (Core::ERROR_NONE == result) {
                     response["autoconnect"] = (AUTO_CONNECT_STATUS_ENABLED == status);
                 } else {
                     successFlag = false;
-                    LOGWARN("Failed to get autoConnect status for deviceID=%s, result=0x%08X", deviceID.c_str(), result);
+                    LOGWARN("Failed to get autoConnect status for deviceID=%s, result=0x%08X", cacheKey.c_str(), result);
                 }
             } else {
                 LOGERR("Please specify parameters. Example: \"params\": {\"deviceID\": \"1234567890\"}");
@@ -1521,10 +1543,6 @@ namespace WPEFramework
                     reconnectOnPowerOn();
                     return;
                 }
-            #else
-                reconnectOnPowerOn();
-                return;
-            #endif
 
             #ifdef BLUETOOTH_DEBUG
                 static const char* powerStateNames[] = {
@@ -1631,6 +1649,9 @@ namespace WPEFramework
             } else {
                 LOGWARN("Unhandled transition\n");
             }
+            #else
+                reconnectOnPowerOn();
+            #endif
         }
 
         void Bluetooth::notifyAutoConnectStatusChanged(const string& deviceID, const bool enable)

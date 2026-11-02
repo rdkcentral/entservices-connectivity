@@ -146,11 +146,21 @@ Core::hresult BluetoothPersistenceAdapter::Parse(const std::string& payload, std
     
     for (uint16_t i = 0; i < pairedDevices.Length(); ++i) {
         
+        if (pairedDevices[i].Content() != WPEFramework::Core::JSON::Variant::type::OBJECT) {
+            LOGWARN("Skipping filesystem persistence entry %u: not a JSON object", static_cast<unsigned>(i));
+            continue;
+        }
+
         JsonObject entry = pairedDevices[i].Object();
         BluetoothDeviceInfo info;
 
         if (entry.HasLabel("deviceAddr")) {
             info.deviceAddr = entry["deviceAddr"].String();
+        }
+
+        if (info.deviceAddr.empty()) {
+            LOGWARN("Skipping filesystem persistence entry %u: missing or empty deviceAddr", static_cast<unsigned>(i));
+            continue;
         }
 
         if (entry.HasLabel("deviceType")) {
@@ -183,67 +193,15 @@ Core::hresult BluetoothPersistenceAdapter::Parse(const std::string& payload, std
     return Core::ERROR_NONE;
 }
 
-Core::hresult BluetoothPersistenceAdapter::Read(std::vector<BluetoothDeviceInfo>& devices) const
-{
-    if (access(_filesystemPersistencePath.c_str(), F_OK) != 0) {
-        if (errno == ENOENT) {
-            LOGINFO("filesystem persistence file does not exist: %s", _filesystemPersistencePath.c_str());
-            return Core::ERROR_NOT_EXIST;
-        }
-        LOGWARN("filesystem persistence file is not accessible: %s", _filesystemPersistencePath.c_str());
-        return Core::ERROR_GENERAL;
-    }
-
-    std::ifstream input(_filesystemPersistencePath, std::ios::in | std::ios::binary);
-    if (!input.is_open()) {
-        LOGWARN("filesystem persistence file is not readable: %s", _filesystemPersistencePath.c_str());
-        return Core::ERROR_GENERAL;
-    }
-
-    input.seekg(0, std::ios::end);
-    const std::streamoff fileSize = static_cast<std::streamoff>(input.tellg());
-    if (fileSize < 0) {
-        LOGWARN("filesystem persistence file size query failed: %s", _filesystemPersistencePath.c_str());
-        return Core::ERROR_GENERAL;
-    }
-    if (fileSize > kMaxFilesystemPersistencePayloadBytes) {
-        LOGWARN("filesystem persistence file too large (%lld bytes), skipping parse: %s",
-            static_cast<long long>(fileSize), _filesystemPersistencePath.c_str());
-        return Core::ERROR_GENERAL;
-    }
-    input.seekg(0, std::ios::beg);
-
-    std::stringstream buffer;
-    buffer << input.rdbuf();
-
-    if (input.bad()) {
-        LOGWARN("filesystem persistence file read failed: %s", _filesystemPersistencePath.c_str());
-        return Core::ERROR_GENERAL;
-    }
-
-    std::vector<BluetoothDeviceInfo> loaded;
-    const Core::hresult parseResult = Parse(buffer.str(), loaded);
-    if (Core::ERROR_NONE != parseResult) {
-        return parseResult;
-    }
-
-    devices = std::move(loaded);
-    return Core::ERROR_NONE;
-}
-
 Core::hresult BluetoothPersistenceAdapter::ReadRaw(std::string& content) const
 {
-    if (access(_filesystemPersistencePath.c_str(), F_OK) != 0) {
+    errno = 0;
+    std::ifstream input(_filesystemPersistencePath, std::ios::in | std::ios::binary);
+    if (!input.is_open()) {
         if (errno == ENOENT) {
             LOGINFO("filesystem persistence file does not exist: %s", _filesystemPersistencePath.c_str());
             return Core::ERROR_NOT_EXIST;
         }
-        LOGWARN("filesystem persistence file is not accessible: %s", _filesystemPersistencePath.c_str());
-        return Core::ERROR_GENERAL;
-    }
-
-    std::ifstream input(_filesystemPersistencePath, std::ios::in | std::ios::binary);
-    if (!input.is_open()) {
         LOGWARN("filesystem persistence file is not readable: %s", _filesystemPersistencePath.c_str());
         return Core::ERROR_GENERAL;
     }
@@ -396,9 +354,17 @@ Core::hresult BluetoothPersistenceAdapter::Write(const std::unordered_map<std::s
         }
 
         if (fsync(fd) != 0) {
-            LOGWARN("fsync failed for temp file: %s", tmpPath.c_str());
+            LOGERR("fsync failed for temp file: %s", tmpPath.c_str());
+            close(fd);
+            ::unlink(tmpPath.c_str());
+            return Core::ERROR_GENERAL;
         }
-        close(fd);
+        // close() is not retried after failure (fd state is unspecified), so no double-close.
+        if (close(fd) != 0) {
+            LOGERR("close failed for temp file: %s", tmpPath.c_str());
+            ::unlink(tmpPath.c_str());
+            return Core::ERROR_GENERAL;
+        }
     }
 
     if (std::rename(tmpPath.c_str(), _filesystemPersistencePath.c_str()) != 0) {

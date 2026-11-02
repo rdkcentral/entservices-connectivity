@@ -28,27 +28,27 @@
 #include <core/core.h>
 #include "UtilsJsonRpc.h"
 
-#define PERSISTENT_STORE_CALLSIGN "org.rdk.PersistentStore"
-#define PERSISTENT_STORE_NAMESPACE "Bluetooth"
-#define PERSISTENT_STORE_KEY_DEVICE_INFO "deviceInfo"
-#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
-#define PERSISTENT_STORE_KEY_MIGRATION_VERSION "migrationVersion"
-#define BLUETOOTH_MIGRATION_VERSION "1"
-#endif
-
 namespace WPEFramework {
     namespace Plugin {
+
+        static constexpr const char* PERSISTENT_STORE_CALLSIGN = "org.rdk.PersistentStore";
+        static constexpr const char* PERSISTENT_STORE_NAMESPACE = "Bluetooth";
+        static constexpr const char* PERSISTENT_STORE_KEY_DEVICE_INFO = "deviceInfo";
+#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+        static constexpr const char* PERSISTENT_STORE_KEY_MIGRATION_VERSION = "migrationVersion";
+        static constexpr const char* BLUETOOTH_MIGRATION_VERSION = "1";
+#endif
 
         // Forward declaration to avoid circular includes.
         class IBtAdapter;
 
-        typedef enum _AutoConnectStatus {
+        enum AutoConnectStatus {
             AUTO_CONNECT_STATUS_DISABLED    = 0,
             AUTO_CONNECT_STATUS_ENABLED     = 1,
             AUTO_CONNECT_STATUS_UNSET       = 2
-        } AutoConnectStatus;
+        };
 
-        typedef struct _BluetoothDeviceInfo {
+        struct BluetoothDeviceInfo {
             std::string         deviceAddr          = "";
             std::string         deviceType          = "UNKNOWN";
             std::string         friendlyName        = "";
@@ -57,7 +57,7 @@ namespace WPEFramework {
             std::string         lastConnectTimeUtc  = "";
             // BTRMGR reports gamepads as "HUMAN INTERFACE DEVICE"; this disambiguates them.
             bool                isGamePad           = false;
-        } BluetoothDeviceInfo;
+        };
 
         class BluetoothDeviceManager {
 
@@ -106,7 +106,7 @@ namespace WPEFramework {
                 void ReleaseService();
         #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
                 Core::hresult writeCacheFromFilesystemPersistence(const std::string& rawContent);
-                void writeFilesystemPersistenceFromCache(const std::unordered_map<std::string, BluetoothDeviceInfo>& cacheSnapshot);
+                void writeFilesystemPersistenceFromCache(std::unordered_map<std::string, BluetoothDeviceInfo> cacheSnapshot);
                 Core::hresult readMigrationVersionFromStorage(std::string& version) const;
                 Core::hresult writeMigrationVersionToStorage();
                 std::atomic<bool> _isMigrated{false};

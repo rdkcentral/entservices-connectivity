@@ -20,8 +20,6 @@
 #include "EventBridge.h"
 
 #include <core/core.h>
-#include <sys/syscall.h>
-#include <unistd.h>
 #include <UtilsLogging.h>
 
 #include "DeviceDisplayName.h"
@@ -42,26 +40,25 @@ void populateDeviceFields(std::shared_ptr<bluetooth::Device> device,
 
     outName = deviceDisplayName(device);
 
-    outType = registry.getDeviceType(outId);
-    if (outType.empty()) {
-        bluetooth::DeviceProperties props;
-        if (device->getAllProperties(props)) {
-            outType = DeviceTypeClassifier::classify(props.appearance.value_or(0),
-                                                      props.classOfDevice.value_or(0),
-                                                      props.uuids.value_or(std::vector<std::string>{}));
-            registry.setDeviceType(outId, outType);
-            outRaw = props.classOfDevice.value_or(0);
-            outBle = props.appearance.value_or(0);
-            return;
-        }
-        outType = "UNKNOWN DEVICE";
-    }
-    // Retrieve raw fields from properties if needed.
     bluetooth::DeviceProperties props;
-    if (device->getAllProperties(props)) {
+    const bool havePropsRead = device->getAllProperties(props);
+    if (havePropsRead) {
         outRaw = props.classOfDevice.value_or(0);
         outBle = props.appearance.value_or(0);
     }
+
+    outType = registry.getDeviceType(outId);
+    // A cached "UNKNOWN DEVICE" may predate the device's properties, so it is classified again.
+    if ((outType.empty() || outType == "UNKNOWN DEVICE") && havePropsRead) {
+        const std::string classified = DeviceTypeClassifier::classify(outBle, outRaw,
+                                                                      props.uuids.value_or(std::vector<std::string>{}));
+        if (classified != "UNKNOWN DEVICE") {
+            outType = classified;
+            // A device that is no longer registered (e.g. DeviceDisappeared) must not get its type cached again.
+            if (!registry.getHandleForMac(mac).empty()) registry.setDeviceType(outId, outType);
+        }
+    }
+    if (outType.empty()) outType = "UNKNOWN DEVICE";
 }
 
 } // namespace
@@ -103,8 +100,9 @@ void EventBridge::onAdapterEvent(bluetooth::AdapterEvent event, bluetooth::Adapt
             uint16_t bleType = 0;
             populateDeviceFields(data.device, m_registry, deviceId, name, deviceType, rawType, bleType);
 
-            bool paired = (data.device->state() == bluetooth::DeviceState::Paired ||
-                           data.device->state() == bluetooth::DeviceState::Connected);
+            const bluetooth::DeviceState state = data.device->state();
+            const bool paired = (state == bluetooth::DeviceState::Paired ||
+                                 state == bluetooth::DeviceState::Connected);
 
             if (m_callbacks.onDiscoveredDevice) {
                 m_callbacks.onDiscoveredDevice(deviceId, name, deviceType, rawType, bleType,
@@ -124,8 +122,9 @@ void EventBridge::onAdapterEvent(bluetooth::AdapterEvent event, bluetooth::Adapt
             uint16_t bleType = 0;
             populateDeviceFields(data.device, m_registry, deviceId, name, deviceType, rawType, bleType);
 
-            bool paired = (data.device->state() == bluetooth::DeviceState::Paired ||
-                           data.device->state() == bluetooth::DeviceState::Connected);
+            const bluetooth::DeviceState state = data.device->state();
+            const bool paired = (state == bluetooth::DeviceState::Paired ||
+                                 state == bluetooth::DeviceState::Connected);
 
             if (m_callbacks.onDiscoveredDevice) {
                 m_callbacks.onDiscoveredDevice(deviceId, name, deviceType, rawType, bleType,
@@ -196,9 +195,10 @@ void EventBridge::beginDeviceOperation(const std::shared_ptr<bluetooth::Device>&
     DeviceOperation& op = m_ops[mac];
     // active is a count because a new request may begin while the previous one is still awaiting its delayed
     // release; the entry, and with it the holding of status changes, lasts until both have been released.
-    ++op.active;
     // Only status changes raised by this request decide whether its completion event must be synthesized.
-    op.seen = 0;
+    // An overlapping request keeps the changes already seen for the entry.
+    if (op.active == 0) op.seen = 0;
+    ++op.active;
 }
 
 void EventBridge::completeDeviceOperation(bluetooth::DeviceEvent event, std::shared_ptr<bluetooth::Device> device,

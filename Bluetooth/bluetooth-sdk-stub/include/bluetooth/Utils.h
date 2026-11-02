@@ -55,7 +55,7 @@ sdbus::ObjectPath createAdapterPathById(int id);
 /**
  * @brief Extracts the adapter ID from a DBus object path.
  * @param path The DBus object path.
- * @return The adapter ID as an integer.
+ * @return The adapter ID as an integer, or -1 if the path contains no adapter ID.
  */
 int getAdapterIdFromObjectPath(const sdbus::ObjectPath& path);
 
@@ -83,7 +83,7 @@ std::string extractServicePath(const std::string& characteristicPath);
 /**
  * @brief Retrieves the MAC address from a device's DBus object path.
  * @param device The device's DBus object path.
- * @return The MAC address as a string.
+ * @return The MAC address as a string, or an empty string on failure.
  */
 std::string getMacFromObjectPath(const sdbus::ObjectPath& device);
 

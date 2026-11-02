@@ -116,6 +116,23 @@ private:
 
     BtDeviceInfo deviceToInfo(std::shared_ptr<bluetooth::Device> device) const;
 
+    // Takes m_devicesMutex only for the lookup, so callers can use the device across blocking SDK calls.
+    std::shared_ptr<bluetooth::Device> findDevice(const std::string& handleStr) const;
+
+    // Marks a device as being paired or connected by the plugin itself while in scope, so AuthBridge
+    // accepts the connection authorisation the SDK raises meanwhile.
+    class OperationScope {
+    public:
+        OperationScope(BtSdkAdapterImpl& owner, const std::shared_ptr<bluetooth::Device>& device);
+        ~OperationScope();
+        OperationScope(const OperationScope&)            = delete;
+        OperationScope& operator=(const OperationScope&) = delete;
+    private:
+        BtSdkAdapterImpl& m_owner;
+        std::string       m_mac;
+    };
+    bool isOperationInProgress(const std::string& mac) const;
+
     // Discovery name gate (see DiscoveryNameGate): unpaired devices BlueZ has not named yet are held back
     // from clients, and re-read by a worker thread until they are named or their wait runs out.
     struct PendingDevice {
@@ -140,6 +157,10 @@ private:
     // Device pointer map (handle → Device); parallel to DeviceRegistry metadata.
     mutable std::mutex m_devicesMutex;
     std::unordered_map<std::string, std::shared_ptr<bluetooth::Device>> m_devicesByHandle;
+
+    // MACs the plugin is currently pairing or connecting, with the number of requests in flight for each.
+    mutable std::mutex m_operationsMutex;
+    std::unordered_map<std::string, unsigned> m_operationsInProgress;
 
     // MACs whose DeviceDisappeared event must not be forwarded (never announced, or pruned by us).
     std::mutex m_suppressedMutex;

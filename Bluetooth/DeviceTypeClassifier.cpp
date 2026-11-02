@@ -85,9 +85,8 @@ std::string DeviceTypeClassifier::classifyByAppearance(uint16_t appearance) {
         case BleAppearanceCategory::kKeyring:
             return "LE TILE";
 
-        case BleAppearanceCategory::kWatch:
-        case BleAppearanceCategory::kUncategorized:
         default:
+            // Includes kWatch and kUncategorized.
             return "UNKNOWN DEVICE";
     }
 }
@@ -115,14 +114,9 @@ std::string DeviceTypeClassifier::classifyByCoD(uint32_t cod) {
                     return "HANDSFREE";
                 case COD_AV_MINOR_HEADPHONES:
                     return "HEADPHONES";
-                case COD_AV_MINOR_LOUDSPEAKER:
-                case COD_AV_MINOR_PORTABLE_AUDIO:
-                case COD_AV_MINOR_CAR_AUDIO:
-                case COD_AV_MINOR_HIFI_AUDIO:
-                    return "LOUDSPEAKER";
                 default:
-                    // Other A/V minor classes (microphone, STB, VCR, etc.)
-                    // default to LOUDSPEAKER to match BTMgr's majority mapping.
+                    // Loudspeaker, portable, car and hi-fi audio plus other A/V minor classes
+                    // (microphone, STB, VCR, etc.) all map to LOUDSPEAKER to match BTMgr's majority mapping.
                     return "LOUDSPEAKER";
             }
 

@@ -246,7 +246,9 @@ AuthorisationType::PairingRequest          AuthorisationType::ConnectionRequest
 **Audio device connection policy** (supersedes the earlier "auto-accept paired audio device" rule; mirrors the BTMgr plugin behaviour):
 - Once migrated, the persisted autoconnect status resolves the request (`BtAuthCallbacks::getConnectAutoResponse`): enabled → accept, disabled/unset → reject, with no client notification.
 - Not migrated: emit `onConnectionRequest` and wait for `respondToEvent`. Audio output devices only wait 200 ms (BTMgr behaviour); other types wait 30 s. The device type is re-classified from current BlueZ properties if the cached type is unknown (paired devices at boot).
-- Paired HID devices that are not in cooldown are still auto-accepted.
+- A device the plugin itself is pairing or connecting (`pairDevice` / `connectDevice` in flight) is accepted without consulting autoconnect or the client.
+- Paired HID devices that are not gamepads and not in cooldown are still auto-accepted. RDK remote controls (appearance 0x0180 or a known RCU OUI) are never treated as gamepads.
+- Gamepads (BLE appearance 0x03C4 or a classic Joystick/Gamepad class of device) are never auto-accepted: they follow the same autoconnect/client decision, and the client waits 2 s for a classic gamepad and 20 s for an LE gamepad (BTMgr values). No answer rejects. BTMgr's gamepad RFC, standby-mode and last-disconnected special cases are not mirrored, and an unpaired gamepad escalates instead of being rejected outright.
 
 **Startup / power-on reconnect:** BTMgr itself asks about the previously used audio output device at startup and on power-on (`BTRMGR_StartAudioStreamingOut_StartUp`). The SDK has no such daemon, so `BtSdkAdapterImpl::startAutoConnect()` does it: for each paired audio output device (when none is connected and the adapter is powered) it applies the same decision as above. Auto-accepted devices are connected by the plugin; devices accepted by the client are connected by the client. If the client does not answer in time, the pass is retried once after 40 s.
 
@@ -258,7 +260,7 @@ AuthorisationType::PairingRequest          AuthorisationType::ConnectionRequest
 **HID device auto-accept conditions**:
 - Device is in Paired state
 - Device is not in cooldown
-- Device is not currently being paired/connected by plugin-initiated flow
+- Device is not a gamepad (gamepads escalate with a short client window)
 
 **Playback request special case** (`AuthorisationType::ConnectionRequest` for audio-streaming devices): When the client accepts via `respondToEvent`, the AuthBridge must also trigger audio streaming via the AUDIO_SUPPORT API. BTMgr did this inside `BTRMGR_SetEventResponse` — the AuthBridge now owns it.
 

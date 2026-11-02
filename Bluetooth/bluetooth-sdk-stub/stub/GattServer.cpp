@@ -27,6 +27,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <utility>
 
@@ -172,7 +173,9 @@ std::vector<uint8_t> Characteristic::Value() { return m_impl->Value(); }
 void Characteristic::setValue(std::vector<uint8_t> value) { m_impl->setValue(std::move(value)); }
 void Characteristic::Service(std::shared_ptr<gattServer::Service> service) { m_impl->setService(std::move(service)); }
 bool Characteristic::addDescriptor(std::shared_ptr<Descriptor> descriptor) {
-  return m_impl->addDescriptor(descriptor, shared_from_this());
+  auto self = weak_from_this().lock();
+  if (!self) return false;
+  return m_impl->addDescriptor(descriptor, self);
 }
 const std::map<std::string, std::shared_ptr<Descriptor>>& Characteristic::getDescriptors() const {
   return m_impl->getDescriptors();
@@ -212,7 +215,9 @@ Service::~Service() = default;
 
 std::string Service::UUID() { return m_impl->UUID(); }
 bool Service::addCharacteristic(std::shared_ptr<Characteristic> characteristic) {
-  return m_impl->addCharacteristic(characteristic, shared_from_this());
+  auto self = weak_from_this().lock();
+  if (!self) return false;
+  return m_impl->addCharacteristic(characteristic, self);
 }
 const std::map<std::string, std::shared_ptr<Characteristic>>& Service::getCharacteristics() const {
   return m_impl->getCharacteristics();
@@ -226,14 +231,37 @@ class Server::Impl {
 
   bool addService(std::shared_ptr<Service> service) {
     if (!service) return false;
-    m_services.push_back(std::move(service));
+    m_services[service->m_path] = std::move(service);
     return true;
   }
   bool removeService(const std::shared_ptr<Service>& service) {
-    auto it = std::find(m_services.begin(), m_services.end(), service);
-    if (it == m_services.end()) return false;
-    m_services.erase(it);
-    return true;
+    if (!service) return false;
+    return m_services.erase(service->m_path) > 0;
+  }
+  const std::map<std::string, std::shared_ptr<Service>>& getServices() const { return m_services; }
+  std::shared_ptr<Service> GetServiceByUUID(const std::string& uuid) {
+    for (const auto& entry : m_services) {
+      if (entry.second->UUID() == uuid) return entry.second;
+    }
+    return nullptr;
+  }
+  std::shared_ptr<Characteristic> GetCharacteristicByUUID(const std::string& uuid) {
+    for (const auto& service : m_services) {
+      for (const auto& characteristic : service.second->getCharacteristics()) {
+        if (characteristic.second->UUID() == uuid) return characteristic.second;
+      }
+    }
+    return nullptr;
+  }
+  std::shared_ptr<Descriptor> GetDescriptorByUUID(const std::string& uuid) {
+    for (const auto& service : m_services) {
+      for (const auto& characteristic : service.second->getCharacteristics()) {
+        for (const auto& descriptor : characteristic.second->getDescriptors()) {
+          if (descriptor.second->UUID() == uuid) return descriptor.second;
+        }
+      }
+    }
+    return nullptr;
   }
   Status start() { return unavailable(); }
   Status stop() {
@@ -243,7 +271,7 @@ class Server::Impl {
 
  private:
   std::shared_ptr<Adapter> m_adapter;
-  std::vector<std::shared_ptr<Service>> m_services;
+  std::map<std::string, std::shared_ptr<Service>> m_services;
   int m_maxConnections;
   bool m_running = false;
 };
@@ -256,6 +284,14 @@ bool Server::addService(std::shared_ptr<Service> service) { return m_impl->addSe
 bool Server::removeService(std::shared_ptr<Service> service) { return m_impl->removeService(service); }
 Status Server::start() { return m_impl->start(); }
 Status Server::stop() { return m_impl->stop(); }
+const std::map<std::string, std::shared_ptr<Service>>& Server::getServices() { return m_impl->getServices(); }
+std::shared_ptr<Service> Server::GetServiceByUUID(const std::string& uuid) { return m_impl->GetServiceByUUID(uuid); }
+std::shared_ptr<Characteristic> Server::GetCharacteristicByUUID(const std::string& uuid) {
+  return m_impl->GetCharacteristicByUUID(uuid);
+}
+std::shared_ptr<Descriptor> Server::GetDescriptorByUUID(const std::string& uuid) {
+  return m_impl->GetDescriptorByUUID(uuid);
+}
 
 }  // namespace gattServer
 }  // namespace bluetooth

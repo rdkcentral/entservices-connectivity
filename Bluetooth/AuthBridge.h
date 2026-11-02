@@ -42,16 +42,20 @@ namespace Plugin {
  * respondToEvent flow.
  *
  * Connection request policy (mirrors the BTMgr-based plugin):
- *   - A device the plugin itself is pairing/connecting right now   → accept
+ *   - A device the plugin itself is pairing/connecting right now (see
+ *     setOperationInProgressPredicate)                             → accept, without asking anyone
  *   - Remote controls and other HID devices that are not gamepads
  *     (paired, not in cooldown)                                    → auto-accept
  *   - Otherwise, once migrated, the persisted autoconnect status resolves the request
  *     (BtAuthCallbacks::getConnectAutoResponse): enabled → accept, disabled/unset → reject,
  *     without notifying the client.
- *   - Otherwise (not migrated) → escalate to the client via onConnectionRequest.
- *     Audio output devices only wait AUDIO_AUTH_TIMEOUT_MS for the client's answer
- *     (BTMgr: 200 ms), gamepads GAMEPAD_AUTH_TIMEOUT_MS (BTMgr: 2 s); every other type
- *     waits AUTH_TIMEOUT_SECONDS.
+ *   - Otherwise (not migrated) → escalate to the client via onConnectionRequest. The client only gets a
+ *     bounded time to answer, and no answer rejects: audio output devices wait AUDIO_AUTH_TIMEOUT_MS
+ *     (BTMgr: 200 ms), classic gamepads GAMEPAD_AUTH_TIMEOUT_MS (BTMgr: 2 s), LE gamepads
+ *     LE_GAMEPAD_AUTH_TIMEOUT_MS (BTMgr: 20 s); every other type waits AUTH_TIMEOUT_SECONDS.
+ *   Gamepads are never auto-accepted, even though they are HID devices. RDK remote controls are not
+ *   gamepads. Unlike BTMgr, a gamepad that is not paired follows the same escalation rather than being
+ *   rejected outright, and BTMgr's gamepad RFC, standby-mode and last-disconnected special cases are not mirrored.
  *
  * PairingRequest always escalates to client.
  *
@@ -96,20 +100,22 @@ public:
     std::string resolveDeviceType(const std::shared_ptr<bluetooth::Device>& device, const std::string& handleStr);
 
     static bool isAudioOutputType(const std::string& deviceType);
-    // LE gamepad, identified by its BLE appearance as BTMgr does.
-    static bool isGamepad(const std::shared_ptr<bluetooth::Device>& device);
-    // RDK remote control (not managed by this policy), identified by appearance or its remote service UUID.
-    static bool isRemoteControl(const std::shared_ptr<bluetooth::Device>& device);
 
-    // Set by the adapter: true while the plugin itself is pairing or connecting the device with this MAC.
+    // Set by the adapter before the SDK can call back: true while the plugin itself is pairing or
+    // connecting the device with this MAC. Must be cheap and must not call back into the SDK.
     void setOperationInProgressPredicate(std::function<bool(const std::string& mac)> predicate) {
         m_isOperationInProgress = std::move(predicate);
     }
 
 private:
-    bool isAutoAcceptDevice(const std::string& deviceType,
-                            const std::string& handleStr,
-                            std::shared_ptr<bluetooth::Device> device) const;
+    bool isAutoAcceptDevice(const std::string& deviceType, std::shared_ptr<bluetooth::Device> device) const;
+
+    // RDK remote control (not managed by this policy): its appearance or MAC OUI, as ScanFilterPolicy decides.
+    static bool isRemoteControl(const std::string& mac, const bluetooth::DeviceProperties& props);
+    // LE gamepad, identified by its BLE appearance as BTMgr does.
+    static bool isLeGamepad(const bluetooth::DeviceProperties& props);
+    // LE gamepad or classic Joystick/Gamepad class of device, excluding RDK remote controls.
+    static bool isGamepad(const std::string& mac, const bluetooth::DeviceProperties& props);
 
     struct PendingAuth {
         bool resolved{false};
@@ -122,6 +128,7 @@ private:
 
     DeviceRegistry& m_registry;
     BtAuthCallbacks m_callbacks;
+    // Set once, before the SDK callbacks are registered, and read-only afterwards.
     std::function<bool(const std::string& mac)> m_isOperationInProgress;
 
     mutable std::mutex m_pendingMutex;

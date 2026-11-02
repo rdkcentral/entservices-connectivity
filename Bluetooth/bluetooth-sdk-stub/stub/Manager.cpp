@@ -58,8 +58,8 @@ Manager::Manager(AuthorisationMode isAuthManager,
     : m_impl(std::make_unique<Impl>(this, isAuthManager, std::move(authManagerCallback), logOutput,
                                     std::move(output), std::move(agentCapability))) {}
 
-Manager::Manager(std::string /* agentCapability */)
-    : Manager(AuthorisationMode::NoAuthorisation, {}, LogLocation::Stdout, {}) {}
+Manager::Manager(std::string agentCapability)
+    : Manager(AuthorisationMode::NoAuthorisation, {}, LogLocation::Stdout, {}, std::move(agentCapability)) {}
 
 Manager::~Manager() = default;
 

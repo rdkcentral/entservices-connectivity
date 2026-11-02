@@ -41,12 +41,12 @@ namespace dbus {
 sdbus::IConnection& get_sdbus_connection();
 
 /**
- * @brief Get a named D-Bus connection
+ * @brief Get a second, independent system-bus connection
  * 
- * Retrieves a reference to a named D-Bus connection instance. This allows
- * for establishing connections with specific service names on the D-Bus.
+ * Retrieves a reference to a separate system-bus connection that is independent of
+ * the one returned by get_sdbus_connection(), e.g. for use on another thread or event loop.
  * 
- * @return Reference to the named D-Bus connection interface
+ * @return Reference to the second system-bus connection interface
  * @throws sdbus::Error if named connection cannot be established
  */
 sdbus::IConnection& get_sdbus_named_connection();

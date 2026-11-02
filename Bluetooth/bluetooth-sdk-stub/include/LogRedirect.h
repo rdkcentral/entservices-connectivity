@@ -19,6 +19,7 @@
 #pragma once
 #include <functional>
 #include <string>
+#include <utility>
 
 struct LogRedirect final {
 public:
@@ -26,7 +27,7 @@ public:
                 std::function<void(std::string&)> info,
                 std::function<void(std::string&)> warning,
                 std::function<void(std::string&)> error)
-        : m_debug(debug), m_info(info), m_warning(warning), m_error(error) {}
+        : m_debug(std::move(debug)), m_info(std::move(info)), m_warning(std::move(warning)), m_error(std::move(error)) {}
 
 protected:
     std::function<void(std::string&)> m_debug;

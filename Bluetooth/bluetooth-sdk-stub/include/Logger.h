@@ -25,6 +25,7 @@
 #include <memory>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <map>
 #include <mutex>
 #include <variant>
@@ -40,10 +41,10 @@ class Logger {
     return logger;
   }
   template <typename... Args>
-  void log(std::string level, Args... args) {
+  void log(const std::string& level, Args&&... args) {
     // Format outside the lock; the lock is recursive because a redirect callback may log.
     std::ostringstream oss;
-    (oss << ... << args);
+    (oss << ... << std::forward<Args>(args));
     std::string logMsg = oss.str();
     std::lock_guard<std::recursive_mutex> lock(m_mutex);
     if (m_output == LogOutput::Stdout) {
@@ -54,23 +55,23 @@ class Logger {
     {
       switch (level[0]) {
         case 'D':
-          m_logRedirect->m_debug(logMsg);
+          if (m_logRedirect->m_debug) m_logRedirect->m_debug(logMsg);
           break;
         case 'I':
-          m_logRedirect->m_info(logMsg);
+          if (m_logRedirect->m_info) m_logRedirect->m_info(logMsg);
           break;
         case 'W':
-          m_logRedirect->m_warning(logMsg);
+          if (m_logRedirect->m_warning) m_logRedirect->m_warning(logMsg);
           break;
         case 'E':
-          m_logRedirect->m_error(logMsg);
+          if (m_logRedirect->m_error) m_logRedirect->m_error(logMsg);
           break;
         default:
           break;
       }
     }
   }
-  bool setLogOutput(LogOutput output, std::variant<std::string, std::unique_ptr<LogRedirect>> outputParam) {
+  bool setLogOutput(LogOutput output, std::variant<std::string, std::unique_ptr<LogRedirect>> outputParam = {}) {
     std::lock_guard<std::recursive_mutex> lock(m_mutex);
     // The new sink is validated before the previous one is released, so a failure leaves the
     // current output untouched.

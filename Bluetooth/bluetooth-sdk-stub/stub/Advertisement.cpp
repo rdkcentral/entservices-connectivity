@@ -84,8 +84,7 @@ class AdvertisementMgr::Impl {
  public:
   explicit Impl(std::string adapterPath) : m_adapterPath(std::move(adapterPath)) {}
 
-  Status startAdvertising(std::shared_ptr<Advertisement> advertisement) {
-    m_advertisement = std::move(advertisement);
+  Status startAdvertising(std::shared_ptr<Advertisement> /* advertisement */) {
     return Status(StatusCodes::BLUETOOTH_ERROR, "bluetooth-sdk stub: no Bluetooth backend available");
   }
   Status stopAdvertising() {

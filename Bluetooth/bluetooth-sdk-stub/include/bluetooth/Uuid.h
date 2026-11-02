@@ -52,6 +52,7 @@ class Uuid {
   /**
    * @brief Constructs a Uuid from a string representation.
    * @param id The UUID as a string (e.g., "0000180D-0000-1000-8000-00805F9B34FB").
+   * @throws std::runtime_error if the string is not a valid 128-bit UUID.
    */
   explicit Uuid(const std::string& id);
 
@@ -82,6 +83,27 @@ class Uuid {
    * @return True if both UUIDs are equal.
    */
   bool operator==(const Uuid& rhs) const { return this->compare(rhs) == 0; }
+
+  /**
+   * @brief Inequality operator for comparing UUIDs.
+   * @param rhs The UUID to compare against.
+   * @return True if the UUIDs differ.
+   */
+  bool operator!=(const Uuid& rhs) const { return this->compare(rhs) != 0; }
+
+  /**
+   * @brief Less-than-or-equal operator for comparing UUIDs.
+   * @param rhs The UUID to compare against.
+   * @return True if this UUID is less than or equal to rhs.
+   */
+  bool operator<=(const Uuid& rhs) const { return this->compare(rhs) <= 0; }
+
+  /**
+   * @brief Greater-than-or-equal operator for comparing UUIDs.
+   * @param rhs The UUID to compare against.
+   * @return True if this UUID is greater than or equal to rhs.
+   */
+  bool operator>=(const Uuid& rhs) const { return this->compare(rhs) >= 0; }
 
   /**
    * @brief Compares this UUID with another.

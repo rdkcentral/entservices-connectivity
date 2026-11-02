@@ -21,8 +21,6 @@
 
 #include <cstdint>
 
-#define BLUETOOTH_APPEARANCE_CATEGORY_MASK 0xffc0
-#define BLUETOOTH_APPEARANCE_SUBCATEGORY_MASK 0x003f
 /**
  * @file Appearance.h
  * @brief Bluetooth Appearance value definitions and utility class
@@ -34,6 +32,9 @@
  */
 
 namespace bluetooth {
+
+inline constexpr uint16_t kCategoryMask = 0xffc0;
+inline constexpr uint16_t kSubCategoryMask = 0x003f;
 
 /**
  * @class Appearance
@@ -157,19 +158,19 @@ class Appearance {
    * 16-bit appearance value according to Bluetooth specifications.
    */
   Appearance(Category category, SubCategory subCategory)
-      : m_value((static_cast<uint16_t>(category) & BLUETOOTH_APPEARANCE_CATEGORY_MASK) | (static_cast<uint16_t>(subCategory) & BLUETOOTH_APPEARANCE_SUBCATEGORY_MASK)) {}
+      : m_value((static_cast<uint16_t>(category) & kCategoryMask) | (static_cast<uint16_t>(subCategory) & kSubCategoryMask)) {}
 
   /**
    * @brief Extracts the category from the appearance value
    * @return The device category
    */
-  inline Category category() const { return static_cast<Category>(m_value & BLUETOOTH_APPEARANCE_CATEGORY_MASK); }
+  inline Category category() const { return static_cast<Category>(m_value & kCategoryMask); }
 
   /**
    * @brief Extracts the subcategory from the appearance value
    * @return The device subcategory
    */
-  inline SubCategory subCategory() const { return static_cast<SubCategory>(m_value & BLUETOOTH_APPEARANCE_SUBCATEGORY_MASK); }
+  inline SubCategory subCategory() const { return static_cast<SubCategory>(m_value & kSubCategoryMask); }
 
   /**
    * @brief Gets the raw 16-bit appearance value

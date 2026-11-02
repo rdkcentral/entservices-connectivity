@@ -20,9 +20,11 @@
 #include "Module.h"
 #include "BtMgrAdapterImpl.h"
 
+#include <algorithm>
 #include <condition_variable>
 #include <cstdlib>
 #include <cstring>
+#include <iterator>
 #include <mutex>
 
 #include "btmgr.h"
@@ -64,6 +66,20 @@ bool parseHandle(const std::string& handleStr, BTRMgrDeviceHandle& handle) {
     return true;
 }
 
+// BTMgr reports the count separately from the fixed array, so clamp it before indexing.
+size_t profileCount(const BTRMGR_DeviceServiceList_t& svc) {
+    return std::min<size_t>(svc.m_numOfService, std::size(svc.m_profileInfo));
+}
+
+std::string joinProfiles(const BTRMGR_DeviceServiceList_t& svc) {
+    std::string profiles;
+    for (size_t i = 0; i < profileCount(svc); ++i) {
+        if (!profiles.empty()) profiles += ";";
+        profiles += svc.m_profileInfo[i].m_profile;
+    }
+    return profiles;
+}
+
 // Tracks event-thread dispatches in flight so deinit() can wait for them to drain.
 std::mutex              s_inflightMutex;
 std::condition_variable s_inflightCv;
@@ -94,12 +110,13 @@ std::atomic<BtMgrAdapterImpl*> BtMgrAdapterImpl::s_instance{nullptr};
 std::string BtMgrAdapterImpl::init(PluginHost::IShell* /* service */,
                                     BtEventCallbacks&& eventCallbacks,
                                     BtAuthCallbacks&& authCallbacks) {
-    printf("*** _DEBUG: BtMgrAdapterImpl::init: entry\n");    
     m_evtCbs  = std::move(eventCallbacks);
     m_authCbs = std::move(authCallbacks);
     s_instance = this;
 
-    Utils::IARM::init();
+    if (!Utils::IARM::init()) {
+        LOGERR("Utils::IARM::init() failed; continuing");
+    }
 
     BTRMGR_Result_t rc = BTRMGR_RegisterForCallbacks(kIarmClientName);
     if (rc != BTRMGR_RESULT_SUCCESS) {
@@ -224,7 +241,8 @@ std::vector<IBtAdapter::BtDeviceInfo> BtMgrAdapterImpl::getDiscoveredDevices() c
     BTRMGR_DiscoveredDevicesList_t list;
     memset(&list, 0, sizeof(list));
     if (BTRMGR_GetDiscoveredDevices(0, &list) != BTRMGR_RESULT_SUCCESS) return result;
-    for (int i = 0; i < list.m_numOfDevices; ++i) {
+    const size_t count = std::min<size_t>(list.m_numOfDevices, std::size(list.m_deviceProperty));
+    for (size_t i = 0; i < count; ++i) {
         const auto& d = list.m_deviceProperty[i];
         auto info = deviceInfoFromBtmgr(d, d.m_isPairedDevice != 0);
         cacheHandleToMac(info.handleStr, info.mac);
@@ -238,7 +256,8 @@ std::vector<IBtAdapter::BtDeviceInfo> BtMgrAdapterImpl::getPairedDevices() const
     BTRMGR_PairedDevicesList_t list;
     memset(&list, 0, sizeof(list));
     if (BTRMGR_GetPairedDevices(0, &list) != BTRMGR_RESULT_SUCCESS) return result;
-    for (int i = 0; i < list.m_numOfDevices; ++i) {
+    const size_t count = std::min<size_t>(list.m_numOfDevices, std::size(list.m_deviceProperty));
+    for (size_t i = 0; i < count; ++i) {
         auto info = deviceInfoFromBtmgr(list.m_deviceProperty[i], true);
         cacheHandleToMac(info.handleStr, info.mac);
         result.push_back(std::move(info));
@@ -247,12 +266,12 @@ std::vector<IBtAdapter::BtDeviceInfo> BtMgrAdapterImpl::getPairedDevices() const
 }
 
 std::vector<IBtAdapter::BtDeviceInfo> BtMgrAdapterImpl::getConnectedDevices() const {
-    printf("*** _DEBUG: BtMgrAdapterImpl::getConnectedDevices(): entry\n");
     std::vector<BtDeviceInfo> result;
     BTRMGR_ConnectedDevicesList_t list;
     memset(&list, 0, sizeof(list));
     if (BTRMGR_GetConnectedDevices(0, &list) != BTRMGR_RESULT_SUCCESS) return result;
-    for (int i = 0; i < list.m_numOfDevices; ++i) {
+    const size_t count = std::min<size_t>(list.m_numOfDevices, std::size(list.m_deviceProperty));
+    for (size_t i = 0; i < count; ++i) {
         const auto& d = list.m_deviceProperty[i];
         auto info = deviceInfoFromBtmgr(d, true);
         info.powerStatus = static_cast<uint32_t>(d.m_powerStatus);
@@ -346,7 +365,7 @@ bool BtMgrAdapterImpl::getDeviceProperties(const std::string& handleStr,
     props.modalias     = p.m_modalias;
     props.firmwareRevision = p.m_firmwareRevision;
 
-    for (int i = 0; i < p.m_serviceInfo.m_numOfService; ++i) {
+    for (size_t i = 0; i < profileCount(p.m_serviceInfo); ++i) {
         props.uuids.push_back(p.m_serviceInfo.m_profileInfo[i].m_profile);
     }
 
@@ -384,33 +403,6 @@ bool BtMgrAdapterImpl::respondToEvent(const std::string& handleStr, const std::s
         return false;
     }
     rsp.m_eventResp = accepted ? 1 : 0;
-
-    return BTRMGR_SetEventResponse(0, &rsp) == BTRMGR_RESULT_SUCCESS;
-}
-
-bool BtMgrAdapterImpl::respondToEvent(const std::string& mac,
-                                      int eventType,
-                                      bool accepted) {
-
-    BTRMGR_EventResponse_t rsp;
-    memset(&rsp, 0, sizeof(rsp));
-    // Recover handle from MAC.
-    std::string handleStr;
-    {
-        std::lock_guard<std::mutex> lk2(m_mapMutex);
-        auto it = m_macToHandle.find(mac);
-        if (it != m_macToHandle.end()) handleStr = it->second;
-    }
-    if (handleStr.empty()) return false;
-
-    BTRMgrDeviceHandle h = 0;
-    if (!parseHandle(handleStr, h)) {
-        LOGERR("Invalid device handle '%s'", handleStr.c_str());
-        return false;
-    }
-    rsp.m_deviceHandle = h;
-    rsp.m_eventType    = static_cast<BTRMGR_Events_t>(eventType);
-    rsp.m_eventResp    = accepted ? 1 : 0;
 
     return BTRMGR_SetEventResponse(0, &rsp) == BTRMGR_RESULT_SUCCESS;
 }
@@ -640,11 +632,7 @@ void BtMgrAdapterImpl::onEvent(void* data, size_t /*len*/) {
         const auto& d = msg.m_externalDevice;
         std::string handleStr = std::to_string(d.m_deviceHandle);
         const char* dt = BTRMGR_GetDeviceTypeAsString(d.m_deviceType);
-        std::string profiles;
-        for (int i = 0; i < d.m_serviceInfo.m_numOfService; ++i) {
-            if (!profiles.empty()) profiles += ";";
-            profiles += d.m_serviceInfo.m_profileInfo[i].m_profile;
-        }
+        const std::string profiles = joinProfiles(d.m_serviceInfo);
         cacheHandleToMac(handleStr, d.m_deviceAddress);
         if (m_authCbs.onPairingRequest)
             m_authCbs.onPairingRequest(handleStr, d.m_name, dt ? dt : "UNKNOWN",
@@ -658,25 +646,19 @@ void BtMgrAdapterImpl::onEvent(void* data, size_t /*len*/) {
         const auto& d = msg.m_externalDevice;
         std::string handleStr = std::to_string(d.m_deviceHandle);
         const char* dt = BTRMGR_GetDeviceTypeAsString(d.m_deviceType);
-        std::string profiles;
-        for (int i = 0; i < d.m_serviceInfo.m_numOfService; ++i) {
-            if (!profiles.empty()) profiles += ";";
-            profiles += d.m_serviceInfo.m_profileInfo[i].m_profile;
-        }
+        const std::string profiles = joinProfiles(d.m_serviceInfo);
         cacheHandleToMac(handleStr, d.m_deviceAddress);
 
         // Once migrated, respond directly (accept or reject) and suppress the client notification either way.
         bool accept = false;
         if (m_authCbs.getConnectAutoResponse && m_authCbs.getConnectAutoResponse(handleStr, accept)) {
-            if (!respondToEvent(
-                    d.m_deviceAddress,
-                    static_cast<int>(BTRMGR_EVENT_RECEIVED_EXTERNAL_CONNECT_REQUEST),
-                    accept)) {
+            const bool responded = respondToEvent(handleStr, EVT_CONNECTION_REQUEST, accept);
+            if (!responded) {
                 LOGERR("Failed to auto-respond to connection request for %s",
                        d.m_deviceAddress);
             }
-            if (accept) {
-                connectDevice(handleStr, dt ? dt : "UNKNOWN");
+            if (accept && responded && !connectDevice(handleStr, dt ? dt : "UNKNOWN")) {
+                LOGERR("Failed to connect device %s after auto-accept", d.m_deviceAddress);
             }
             return;
         }
@@ -691,11 +673,7 @@ void BtMgrAdapterImpl::onEvent(void* data, size_t /*len*/) {
         const auto& d = msg.m_externalDevice;
         std::string handleStr = std::to_string(d.m_deviceHandle);
         const char* dt = BTRMGR_GetDeviceTypeAsString(d.m_deviceType);
-        std::string profiles;
-        for (int i = 0; i < d.m_serviceInfo.m_numOfService; ++i) {
-            if (!profiles.empty()) profiles += ";";
-            profiles += d.m_serviceInfo.m_profileInfo[i].m_profile;
-        }
+        const std::string profiles = joinProfiles(d.m_serviceInfo);
         cacheHandleToMac(handleStr, d.m_deviceAddress);
         if (m_authCbs.onPlaybackRequest)
             m_authCbs.onPlaybackRequest(handleStr, d.m_name, dt ? dt : "UNKNOWN",
@@ -790,16 +768,6 @@ void BtMgrAdapterImpl::onEvent(void* data, size_t /*len*/) {
 // ── Private helpers ────────────────────────────────────────────────────────────
 
 // static
-std::string BtMgrAdapterImpl::deriveHandle(const std::string& mac) {
-    if (mac.size() < 17) return "0";
-    char h[13] = {};
-    h[0]=mac[0]; h[1]=mac[1]; h[2]=mac[3];  h[3]=mac[4];
-    h[4]=mac[6]; h[5]=mac[7]; h[6]=mac[9];  h[7]=mac[10];
-    h[8]=mac[12];h[9]=mac[13];h[10]=mac[15];h[11]=mac[16];
-    return std::to_string(static_cast<uint64_t>(strtoll(h, nullptr, 16)));
-}
-
-// static
 int BtMgrAdapterImpl::deviceOpTypeFromProfile(const std::string& p) {
     const bool hasAudio = Utils::String::contains(p, "LOUDSPEAKER") ||
                           Utils::String::contains(p, "HEADPHONES") ||
@@ -826,15 +794,6 @@ void BtMgrAdapterImpl::cacheHandleToMac(const std::string& handleStr,
                                          const std::string& mac) const {  // mutable map members allow const
     std::lock_guard<std::mutex> lk(m_mapMutex);
     m_handleToMac[handleStr] = mac;
-    m_macToHandle[mac]       = handleStr;
-}
-
-// static
-int BtMgrAdapterImpl::staticEventCallback(const char* /*owner*/, int /*eventId*/,
-                                            void* data, size_t len) {
-    BtMgrAdapterImpl* inst = s_instance.load();
-    if (inst) inst->onEvent(data, len);
-    return 0;
 }
 
 } // namespace Plugin

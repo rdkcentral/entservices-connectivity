@@ -19,7 +19,6 @@
 
 #pragma once
 
-#include <Events.h>
 #include <Status.h>
 
 #include <cstdint>
@@ -82,7 +81,7 @@ class Service;
  * @param properties The bitmask of properties.
  * @param property The property to check.
  */
-#define CHECK_GATT_PROPERTY(properties, property) (properties & property)
+#define CHECK_GATT_PROPERTY(properties, property) (((properties) & (property)) != 0)
 
 /**
  * @class Descriptor
@@ -111,7 +110,7 @@ class Descriptor {
   /** @brief Sets the value of the descriptor. */
   void setValue(std::vector<uint8_t>);
 
-  std::string m_path; /**< Object path for the descriptor. */
+  std::string m_path; /**< Object path for the descriptor. Do not modify; owned by the library. */
 
  protected:
   /** @brief Associates the descriptor with a characteristic. */
@@ -148,7 +147,11 @@ class Characteristic : public std::enable_shared_from_this<Characteristic> {
   /** @brief Gets all descriptors associated with this characteristic. */
   const std::map<std::string, std::shared_ptr<Descriptor>>& getDescriptors() const;
 
-  /** @brief Adds a descriptor to the characteristic. */
+  /**
+   * @brief Adds a descriptor to the characteristic.
+   * @note The characteristic must be owned by a std::shared_ptr (e.g. created with std::make_shared)
+   *       because it relies on shared_from_this().
+   */
   bool addDescriptor(std::shared_ptr<Descriptor> descriptor);
 
   /** @brief Gets the current value of the characteristic. */
@@ -157,7 +160,7 @@ class Characteristic : public std::enable_shared_from_this<Characteristic> {
   /** @brief Sets the value of the characteristic. */
   void setValue(std::vector<uint8_t>);
 
-  std::string m_path; /**< Object path for the characteristic. */
+  std::string m_path; /**< Object path for the characteristic. Do not modify; owned by the library. */
 
  protected:
   /** @brief Associates the characteristic with a service. */
@@ -192,9 +195,13 @@ class Service : public std::enable_shared_from_this<Service> {
   std::string UUID();
   /** @brief Gets the characteristics associated with this service. */
   const std::map<std::string, std::shared_ptr<Characteristic>>& getCharacteristics() const;
-  /** @brief Adds a characteristic to this service. */
+  /**
+   * @brief Adds a characteristic to this service.
+   * @note The service must be owned by a std::shared_ptr (e.g. created with std::make_shared)
+   *       because it relies on shared_from_this().
+   */
   bool addCharacteristic(std::shared_ptr<Characteristic>);
-  std::string m_path;
+  std::string m_path; /**< Object path for the service. Do not modify; owned by the library. */
 
  private:
   class Impl;

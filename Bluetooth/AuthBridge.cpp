@@ -19,8 +19,12 @@
 
 #include "AuthBridge.h"
 
+#include <bluetooth/Appearance.h>
 #include <core/core.h>
 #include <UtilsLogging.h>
+
+#include "DiscoveryNameGate.h"
+#include "ScanFilterPolicy.h"
 
 namespace WPEFramework {
 namespace Plugin {
@@ -40,6 +44,21 @@ bool AuthBridge::isAudioOutputType(const std::string& deviceType) {
         || deviceType == "WEARABLE HEADSET"
         || deviceType == "HANDSFREE"
         || deviceType == "HIFI AUDIO DEVICE";
+}
+
+bool AuthBridge::isRemoteControl(const std::string& mac, const bluetooth::DeviceProperties& props) {
+    return ScanFilterPolicy::isRemoteControl(mac, props.appearance.value_or(0));
+}
+
+bool AuthBridge::isLeGamepad(const bluetooth::DeviceProperties& props) {
+    return props.appearance.value_or(0)
+        == (static_cast<uint16_t>(bluetooth::Appearance::Category::HumanInterfaceDevice)
+          | static_cast<uint16_t>(bluetooth::Appearance::SubCategory::Gamepad));
+}
+
+bool AuthBridge::isGamepad(const std::string& mac, const bluetooth::DeviceProperties& props) {
+    if (isRemoteControl(mac, props)) return false;
+    return isLeGamepad(props) || DiscoveryNameGate::isController(props.classOfDevice.value_or(0));
 }
 
 std::string AuthBridge::resolveDeviceType(const std::shared_ptr<bluetooth::Device>& device, const std::string& handleStr) {
@@ -84,7 +103,7 @@ bool AuthBridge::onAuthRequest(bluetooth::AuthorisationType type, std::shared_pt
         }
         std::string deviceAddress;
         device->address(deviceAddress);
-        const std::string devId = handleStr.empty() ? DeviceRegistry::deriveHandle(mac) : std::move(handleStr);
+        const std::string devId = handleStr.empty() ? DeviceRegistry::deriveHandle(mac) : handleStr;
 
         auto pending = std::make_shared<PendingAuth>();
         {
@@ -110,17 +129,30 @@ bool AuthBridge::onAuthRequest(bluetooth::AuthorisationType type, std::shared_pt
 
     // ── ConnectionRequest ────────────────────────────────────────────────────
 
-    // Auto-accept policy for paired HID devices that are not in cooldown.
-    if (isAutoAcceptDevice(deviceType, handleStr, device)) {
+    // A connection the plugin itself is making (e.g. while pairing) is not for the autoconnect status or the client to decide.
+    if (m_isOperationInProgress && m_isOperationInProgress(mac)) {
+        LOGINFO("AuthBridge: accepting connection from %s (%s), the plugin is pairing or connecting it",
+                mac.c_str(), deviceType.c_str());
+        return true;
+    }
+
+    bluetooth::DeviceProperties props;
+    const bool gamepad = device->getAllProperties(props) && isGamepad(mac, props);
+
+    // Auto-accept policy for paired HID devices that are not gamepads and not in cooldown.
+    if (!gamepad && isAutoAcceptDevice(deviceType, device)) {
         LOGINFO("AuthBridge: auto-accepting connection from %s (%s)", mac.c_str(), deviceType.c_str());
         return true;
     }
 
     // Everything else follows the BTMgr policy: autoconnect status when migrated, otherwise the client decides.
-    // Audio output devices only get a short window, as in BTMgr; the startup reconnect retries later.
-    const auto timeout = isAudioOutputType(deviceType)
-        ? std::chrono::milliseconds(AUDIO_AUTH_TIMEOUT_MS)
-        : std::chrono::milliseconds(std::chrono::seconds(AUTH_TIMEOUT_SECONDS));
+    // Audio output devices and gamepads only get a short window, as in BTMgr; the startup reconnect retries later.
+    std::chrono::milliseconds timeout{std::chrono::seconds(AUTH_TIMEOUT_SECONDS)};
+    if (isAudioOutputType(deviceType)) {
+        timeout = std::chrono::milliseconds(AUDIO_AUTH_TIMEOUT_MS);
+    } else if (gamepad) {
+        timeout = std::chrono::milliseconds(isLeGamepad(props) ? LE_GAMEPAD_AUTH_TIMEOUT_MS : GAMEPAD_AUTH_TIMEOUT_MS);
+    }
     const ConnectDecision decision = decideConnection(device, timeout);
     return decision == ConnectDecision::AcceptedAuto || decision == ConnectDecision::AcceptedByClient;
 }
@@ -188,15 +220,14 @@ bool AuthBridge::onRespondToEvent(const std::string& mac, bool accepted) {
 }
 
 bool AuthBridge::isAutoAcceptDevice(const std::string& deviceType,
-                                    const std::string& handleStr,
                                     std::shared_ptr<bluetooth::Device> device) const {
     if (!isHidType(deviceType)) {
         return false;
     }
 
     // Must be in Paired state.
-    if (device->state() != bluetooth::DeviceState::Paired &&
-        device->state() != bluetooth::DeviceState::Connected) {
+    const bluetooth::DeviceState state = device->state();
+    if (state != bluetooth::DeviceState::Paired && state != bluetooth::DeviceState::Connected) {
         return false;
     }
 

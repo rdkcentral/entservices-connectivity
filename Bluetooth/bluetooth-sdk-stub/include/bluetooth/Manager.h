@@ -91,7 +91,7 @@ class Manager {
    * @param output Log output configuration (file path or LogRedirect instance).
    * @param agentCapability The capability string for the BlueZ agent (defaults to "DisplayYesNo").
    */
-  Manager(AuthorisationMode isAuthManager = AuthorisationMode::NoAuthorisation,
+  explicit Manager(AuthorisationMode isAuthManager = AuthorisationMode::NoAuthorisation,
           std::function<bool(AuthorisationType authType, std::shared_ptr<Device>)> authManagerCallback = {},
           LogLocation logOutput = LogLocation::Stdout,
           std::variant<std::string, std::unique_ptr<LogRedirect>> output = {},

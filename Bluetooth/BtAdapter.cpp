@@ -17,6 +17,7 @@
 * limitations under the License.
 **/
 
+#include "Module.h"
 #include "BtAdapter.h"
 #include "DeviceRegistry.h"
 #include "BtSdkAdapterImpl.h"
@@ -28,6 +29,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <UtilsLogging.h>
 
 namespace {
 
@@ -83,9 +85,9 @@ void BtAdapter::setImpl(IBtAdapter* newImpl) {
     injected.store(newImpl != nullptr, std::memory_order_release);
 }
 
-std::string BtAdapter::ensureImpl() {
+void BtAdapter::ensureImpl() {
     if (impl.load(std::memory_order_acquire)) {
-        return {};
+        return;
     }
 
     IBtAdapter* chosen = useSdkBackend() ? static_cast<IBtAdapter*>(&g_btSdkAdapterImpl)
@@ -93,16 +95,13 @@ std::string BtAdapter::ensureImpl() {
     // Never overwrite an impl published concurrently (e.g. by init()).
     IBtAdapter* expected = nullptr;
     impl.compare_exchange_strong(expected, chosen, std::memory_order_acq_rel, std::memory_order_acquire);
-    return {};
 }
 
 IBtAdapter& BtAdapter::getImpl() {
     IBtAdapter* current = nullptr;
     // Retry covers a concurrent deinit() clearing impl between ensureImpl() and the load.
     while ((current = impl.load(std::memory_order_acquire)) == nullptr) {
-        const std::string error = ensureImpl();
-        assert(error.empty());
-        (void)error;
+        ensureImpl();
     }
     return *current;
 }
@@ -110,12 +109,12 @@ IBtAdapter& BtAdapter::getImpl() {
 std::string BtAdapter::init(PluginHost::IShell* service,
                             BtEventCallbacks&& evtCbs,
                             BtAuthCallbacks&& authCbs) {
-    printf("*** _DEBUG: BtAdapter::init: entry\n");
+    LOGINFO("BtAdapter::init: entry");
     // Only an explicit setImpl() injection skips probing; an impl chosen lazily by ensureImpl() must not.
     IBtAdapter* injectedImpl = injected.load(std::memory_order_acquire) ? impl.load(std::memory_order_acquire) : nullptr;
     if (injectedImpl) {
         // setImpl() test injection already fixed the backend; skip probing.
-        printf("*** _DEBUG: BtAdapter::init: impl already set\n");
+        LOGINFO("BtAdapter::init: impl already set");
         return injectedImpl->init(service, std::move(evtCbs), std::move(authCbs));
     }
 
@@ -126,7 +125,7 @@ std::string BtAdapter::init(PluginHost::IShell* service,
         // the only reliable, runtime signal that the real SDK is behind it;
         // the stub deliberately fails it so callers fall back correctly.
         std::string sdkError = g_btSdkAdapterImpl.init(service, BtEventCallbacks(evtCbs), BtAuthCallbacks(authCbs));
-        printf("*** _DEBUG: BtAdapter::init: sdkError: %s\n", sdkError.c_str());
+        LOGINFO("BtAdapter::init: sdkError: %s", sdkError.c_str());
         if (sdkError.empty()) {
             impl.store(&g_btSdkAdapterImpl, std::memory_order_release);
             return {};

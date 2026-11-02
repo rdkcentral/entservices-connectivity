@@ -31,7 +31,7 @@ class Status {
     m_message = message;
   }
   std::string get_message() const { return m_message; }
-  operator bool() const { return m_code == StatusCodes::SUCCESS; }
+  explicit operator bool() const { return m_code == StatusCodes::SUCCESS; }
 
  private:
   StatusCodes m_code;

@@ -28,7 +28,7 @@
 #include "Module.h"
 #include <interfaces/IPowerManager.h>
 #include "PowerManagerInterface.h"
-#include "UtilsThreadRAII.h"
+#include "UtilsLogging.h"
 #include "BluetoothDeviceManager.h"
 #include "BtAdapter.h"
 #include <type_traits>
@@ -109,7 +109,9 @@ namespace WPEFramework {
                     const WPEFramework::Exchange::IPowerManager::PowerState currentState,
                     const WPEFramework::Exchange::IPowerManager::PowerState newState)
                 {
-                    _queue.Post(Transition{currentState, newState});
+                    if (!_queue.Post(Transition{currentState, newState})) {
+                        LOGERR("Power transition dropped (queue disabled): %d --> %d", static_cast<int>(currentState), static_cast<int>(newState));
+                    }
                 }
 
             private:
@@ -151,6 +153,7 @@ namespace WPEFramework {
                 void OnPowerModeChanged(const WPEFramework::Exchange::IPowerManager::PowerState currentState, const WPEFramework::Exchange::IPowerManager::PowerState newState) override
                 {
                     // Hand off to the dedicated queue; do not call _bluetooth.onPowerModeChanged() directly from here.
+                    std::lock_guard<std::mutex> lock(_bluetooth.m_powerModeQueueLock);
                     if (_bluetooth.m_powerModeEventQueue) {
                         _bluetooth.m_powerModeEventQueue->Post(currentState, newState);
                     }
@@ -229,6 +232,7 @@ namespace WPEFramework {
             bool setAudioControlCommand(long long int  deviceID, const string &audioCtrlCmd);
             bool setEventResponse(long long int  deviceID, const string &eventType, const string &respValue);
             bool parseDeviceID(const std::string& deviceIDStr,long long int& deviceID);
+            std::string toCacheKey(const std::string& deviceIDStr);
             JsonObject getDeviceInfo(long long int deviceID);
             JsonObject getMediaTrackInfo(long long int deviceID);
             bool setDeviceVolumeMuteProperties(long long int  deviceID, const string &deviceProfile, unsigned char ui8volume, unsigned char mute);
@@ -274,11 +278,7 @@ namespace WPEFramework {
             static const string EVT_CONNECTION_REQUEST;
 
             static const string EVT_PLAYBACK_REQUEST;
-            static const string EVT_PLAYBACK_STARTED;
-            static const string EVT_PLAYBACK_PAUSED;
-            static const string EVT_PLAYBACK_RESUMED;
-            static const string EVT_PLAYBACK_STOPPED;
-            static const string EVT_PLAYBACK_ENDED;
+            static const string EVT_PLAYBACK_CHANGE;
 
             static const string EVT_PLAYBACK_POSITION;
             static const string EVT_PLAYBACK_NEW_TRACK;
@@ -299,7 +299,6 @@ namespace WPEFramework {
             END_INTERFACE_MAP
 
         public:
-            static Bluetooth* _instance;
             void onPowerModeChanged(const WPEFramework::Exchange::IPowerManager::PowerState currentState, const WPEFramework::Exchange::IPowerManager::PowerState newState);
 
         private:
@@ -340,9 +339,6 @@ namespace WPEFramework {
             static const string CMD_AUDIO_CTRL_UNKNOWN;
 
             uint32_t m_apiVersionNumber;
-            // Assuming that there will be only one threaded call at a time (which is the case for Bluetooth)
-            // Otherwise we might need a thread for each async command for better performance
-            Utils::ThreadRAII m_executionThread;
             // Guards m_discoveryRunning and the scan start/stop sequence; recursive because
             // startDeviceDiscovery()/onDiscoveryTimer() call stopDeviceDiscovery().
             Core::CriticalSection m_discoveryLock;
@@ -351,6 +347,9 @@ namespace WPEFramework {
             friend class DiscoveryTimer;
             PowerManagerInterfaceRef m_powerManagerPlugin;
             Core::Sink<PowerManagerNotification> m_powerManagerNotification;
+            // Guards the m_powerModeEventQueue pointer (read by the notification callback, reset by Deinitialize()).
+            // Never held while the queue is destroyed: ~PowerModeEventQueue joins a thread that takes m_powerModeLock.
+            std::mutex m_powerModeQueueLock;
             std::unique_ptr<PowerModeEventQueue> m_powerModeEventQueue;
             // Serializes onPowerModeChanged() between the queue thread and Initialize()'s initial call.
             std::mutex m_powerModeLock;

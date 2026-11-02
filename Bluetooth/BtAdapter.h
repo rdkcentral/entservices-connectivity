@@ -49,47 +49,47 @@ public:
 
     std::string init(PluginHost::IShell* service,
                      BtEventCallbacks&& eventCallbacks,
-                     BtAuthCallbacks&& authCallbacks);
-    void deinit();
+                     BtAuthCallbacks&& authCallbacks) override;
+    void deinit() override;
 
-    bool getAdapterPowered(bool& powered) const;
-    bool setAdapterPowered(bool powered);
-    bool getAdapterName(std::string& name) const;
-    bool setAdapterName(const std::string& name);
-    bool isAdapterDiscoverable(bool& discoverable) const;
-    bool setAdapterDiscoverable(bool discoverable, int timeoutSeconds);
+    bool getAdapterPowered(bool& powered) const override;
+    bool setAdapterPowered(bool powered) override;
+    bool getAdapterName(std::string& name) const override;
+    bool setAdapterName(const std::string& name) override;
+    bool isAdapterDiscoverable(bool& discoverable) const override;
+    bool setAdapterDiscoverable(bool discoverable, int timeoutSeconds) override;
 
-    bool startScan(const std::string& profile);
-    bool stopScan();
+    bool startScan(const std::string& profile) override;
+    bool stopScan() override;
 
-    std::vector<IBtAdapter::BtDeviceInfo> getDiscoveredDevices() const;
-    std::vector<IBtAdapter::BtDeviceInfo> getPairedDevices() const;
-    std::vector<IBtAdapter::BtDeviceInfo> getConnectedDevices() const;
+    std::vector<IBtAdapter::BtDeviceInfo> getDiscoveredDevices() const override;
+    std::vector<IBtAdapter::BtDeviceInfo> getPairedDevices() const override;
+    std::vector<IBtAdapter::BtDeviceInfo> getConnectedDevices() const override;
 
-    bool pairDevice(const std::string& handleStr);
-    bool unpairDevice(const std::string& handleStr);
-    bool connectDevice(const std::string& handleStr, const std::string& deviceType = "");
-    bool disconnectDevice(const std::string& handleStr, const std::string& deviceType = "");
+    bool pairDevice(const std::string& handleStr) override;
+    bool unpairDevice(const std::string& handleStr) override;
+    bool connectDevice(const std::string& handleStr, const std::string& deviceType = "") override;
+    bool disconnectDevice(const std::string& handleStr, const std::string& deviceType = "") override;
 
     bool getDeviceProperties(const std::string& handleStr,
-                             IBtAdapter::BtDeviceProperties& props) const;
+                             IBtAdapter::BtDeviceProperties& props) const override;
 
-    std::string getMacForHandle(const std::string& handleStr) const;
+    std::string getMacForHandle(const std::string& handleStr) const override;
 
-    bool respondToEvent(const std::string& handleStr, const std::string& eventType, bool accepted);
+    bool respondToEvent(const std::string& handleStr, const std::string& eventType, bool accepted) override;
 
     bool                          setAudioStream(long long int deviceID,
-                                                  const std::string& streamName);
+                                                  const std::string& streamName) override;
     bool                          setAudioControlCommand(long long int deviceID,
-                                                         const std::string& cmd);
+                                                         const std::string& cmd) override;
     bool                          setDeviceVolumeMute(long long int deviceID,
                                                        const std::string& profile,
-                                                       uint8_t volume, bool mute);
+                                                       uint8_t volume, bool mute) override;
     IBtAdapter::BtDeviceVolumeMute getDeviceVolumeMute(long long int deviceID,
-                                                       const std::string& profile) const;
-    IBtAdapter::BtMediaTrackInfo   getMediaTrackInfo(long long int deviceID) const;
+                                                       const std::string& profile) const override;
+    IBtAdapter::BtMediaTrackInfo   getMediaTrackInfo(long long int deviceID) const override;
 
-    void startAutoConnect();
+    void startAutoConnect() override;
 
     // Derive the stable numeric handle string from a MAC address.
     static std::string handleForMac(const std::string& mac);
@@ -98,7 +98,7 @@ private:
     static std::atomic<IBtAdapter*> impl;
     // True only when impl was set via setImpl() (test injection); a lazily chosen impl does not count.
     static std::atomic<bool> injected;
-    static std::string ensureImpl();
+    static void ensureImpl();
     static IBtAdapter& getImpl();
 };
 
