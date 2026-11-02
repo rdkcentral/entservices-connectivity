@@ -34,6 +34,8 @@
 
 #ifndef BLUETOOTH_PERSISTENT_FILE_PATH
 // Set at build time via -DBLUETOOTH_PERSISTENT_FILE_PATH=<path>
+// Intentionally unchanged: the /tmp default is a deliberate dev/test fallback that the L1/L2 tests rely on;
+// production builds set the path via CMake (docs name /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json).
 #define BLUETOOTH_PERSISTENT_FILE_PATH "/tmp/paired_bluetooth_devices.json"
 #endif
 
@@ -128,6 +130,9 @@ Core::hresult BluetoothPersistenceAdapter::Parse(const std::string& payload, std
     // Missing, empty, or corrupted (invalid JSON) payloads are treated as the
     // default content {"pairedDevices":[]} rather than a fatal error, so migration
     // is not blocked by an absent or malformed filesystem persistence source.
+    // Intentionally unchanged: documented behaviour (manual test plan TC-MIG-06 and the L1 corrupted-payload
+    // test: a corrupt legacy file migrates as empty). openspec/specs/bluetooth-migration/spec.md describes
+    // aborting instead, so reconcile the two if the policy changes.
     JsonObject root;
     if (payload.empty() || !root.FromString(payload)) {
         if (!payload.empty()) {
@@ -324,6 +329,8 @@ Core::hresult BluetoothPersistenceAdapter::Write(const std::unordered_map<std::s
         if ((::unlink(tmpPath.c_str()) != 0) && (errno != ENOENT)) {
             LOGWARN("Failed to unlink stale filesystem persistence temp file: %s", tmpPath.c_str());
         }
+        // Intentionally unchanged: mode 0644 is kept world-readable on purpose because the legacy AS reader
+        // of this file may run as a different user; tightening needs that confirmed first.
         const int fd = open(tmpPath.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0644);
         if (fd < 0) {
             LOGERR("Failed to open filesystem persistence temp file for write: %s", tmpPath.c_str());

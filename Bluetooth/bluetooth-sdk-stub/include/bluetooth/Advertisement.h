@@ -57,8 +57,12 @@ class Advertisement {
   /** @brief Sets the service UUIDs to advertise. */
   void ServiceUUIDs(std::vector<Uuid> serviceUuids);
   /** @brief Sets the manufacturer data. */
+  // Intentionally unchanged: non-const reference kept for ABI parity with the real SDK; a const& overload
+  // would be an API change to make upstream.
   void ManufacturerData(std::map<uint16_t, std::vector<uint8_t>>& data);
   /** @brief Sets the service data UUIDs. */
+  // Intentionally unchanged: non-const reference kept for ABI parity with the real SDK; a corrected
+  // ServiceData signature would be an API change to make upstream.
   void ServiceData(std::vector<Uuid>& serviceUuids);
   /** @brief Sets whether the advertisement is discoverable. */
   void Discoverable(bool discoverable);

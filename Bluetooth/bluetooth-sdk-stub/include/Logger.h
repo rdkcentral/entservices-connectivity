@@ -144,6 +144,8 @@ class Logger {
   }
 };
 
+// Intentionally unchanged: unprefixed macro names kept for source compatibility with the real SDK, which uses
+// them throughout; the plugin does not include this header so there is no collision.
 #define DBG(...) Logger::getLogger().log("DEBUG", __VA_ARGS__)
 #define INFO(...) Logger::getLogger().log("INFO", __VA_ARGS__)
 #define WARN(...) Logger::getLogger().log("WARN", __VA_ARGS__)

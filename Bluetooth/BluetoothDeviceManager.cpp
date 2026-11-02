@@ -99,6 +99,8 @@ namespace WPEFramework {
             }
 
             _adminLock.Lock();
+            // Intentionally unchanged: the imported cache replaces the whole cache; changes made by mutators before
+            // migration completes are discarded, accepted because those entries only hold defaults plus name/type.
             _pairedDeviceCache = std::move(importedCache);
             _adminLock.Unlock();
 
@@ -321,6 +323,8 @@ namespace WPEFramework {
 
             if (Core::ERROR_NONE == result) {
                 JsonArray deviceInfoArray;
+                // Intentionally unchanged: the FromString() result is deliberately unchecked; same documented
+                // corrupt-payload-migrates-as-empty policy as the persistence adapter, so a corrupt store is not fatal.
                 deviceInfoArray.FromString(bluetoothDeviceInfoStr);
                 LOGINFO("Loaded device info from PersistentStore: entries=%u, length=%zu\n",
                         static_cast<unsigned>(deviceInfoArray.Length()), bluetoothDeviceInfoStr.size());
@@ -554,6 +558,8 @@ namespace WPEFramework {
 
             service->AddRef();
             _adminLock.Lock();
+            // Intentionally unchanged: init() is called exactly once per activation (deinit() releases),
+            // so a repeated-init guard is deliberately not added.
             _service = service;
             _adminLock.Unlock();
 
@@ -823,6 +829,9 @@ namespace WPEFramework {
             deviceInfo.friendlyName = props.name.empty() ? deviceID : props.name;
             deviceInfo.isGamePad     = props.isGamePad;
 
+            // Intentionally unchanged: reset-on-pair is intended; pairing starts from default settings
+            // (autoconnect/volume/last-connect), so the MAC-keyed entry's settings are not copied (L1 test
+            // macKeyedEntry_PairEvictsMacKeyedEntryAndAddsHandleKeyedEntry asserts this).
             // Evict any MAC-keyed entry left from migration import for the same physical device.
             if (!deviceInfo.deviceAddr.empty()) {
                 auto macIt = _pairedDeviceCache.find(deviceInfo.deviceAddr);
@@ -832,6 +841,7 @@ namespace WPEFramework {
                 }
             }
 
+            // Intentionally unchanged: a fresh BluetoothDeviceInfo (default settings) is stored on pair by design.
             _pairedDeviceCache[deviceID] = std::move(deviceInfo);
 
             _adminLock.Unlock();

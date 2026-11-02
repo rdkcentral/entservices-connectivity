@@ -134,6 +134,8 @@ class Adapter : public EventEmitter<AdapterEvent, AdapterEventData>,
    * @param filter Scan filter criteria (default: scan for all devices)
    * @return Status of the operation
    */
+  // Intentionally unchanged: by-value parameter kept for ABI parity with the real SDK (which moves it);
+  // changing it would alter the mangled symbol.
   Status startScan(ScanFilter filter = ScanFilter());
   
   /**
@@ -203,6 +205,8 @@ class Adapter : public EventEmitter<AdapterEvent, AdapterEventData>,
    * @param connections Maximum number of connections (-1 for unlimited)
    * @return Shared pointer to the GATT server manager
    */
+  // Intentionally unchanged: the int parameter (narrowed to uint8_t by Server) preserves the real SDK's
+  // mangled symbol/ABI; clamping belongs in the real SDK implementation (the stub returns nullptr).
   std::shared_ptr<gattServer::Server> getGattServerMgr(int connections = -1);
 
  private:

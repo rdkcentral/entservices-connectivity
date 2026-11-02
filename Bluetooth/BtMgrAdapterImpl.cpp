@@ -215,6 +215,8 @@ bool BtMgrAdapterImpl::startScan(const std::string& profile) {
 }
 
 bool BtMgrAdapterImpl::stopScan() {
+    // Intentionally unchanged: legacy alignment - the BTMgr-based plugin always stopped discovery with AUDIO_OUTPUT
+    // regardless of the opType used to start it.
     return BTRMGR_StopDeviceDiscovery(0, BTRMGR_DEVICE_OP_TYPE_AUDIO_OUTPUT) == BTRMGR_RESULT_SUCCESS;
 }
 
@@ -657,6 +659,8 @@ void BtMgrAdapterImpl::onEvent(void* data, size_t /*len*/) {
                 LOGERR("Failed to auto-respond to connection request for %s",
                        d.m_deviceAddress);
             }
+            // Intentionally unchanged: legacy alignment - the BTMgr-based plugin connected inline on the event thread;
+            // deinit() waits for in-flight callbacks, so this blocking BTRMGR connect is tolerated.
             if (accept && responded && !connectDevice(handleStr, dt ? dt : "UNKNOWN")) {
                 LOGERR("Failed to connect device %s after auto-accept", d.m_deviceAddress);
             }
@@ -785,6 +789,8 @@ int BtMgrAdapterImpl::deviceOpTypeFromProfile(const std::string& p) {
         return static_cast<int>(BTRMGR_DEVICE_OP_TYPE_AUDIO_INPUT);
     if (hasHid)
         return static_cast<int>(BTRMGR_DEVICE_OP_TYPE_HID);
+    // Intentionally unchanged: legacy alignment - substring matching is identical to the BTMgr plugin and
+    // ScanFilterPolicy::modeFromProfile.
     if (Utils::String::contains(p, "LE TILE") || Utils::String::contains(p, "LE"))
         return static_cast<int>(BTRMGR_DEVICE_OP_TYPE_LE);
     return static_cast<int>(BTRMGR_DEVICE_OP_TYPE_UNKNOWN);

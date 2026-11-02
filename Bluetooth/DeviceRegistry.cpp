@@ -77,6 +77,8 @@ std::string DeviceRegistry::getHandleForMac(const std::string& mac) const {
 
 std::string DeviceRegistry::getMacForHandle(const std::string& handleStr) const {
     std::lock_guard<std::mutex> lock(m_mutex);
+    // Intentionally unchanged: linear scan is kept; there are at most tens of paired/discovered devices,
+    // so a reverse index is not worth the extra state to maintain.
     for (const auto& pair : m_macToHandle) {
         if (pair.second == handleStr) return pair.first;
     }

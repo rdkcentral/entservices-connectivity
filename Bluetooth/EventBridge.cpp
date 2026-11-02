@@ -144,6 +144,8 @@ EventBridge::~EventBridge() {
 
 // Pending notifications are dropped rather than flushed: they hold SDK Device objects and call back into the
 // plugin, neither of which may be used once the adapter is being torn down.
+// Intentionally unchanged: m_stopping is never reset - stop() is only called from deinit()/the destructor and a fresh
+// EventBridge is created on every init().
 void EventBridge::stop() {
     {
         std::lock_guard<std::mutex> lock(m_taskMutex);

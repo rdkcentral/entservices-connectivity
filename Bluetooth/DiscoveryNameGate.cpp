@@ -58,6 +58,8 @@ bool DiscoveryNameGate::isNameSameAsAddress(const std::string& name, const std::
 
 // static
 bool DiscoveryNameGate::isController(uint32_t classOfDevice) {
+    // Intentionally unchanged: the exact-match mask means combo devices with extra keyboard/pointing minor-class bits
+    // are not treated as controllers; changing it would alter which devices count as controllers.
     if ((classOfDevice & kCodPeripheral) != kCodPeripheral) return false;
     const uint32_t cls = classOfDevice & 0xFFFu;
     return cls == kCodJoystick || cls == kCodGamepad;

@@ -115,6 +115,7 @@ class Audio : public EventEmitter<AudioEvent, AudioEventData> {
      * reference, so they keep the object alive for the duration of a callback
      * instead of racing with destruction.
      */
+    // Intentionally unchanged: only called by Device right after make_shared; the precondition is documented above.
     void bindSelf(const std::shared_ptr<Audio>& self);
 
   private:
@@ -169,6 +170,7 @@ class Audio : public EventEmitter<AudioEvent, AudioEventData> {
     WpProxy* m_device{nullptr}; /**< Pointer to the WirePlumber device proxy (for Route params). */
     int m_routeIndex{0}; /**< PipeWire Route index for the audio sink. */
     int m_routeDevice{0}; /**< PipeWire Route device index. */
+    // Intentionally unchanged: removing/reshaping this map would change the class layout (ABI).
     std::map<std::string, std::tuple<float, bool, uint32_t>> m_audioSettings; /**< Map to store audio settings (volume, mute state, delay compensation) for each device. */
     std::mutex m_mtx;
     std::shared_ptr<IdleCallbackState> m_idleCallbackState{std::make_shared<IdleCallbackState>()}; /**< Shared guard for deferred idle callbacks. */

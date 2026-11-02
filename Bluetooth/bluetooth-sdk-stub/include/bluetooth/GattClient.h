@@ -121,6 +121,7 @@ class Characteristic {
   Status writeValue(const std::vector<uint8_t>& value);
 
   /** @brief Starts notifications for the characteristic. */
+  // Intentionally unchanged: signature kept for ABI parity with the real SDK; the stub is single-threaded.
   Status StartNotify(std::function<void(std::vector<uint8_t>)> notifyCb = nullptr);
 
   /** @brief Stops notifications for the characteristic. */
@@ -230,6 +231,8 @@ class Client {
    * @brief Gets all services available on the device
    * @return Const reference to map of service paths to service objects
    */
+  // Intentionally unchanged: const& getters returning internal maps are kept for ABI parity with the real SDK;
+  // the stub is single-threaded, thread-safety of the returned references is a real-SDK concern.
   const std::map<std::string, std::shared_ptr<Service>>& getServices();
   
   /**

@@ -74,6 +74,7 @@ class HeartRateService {
   std::shared_ptr<Characteristic> m_heartRateCharacteristic;
 
   /** @brief GATT service instance for Heart Rate. */
+  // Intentionally unchanged: public on purpose - the real SDK examples access these members directly.
   std::shared_ptr<Service> m_service;
 };
 
@@ -101,6 +102,7 @@ class BatteryLevelService {
   std::shared_ptr<Characteristic> m_batteryLevelCharacteristic;
 
   /** @brief GATT service instance for Battery Level. */
+  // Intentionally unchanged: public on purpose - the real SDK examples access these members directly.
   std::shared_ptr<Service> m_service;
 };
 
@@ -118,6 +120,7 @@ class CurrentTimeService {
   CurrentTimeService();
 
   /** @brief GATT service instance for Current Time. */
+  // Intentionally unchanged: public on purpose - the real SDK examples access these members directly.
   std::shared_ptr<Service> m_service;
 
  private:

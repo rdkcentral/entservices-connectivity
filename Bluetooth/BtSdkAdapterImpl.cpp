@@ -98,6 +98,8 @@ std::string BtSdkAdapterImpl::init(PluginHost::IShell* /* service */,
     m_authBridge  = std::make_unique<AuthBridge>(m_registry, std::move(authCallbacks));
     m_authBridge->setOperationInProgressPredicate([this](const std::string& mac) { return isOperationInProgress(mac); });
 
+    // Intentionally unchanged: the debug code and commented-out alternatives (LogRedirect, AutoAccept Manager)
+    // below are deliberately left in place for now.
     // <pca> debug
     auto authCb = [this](bluetooth::AuthorisationType type,
                          std::shared_ptr<bluetooth::Device> device) -> bool {
@@ -187,6 +189,8 @@ void BtSdkAdapterImpl::deinit() {
     m_scanMode = ScanFilterPolicy::Mode::Default;
     // The bridge's worker also uses SDK devices; stop it before they are released.
     if (m_eventBridge) m_eventBridge->stop();
+    // Intentionally unchanged: no extra lock around these resets. Thunder quiesces JSON-RPC before Deinitialize()
+    // and the SDK callbacks are unregistered and workers stopped above; a shared_mutex on every entry point is not worth the cost.
     m_adapter.reset();
     m_manager.reset();
     m_eventBridge.reset();
@@ -231,6 +235,8 @@ bool BtSdkAdapterImpl::setAdapterPowered(bool powered) {
     LOGINFO("BtSdkAdapterImpl::setAdapterPowered: exit successfully");
     return true;
 }
+// Intentionally unchanged: the four adapter name/discoverable operations below are a known gap versus the BTMgr
+// backend; the SDK exposes no equivalent API (only setName), so they stay explicit 'unsupported' results.
 bool BtSdkAdapterImpl::getAdapterName(std::string& name) const {
     LOGINFO("BtSdkAdapterImpl::getAdapterName: entry");
     (void)name;
@@ -265,6 +271,8 @@ bool BtSdkAdapterImpl::startScan(const std::string& profile) {
         LOGERR("BtSdkAdapterImpl::startScan: exit with error: adapter is unavailable");
         return false;
     }
+    // Intentionally unchanged: the hard-coded mode is kept while this debug filtering is in use (reduces discovery noise);
+    // ScanFilterPolicy::modeFromProfile(profile) is unused here until the override is removed.
     // <pca> debug - Just AudioOutput for now to reduce discovery noise
     //const ScanFilterPolicy::Mode mode = ScanFilterPolicy::modeFromProfile(profile);
     const ScanFilterPolicy::Mode mode = ScanFilterPolicy::Mode::AudioOutput;
@@ -326,6 +334,8 @@ IBtAdapter::BtDeviceInfo BtSdkAdapterImpl::deviceToInfo(
                             | static_cast<uint16_t>(bluetooth::Appearance::SubCategory::Gamepad)));
         if (props.uuids.has_value()) info.uuids = props.uuids.value();
     }
+    // Intentionally unchanged: powerStatus is never set because the SDK has no power-status property, so activeState
+    // is reported as 0 for SDK-backed devices (known gap vs BTMgr).
     LOGINFO("BtSdkAdapterImpl::deviceToInfo: exit handle=%s mac=%s", info.handleStr.c_str(), info.mac.c_str());
     return info;
 }
@@ -510,6 +520,8 @@ bool BtSdkAdapterImpl::getDeviceProperties(const std::string& handleStr,
     props.appearance    = sdkProps.appearance.value_or(0);
     props.isGamePad     = (props.appearance == (static_cast<uint16_t>(bluetooth::Appearance::Category::HumanInterfaceDevice)
                         | static_cast<uint16_t>(bluetooth::Appearance::SubCategory::Gamepad)));
+    // Intentionally unchanged: the SDK exposes only RSSI and no BTMgr-equivalent signal-level mapping is defined,
+    // so signalLevel stays 0 (known gap vs BTMgr).
     props.rssi          = sdkProps.rssi.value_or(0);
     props.batteryLevel  = sdkProps.batteryLevel.value_or(0);
     props.modalias      = sdkProps.modalias.value_or("");

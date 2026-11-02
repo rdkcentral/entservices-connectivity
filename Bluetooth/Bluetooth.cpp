@@ -366,6 +366,8 @@ namespace WPEFramework
                 params["MAC"]              = mac;
                 params["supportedProfile"] = profile;
                 params["pinRequired"]      = pinRequired ? "true" : "false";
+                // Intentionally unchanged: leading zeros of the PIN are dropped, but this is latent - no backend supplies
+                // a PIN today (AuthBridge always passes pinRequired=false); format with %06u if a PIN source is added.
                 if (pinRequired) params["pinValue"] = std::to_string(pinValue);
                 sendNotifyMaskParameters(C_STR(EVT_PAIRING_REQUEST), params);
             };
@@ -573,6 +575,8 @@ namespace WPEFramework
             LOGWARN("Started discovery..!");
             m_discoveryRunning = true;
 
+            // Intentionally unchanged: a non-positive timeout starts then immediately stops the scan and still
+            // returns STATUS_AVAILABLE; legacy alignment with the BTMgr-based plugin.
             if (timeout <= 0) {
                 stopDeviceDiscovery();
             } else {
@@ -591,6 +595,8 @@ namespace WPEFramework
                 bool ok = m_btAdapter.stopScan();
                 if (!ok) LOGERR("Failed to stop the discovery..!");
                 else     LOGWARN("Stopped discovery..!");
+                // Intentionally unchanged: cleared even if stopScan() failed (failure is only returned); leaving it set
+                // with no timer would make startDeviceDiscovery() return early forever, so discovery could never restart.
                 m_discoveryRunning = false;
                 return ok;
             }
@@ -741,6 +747,8 @@ namespace WPEFramework
 
         bool Bluetooth::setBluetoothDiscoverable(bool enabled, int timeout)
         {
+            // Intentionally unchanged: the client timeout (seconds) is passed to the backend unvalidated;
+            // legacy alignment - forwarded unchanged, as in the BTMgr-based plugin.
             return m_btAdapter.setAdapterDiscoverable(enabled, timeout);
         }
 
@@ -866,6 +874,8 @@ namespace WPEFramework
             string profile;
             bool timeoutDefined = false;
             bool profileDefined = false;
+            // Intentionally unchanged: success is reported regardless of the startDeviceDiscovery() outcome
+            // (incl. NO_BLUETOOTH_HARDWARE); legacy alignment - the status string, not the success flag, carries the result.
             bool successFlag;
             if (parameters.HasLabel("timeout"))
             {
@@ -898,6 +908,8 @@ namespace WPEFramework
         {
             LOGINFOMETHOD();
             UNUSED(parameters);
+            // Intentionally unchanged: the result of stopDeviceDiscovery() is ignored and true is always returned;
+            // legacy alignment (idempotent stop).
             stopDeviceDiscovery();
             returnResponse(true);
         }
@@ -1160,6 +1172,9 @@ namespace WPEFramework
         uint32_t Bluetooth::unpairWrapper(const JsonObject& parameters, JsonObject& response)
         {
             LOGINFOMETHOD();
+            // Intentionally unchanged: successFlag is never updated from the setDevicePairing() result or a
+            // missing/invalid deviceID, so unpair always reports success; legacy alignment - the BTMgr-based
+            // plugin reported success regardless and this contract is kept for client compatibility.
             bool successFlag = true;
             string deviceIDStr;
             long long int deviceID = 0;
@@ -1287,6 +1302,8 @@ namespace WPEFramework
             {
                 LOGINFO("Making a call with deviceID=%lld ", deviceID);
                 response ["volumeinfo"] = getDeviceVolumeMuteProperties(deviceID, deviceTypeStr);
+                // Intentionally unchanged: success is reported even when the volume info is not valid (empty object);
+                // legacy alignment with the BTMgr-based plugin.
                 successFlag = true;
             } else {
                 LOGERR("Please specify parameters. Example: \"params\": {\"deviceID\": \"271731989589742\", \"deviceType\": \"HEADPHONES\"}");
@@ -1330,6 +1347,8 @@ namespace WPEFramework
             if (parameters.HasLabel("volume"))
             {
                 getNumberParameterObject(parameters, "volume", ivolume);
+                // Intentionally unchanged: volume/mute are narrowed without range validation or clamping;
+                // legacy alignment - the BTMgr-based plugin did the same.
                 ui8volume = static_cast<unsigned char>(ivolume);
                 volumeDefined = true;
             }
@@ -1416,6 +1435,8 @@ namespace WPEFramework
 					returnResponse(successFlag);
 				}
                 response["deviceInfo"] = getDeviceInfo(deviceID);
+                // Intentionally unchanged: success is reported even when the lookup fails and deviceInfo is empty;
+                // legacy alignment (BTMgr plugin always returned success here) and the deviceInfo key must stay present.
                 successFlag = true;
             } else {
                 LOGERR("Please specify parameters. Example: \"params\": {\"deviceID\": \"271731989589742\"}");
@@ -1439,6 +1460,8 @@ namespace WPEFramework
 					returnResponse(successFlag);
 				}
                 response["trackInfo"] = getMediaTrackInfo(deviceID);
+                // Intentionally unchanged: success is always reported, even with an empty trackInfo;
+                // legacy alignment - same contract as the BTMgr-based plugin.
                 successFlag = true;
             } else {
                 LOGERR("Please specify parameters. Example: \"params\": {\"deviceID\": \"271731989589742\"}");

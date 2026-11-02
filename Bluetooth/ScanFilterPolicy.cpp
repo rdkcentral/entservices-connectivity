@@ -27,7 +27,7 @@ namespace Plugin {
 
 namespace {
 
-constexpr uint16_t kRemoteControlAppearance = 0x0180;
+constexpr uint16_t kRemoteControlAppearance = 0x0180; // Intentionally unchanged: exact match, as btrCore/BTMgr (ui16Appearance == BTRMGR_REMOTE_CONTROL_APPEARANCE); do not loosen.
 constexpr size_t   kOuiLength               = 8; // "AA:BB:CC"
 
 // Same lists as btrCore's BTRCORE_REMOTE_OUI_VALUES / BTRCORE_AMAZON_OUI_VALUES.
@@ -73,6 +73,8 @@ ScanFilterPolicy::Mode ScanFilterPolicy::modeFromProfile(const std::string& prof
     if (audio)        return Mode::AudioOutput;
     if (phone)        return Mode::AudioInput;
     if (hid)          return Mode::Hid;
+    // Intentionally unchanged: legacy substring parity with the BTMgr plugin (see BtMgrAdapterImpl::deviceOpTypeFromProfile);
+    // changing it would alter BTMgr behaviour.
     if (contains(profile, "LE")) return Mode::Le;
     return Mode::Default;
 }
@@ -96,6 +98,8 @@ bool ScanFilterPolicy::isRemoteControl(const std::string& mac, uint16_t appearan
 
 // static
 bool ScanFilterPolicy::isAudioType(const std::string& deviceType) {
+    // Intentionally unchanged: HANDSFREE is omitted for now - only reachable in Mode::Hid scans, which are not
+    // selected while BtSdkAdapterImpl::startScan() forces Mode::AudioOutput.
     return deviceType == "LOUDSPEAKER"
         || deviceType == "HEADPHONES"
         || deviceType == "WEARABLE HEADSET";
@@ -104,12 +108,15 @@ bool ScanFilterPolicy::isAudioType(const std::string& deviceType) {
 // static
 bool ScanFilterPolicy::isKnownGamepad(const std::string& mac, const std::string& name) {
     // btrCore classifies these as gamepads even when CoD/appearance/UUIDs say nothing.
+    // Intentionally unchanged: the name match stays case-sensitive (strstr) as in btrCore/BTMgr; do not loosen.
     return hasOui(mac, kAmazonOuis) || contains(name, "Luna") || contains(name, "Amazon");
 }
 
 // static
 std::string ScanFilterPolicy::deviceTypeFromIcon(const std::string& icon) {
     if (icon.rfind("input-", 0) == 0)  return "HUMAN INTERFACE DEVICE";
+    // Intentionally unchanged: only used locally by shouldSkipDiscovered, where LOUDSPEAKER/HEADPHONES/WEARABLE HEADSET
+    // are treated alike; an L1 test asserts audio-headset -> LOUDSPEAKER.
     if (icon.rfind("audio-", 0) == 0)  return "LOUDSPEAKER";
     if (icon.rfind("phone", 0) == 0)   return "SMARTPHONE";
     if (icon.rfind("computer", 0) == 0) return "TABLET";

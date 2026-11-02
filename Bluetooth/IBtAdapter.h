@@ -74,6 +74,8 @@ public:
 
     virtual bool pairDevice(const std::string& handleStr) = 0;
     virtual bool unpairDevice(const std::string& handleStr) = 0;
+    // Intentionally unchanged: the identical `= ""` default for deviceType is repeated in BtAdapter.h; all callers pass
+    // both arguments, so the defaults are never relied on.
     virtual bool connectDevice(const std::string& handleStr, const std::string& deviceType = "") = 0;
     virtual bool disconnectDevice(const std::string& handleStr, const std::string& deviceType = "") = 0;
 

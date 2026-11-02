@@ -44,6 +44,8 @@
  * @enum LogLocation
  * @brief Specifies where logs should be directed.
  */
+// Intentionally unchanged: kept at global scope - the plugin and the real SDK reference it unqualified
+// (LogLocation::LogRedirect); moving it would break source and change the Manager constructor's mangled symbol.
 enum class LogLocation {
   Stdout,      /**< Log to standard output. */
   File,        /**< Log to a file. */

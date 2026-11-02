@@ -58,6 +58,8 @@ Manager::Manager(AuthorisationMode isAuthManager,
     : m_impl(std::make_unique<Impl>(this, isAuthManager, std::move(authManagerCallback), logOutput,
                                     std::move(output), std::move(agentCapability))) {}
 
+// Known deviation: the stub keeps NoAuthorisation although the real SDK delegates with AutoAccept
+// (stub-only simplification).
 Manager::Manager(std::string agentCapability)
     : Manager(AuthorisationMode::NoAuthorisation, {}, LogLocation::Stdout, {}, std::move(agentCapability)) {}
 

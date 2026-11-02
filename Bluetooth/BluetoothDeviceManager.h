@@ -71,6 +71,8 @@ namespace WPEFramework {
 
                 // Inject the SDK adapter before init() is called.
                 // Required for addDevice(), updateCacheFromDevice(), and the migration path.
+                // Intentionally unchanged: set once from Bluetooth::Initialize() before init() and never changed
+                // afterwards, so no synchronisation is needed.
                 void setBtAdapter(IBtAdapter* adapter) { _btAdapter = adapter; }
 
                 Core::hresult setAutoConnect(const std::string& deviceID, bool enable);

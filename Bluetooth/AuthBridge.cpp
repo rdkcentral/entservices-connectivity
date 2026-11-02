@@ -90,6 +90,8 @@ bool AuthBridge::onAuthRequest(bluetooth::AuthorisationType type, std::shared_pt
 
     // ── PairingRequest: always escalate to client ────────────────────────────
     if (type == bluetooth::AuthorisationType::PairingRequest) {
+        // Intentionally unchanged: Bluetooth::Initialize() always registers onPairingRequest before the adapter is
+        // initialised, so this no-callback branch is unreachable in production (consider failing closed if that changes).
         if (!m_callbacks.onPairingRequest) return true;
 
         std::string name;

@@ -157,6 +157,8 @@ class Device : public EventEmitter<DeviceEvent, std::shared_ptr<Device>>,
  * @param rssi Reference to store the RSSI value
  * @return Status indicating success or failure
  */
+  // Intentionally unchanged: int8_t out-parameter kept for ABI parity with the real SDK although
+  // DeviceProperties::rssi is int16_t; real values fit in int8_t. An additive int16_t overload is the non-breaking fix.
   Status rssi(int8_t& rssi);
 /**
  * @brief Gets the device's manufacturer data

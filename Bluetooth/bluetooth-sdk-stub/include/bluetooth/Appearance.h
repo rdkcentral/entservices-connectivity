@@ -95,6 +95,8 @@ class Appearance {
     Generic = 0x0000,                    ///< Generic/default subcategory for any category
 
     // Barcode Scanner subcategories
+    // Intentionally unchanged: 0x0008 is the HID-category "Barcode Scanner" subcategory (0x03C8) in the
+    // Bluetooth Assigned Numbers; the standalone category (0x02C0) has none. Renaming would break the API.
     BarcodeScanner = 0x0008,             ///< Generic barcode scanner
 
     // Blood Pressure Monitor subcategories

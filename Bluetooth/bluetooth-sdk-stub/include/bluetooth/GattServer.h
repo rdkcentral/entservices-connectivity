@@ -48,6 +48,8 @@ namespace gattServer {
  *
  * These properties determine how a characteristic can be accessed or interacted with.
  */
+// Intentionally unchanged: kept unscoped - bitwise uses like NOTIFY | READ in the real SDK and examples
+// depend on it; converting to enum class would be a source-breaking API change.
 enum GattProperty {
   BROADCAST = 1 << 0,              /**< Characteristic supports broadcasting. */
   READ = 1 << 1,                   /**< Characteristic can be read. */
