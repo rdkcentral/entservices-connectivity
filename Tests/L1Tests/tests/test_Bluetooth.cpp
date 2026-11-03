@@ -1235,9 +1235,9 @@ TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, legacyPersistenceMigra
         GTEST_SKIP() << "Unable to prepare corrupted filesystem persistence migration file on this test host";
     }
 
-    // A parsed-empty import must short-circuit before the adapter's getPairedDevices() (backed by
-    // BTRMGR_GetPairedDevices in the BTMgr adapter); Times(0) proves that query is never reached.
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetPairedDevices(::testing::_, ::testing::_))
+    // A parsed-empty import must short-circuit before the adapter's paired-devices query;
+    // Times(0) proves that query is never reached.
+    EXPECT_CALL(*p_btSdkMock, queryPairedDevices(::testing::_))
         .Times(0);
 
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
@@ -1287,7 +1287,7 @@ TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, legacyPersistenceMigra
         GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
     }
 
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetPairedDevices(::testing::_, ::testing::_))
+    EXPECT_CALL(*p_btSdkMock, queryPairedDevices(::testing::_))
         .Times(0);
 
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
@@ -1313,7 +1313,7 @@ TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, legacyPersistenceMigra
         GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
     }
 
-    EXPECT_CALL(*p_btmgrMock, BTRMGR_GetPairedDevices(::testing::_, ::testing::_))
+    EXPECT_CALL(*p_btSdkMock, queryPairedDevices(::testing::_))
         .Times(0);
 
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
