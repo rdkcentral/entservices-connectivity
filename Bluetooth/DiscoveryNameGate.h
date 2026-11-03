@@ -51,7 +51,9 @@ public:
 
     // btrCore processes every 5th discovery update of an unnamed audio device (an RSSI update
     // arrives roughly every 500 ms). The SDK has no such update stream, so approximate it with time.
-    static constexpr int kAudioWaitMs = 2500;
+    // Longer than btrCore's equivalent because the SDK reports a device only once, so a MAC-address name
+    // reported after a short wait would never be corrected when BlueZ resolves the real name later.
+    static constexpr int kAudioWaitMs = 7000;
 
     // How often the plugin re-reads a held device's properties, in place of btrCore's name-change event.
     static constexpr int kPollIntervalMs = 500;
