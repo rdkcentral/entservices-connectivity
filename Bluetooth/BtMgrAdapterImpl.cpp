@@ -149,9 +149,12 @@ void BtMgrAdapterImpl::deinit() {
     s_instance = nullptr;
     BTRMGR_UnRegisterFromCallbacks(kIarmClientName);
 
+void BtSdkAdapterImpl::autoConnectWorker() {
     // Must not be called from the BTRMGR event thread, or this wait never completes.
     std::unique_lock<std::mutex> lk(s_inflightMutex);
-    s_inflightCv.wait(lk, [] { return s_inflightCount == 0; });
+    while (s_inflightCount != 0) {
+        s_inflightCv.wait(lk);
+    }
 }
 
 // ── Adapter operations ────────────────────────────────────────────────────────

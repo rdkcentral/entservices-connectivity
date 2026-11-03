@@ -150,18 +150,18 @@ std::string BtSdkAdapterImpl::init(PluginHost::IShell* /* service */,
         //);
         // </pca>
     } catch (const std::exception& e) {
-        const std::string error = std::string("Failed to construct Bluetooth Manager: ") + e.what();
+        std::string error = std::string("Failed to construct Bluetooth Manager: ") + e.what();
         reportManagerConstructionFailure();
         LOGERR("BtSdkAdapterImpl::init: exit with error: %s", error.c_str());
-        return error;
+        return std::move(error);
     }
 
     Status s = m_manager->getDefaultAdapter(m_adapter);
     if (!s) {
-        const std::string error = std::string("No Bluetooth adapter found: ") + s.get_message();
+        std::string error = std::string("No Bluetooth adapter found: ") + s.get_message();
         sendTelemetry("BT_ERR_GetBTAdapterFail");
         LOGERR("BtSdkAdapterImpl::init: exit with error: %s", error.c_str());
-        return error;
+        return std::move(error);
     }
 
     m_adapter->registerForEvents(
@@ -655,10 +655,12 @@ void BtSdkAdapterImpl::stopAutoConnectWorker() {
 
 void BtSdkAdapterImpl::autoConnectWorker() {
     if (runAutoConnectPass(false)) {
-        std::unique_lock<std::mutex> lock(m_autoConnectMutex);
-        const bool stopped = m_autoConnectCv.wait_for(lock, std::chrono::seconds(kAutoConnectRetrySeconds),
-                                                      [this] { return m_autoConnectStop; });
-        lock.unlock();
+        bool stopped = false;
+        {
+            std::unique_lock<std::mutex> lock(m_autoConnectMutex);
+            stopped = m_autoConnectCv.wait_for(lock, std::chrono::seconds(kAutoConnectRetrySeconds),
+                                               [this] { return m_autoConnectStop; });
+        }
         if (!stopped) runAutoConnectPass(true);
     }
     std::lock_guard<std::mutex> lock(m_autoConnectMutex);

@@ -68,12 +68,12 @@ std::string AuthBridge::resolveDeviceType(const std::shared_ptr<bluetooth::Devic
     // The type cached when the device was first seen can predate its properties (e.g. a paired device at boot).
     bluetooth::DeviceProperties props;
     if (device->getAllProperties(props)) {
-        const std::string classified = DeviceTypeClassifier::classify(props.appearance.value_or(0),
+        std::string classified = DeviceTypeClassifier::classify(props.appearance.value_or(0),
                                                                       props.classOfDevice.value_or(0),
                                                                       props.uuids.value_or(std::vector<std::string>{}));
         if (classified != "UNKNOWN DEVICE") {
             m_registry.setDeviceType(handleStr, classified);
-            type = classified;
+            type = std::move(classified);
         }
     }
     return type;
@@ -163,7 +163,7 @@ bool AuthBridge::onAuthRequest(bluetooth::AuthorisationType type, std::shared_pt
     } else if (gamepad) {
         timeout = std::chrono::milliseconds(isLeGamepad(props) ? LE_GAMEPAD_AUTH_TIMEOUT_MS : GAMEPAD_AUTH_TIMEOUT_MS);
     }
-    const ConnectDecision decision = decideConnection(device, timeout);
+    const ConnectDecision decision = decideConnection(std::move(device), timeout);
     return decision == ConnectDecision::AcceptedAuto || decision == ConnectDecision::AcceptedByClient;
 }
 

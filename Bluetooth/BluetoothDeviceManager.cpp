@@ -734,7 +734,7 @@ namespace WPEFramework {
         {
             auto now = std::chrono::system_clock::now();
             std::time_t now_c = std::chrono::system_clock::to_time_t(now);
-            const std::string currentUtcTime = std::to_string(static_cast<long long>(now_c));
+            std::string currentUtcTime = std::to_string(static_cast<long long>(now_c));
 
             _adminLock.Lock();
             auto it = _pairedDeviceCache.find(deviceID);
@@ -746,7 +746,7 @@ namespace WPEFramework {
 
             LOGINFO("deviceID=%s, time=%s\n", deviceID.c_str(), currentUtcTime.c_str());
 
-            it->second.lastConnectTimeUtc = currentUtcTime;
+            it->second.lastConnectTimeUtc = std::move(currentUtcTime);
             _adminLock.Unlock();
 
 #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
