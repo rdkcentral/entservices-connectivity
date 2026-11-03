@@ -90,6 +90,11 @@ public:
     // mac is the device's Bluetooth MAC address string.
     bool onRespondToEvent(const std::string& mac, bool accepted);
 
+    // Cancels every pending request (rejected) and rejects new ones, so no thread stays blocked in
+    // onAuthRequest/decideConnection. Must be called before waiting for in-flight SDK callbacks.
+    // Irreversible: init() creates a fresh bridge.
+    void shutdown();
+
     // Decides a connection to a device the plugin was not asked to connect, either an incoming request
     // or the startup reconnect. Resolves from the persisted autoconnect status when available, otherwise
     // asks the client and waits up to clientTimeout for its answer.
@@ -98,6 +103,9 @@ public:
 
     // Device type for the device, re-classified from its current properties if the cached type is unknown.
     std::string resolveDeviceType(const std::shared_ptr<bluetooth::Device>& device, const std::string& handleStr);
+
+    // True and sets lastConnectTimeUtc only if a last-connect time is persisted for the device.
+    bool getLastConnectTime(const std::string& handleStr, long long& lastConnectTimeUtc) const;
 
     static bool isAudioOutputType(const std::string& deviceType);
 
@@ -133,6 +141,7 @@ private:
 
     mutable std::mutex m_pendingMutex;
     std::unordered_map<std::string, std::shared_ptr<PendingAuth>> m_pendingAuths;
+    bool m_shutdown{false};  // guarded by m_pendingMutex
 };
 
 } // namespace Plugin

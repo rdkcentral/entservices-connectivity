@@ -93,6 +93,10 @@ struct BtAuthCallbacks {
     // adapter should respond directly to BTRMGR (accept/reject set via the out-param) and suppress
     // onConnectionRequest, mirroring the legacy auto-connect policy (only active once migration completed).
     std::function<bool(const std::string& handleStr, bool& accept)> getConnectAutoResponse;
+
+    // Returns true and sets lastConnectTimeUtc (seconds since the epoch) only when a connection time is
+    // persisted for the device; false when the device is not cached or has never been connected.
+    std::function<bool(const std::string& handleStr, long long& lastConnectTimeUtc)> getLastConnectTime;
 };
 
 } // namespace Plugin

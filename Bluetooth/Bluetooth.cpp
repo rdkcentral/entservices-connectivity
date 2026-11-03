@@ -411,6 +411,21 @@ namespace WPEFramework
 #endif
             };
 
+            authCbs.getLastConnectTime = [this](const std::string& handleStr, long long& lastConnectTimeUtc) -> bool {
+                std::string persisted;
+                if (Core::ERROR_NONE != m_bluetoothDeviceManager.getLastConnectTimeUtc(handleStr, persisted)
+                    || persisted.empty()) {
+                    return false;
+                }
+                char* end = nullptr;
+                const long long value = std::strtoll(persisted.c_str(), &end, 10);
+                if (end == persisted.c_str() || *end != '\0' || value <= 0) {
+                    return false;
+                }
+                lastConnectTimeUtc = value;
+                return true;
+            };
+
             message = m_btAdapter.init(service, std::move(evtCbs), std::move(authCbs));
             if (!message.empty()) {
                 LOGERR("%s", message.c_str());

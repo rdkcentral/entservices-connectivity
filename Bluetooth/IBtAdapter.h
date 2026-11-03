@@ -70,6 +70,9 @@ public:
 
     virtual std::vector<BtDeviceInfo> getDiscoveredDevices() const = 0;
     virtual std::vector<BtDeviceInfo> getPairedDevices() const = 0;
+    // Like getPairedDevices(), but returns false (leaving `out` empty) when the backend query fails, so callers
+    // can tell "no paired devices" apart from "query failed" before treating the result as authoritative.
+    virtual bool queryPairedDevices(std::vector<BtDeviceInfo>& out) const = 0;
     virtual std::vector<BtDeviceInfo> getConnectedDevices() const = 0;
 
     virtual bool pairDevice(const std::string& handleStr) = 0;

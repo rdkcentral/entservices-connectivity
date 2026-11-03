@@ -55,6 +55,7 @@ public:
 
     std::vector<BtDeviceInfo> getDiscoveredDevices() const override;
     std::vector<BtDeviceInfo> getPairedDevices()     const override;
+    bool queryPairedDevices(std::vector<BtDeviceInfo>& out) const override;
     std::vector<BtDeviceInfo> getConnectedDevices()  const override;
 
     bool pairDevice(const std::string& handleStr) override;

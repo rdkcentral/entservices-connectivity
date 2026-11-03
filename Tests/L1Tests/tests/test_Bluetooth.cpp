@@ -1235,14 +1235,37 @@ TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, legacyPersistenceMigra
         GTEST_SKIP() << "Unable to prepare corrupted filesystem persistence migration file on this test host";
     }
 
-    // A parsed-empty import must short-circuit before BTRMGR_GetPairedDevices(); configuring it
-    // to fail proves migration cannot be broken by a BTRMGR error it never reaches.
+    // A parsed-empty import must short-circuit before the adapter's getPairedDevices() (backed by
+    // BTRMGR_GetPairedDevices in the BTMgr adapter); Times(0) proves that query is never reached.
     EXPECT_CALL(*p_btmgrMock, BTRMGR_GetPairedDevices(::testing::_, ::testing::_))
         .Times(0);
 
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
     EXPECT_TRUE(response.find("\"success\":true") != string::npos);
     EXPECT_EQ("[]", persistedJson);
+}
+
+TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, legacyPersistenceMigrationMissingStore_PairedDevicesQueryFailureAbortsMigration)
+{
+    EXPECT_CALL(*p_storeMock, GetValue(::testing::_, ::testing::_, ::testing::_))
+        .WillOnce(::testing::Return(GetParam()))
+        .WillRepeatedly(::testing::Return(Core::ERROR_NOT_EXIST));
+    // A failed adapter query must not be treated as an empty authoritative list: nothing is persisted.
+    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, ::testing::_, ::testing::_))
+        .Times(0);
+
+    const std::string payload =
+        "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"deviceType\":\"HEADPHONES\","
+        "\"autoConnectStatus\":true,\"lastConnectionTimeUTC\":0}]}";
+    if (!initializeFromFilesystemPersistencePayload(payload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    ON_CALL(*p_btSdkMock, queryPairedDevices(::testing::_))
+        .WillByDefault(::testing::Return(false));
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_P(BluetoothLegacyPersistenceMigrationParseParamTest, legacyPersistenceMigrationMissingStore_MissingPairedDevicesLabelPerformMigrationSucceeds)

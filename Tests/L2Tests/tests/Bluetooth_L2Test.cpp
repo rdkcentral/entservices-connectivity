@@ -1415,16 +1415,19 @@ TEST_F(Bluetooth_L2Test, BluetoothOnPlaybackNewTrack)
  * call performMigration. The plugin must import the devices and report
  * success=true.
  *
- * writeCacheFromFilesystemPersistence() calls BTRMGR_GetPairedDevices to
- * build an addr→deviceID map; any device whose address is not returned by
- * that call is silently skipped. The default fixture mock returns 0 paired
- * devices, so without overriding it the cache stays empty and the test can
- * pass without having imported anything. This test therefore overrides the
- * mock to return the matching device, drives the addr→ID resolution, and
- * then asserts the imported autoConnectStatus=true flag is observable via
+ * writeCacheFromFilesystemPersistence() calls IBtAdapter::getPairedDevices()
+ * to build an addr→deviceID map; any device whose address is not returned by
+ * that call is keyed by MAC instead of its handle. This fixture runs the
+ * BTMgr adapter, which backs getPairedDevices() with BTRMGR_GetPairedDevices.
+ * The default fixture mock returns 0 paired devices, so without overriding it
+ * the imported entry is not keyed by the device handle and the test can pass
+ * without exercising the resolution. This test therefore overrides the mock
+ * to return the matching device, drives the addr→ID resolution, and then
+ * asserts the imported autoConnectStatus=true flag is observable via
  * getAutoConnect.
  *
- * BTRMGR_GetPairedDevices is called twice during performMigration:
+ * IBtAdapter::getPairedDevices() (BTRMGR_GetPairedDevices here) is called
+ * twice during performMigration:
  *   1. writeCacheFromFilesystemPersistence() — builds addr→deviceID map
  *   2. updateCacheFromDevice(backfillOnly=true) — backfills name / type
  * The ON_CALL default action covers both calls.
@@ -1486,9 +1489,10 @@ TEST_F(Bluetooth_L2Test, BluetoothPerformMigration_Success_FilePresent)
     EXPECT_TRUE(result["success"].Boolean());
 
     /* Verify the imported autoConnectStatus=true is observable via getAutoConnect.
-     * If the addr→deviceID resolution was skipped (e.g. BTRMGR_GetPairedDevices
-     * returned 0 devices), the cache would be empty and getAutoConnect would
-     * return an error rather than the imported flag. */
+     * If the addr→deviceID resolution was skipped (e.g. the adapter's
+     * getPairedDevices() returned 0 devices), the imported entry would be keyed
+     * by MAC and getAutoConnect by handle would return an error rather than
+     * the imported flag. */
     JsonObject acParams, acResult;
     acParams["deviceID"] = std::to_string(TEST_DEVICE_HANDLE);
     status = InvokeServiceMethod("org.rdk.Bluetooth.1", "getAutoConnect", acParams, acResult);

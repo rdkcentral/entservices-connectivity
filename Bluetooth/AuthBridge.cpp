@@ -79,6 +79,10 @@ std::string AuthBridge::resolveDeviceType(const std::shared_ptr<bluetooth::Devic
     return type;
 }
 
+bool AuthBridge::getLastConnectTime(const std::string& handleStr, long long& lastConnectTimeUtc) const {
+    return m_callbacks.getLastConnectTime && m_callbacks.getLastConnectTime(handleStr, lastConnectTimeUtc);
+}
+
 bool AuthBridge::onAuthRequest(bluetooth::AuthorisationType type, std::shared_ptr<bluetooth::Device> device) {
     if (!device) return false;
 
@@ -110,23 +114,27 @@ bool AuthBridge::onAuthRequest(bluetooth::AuthorisationType type, std::shared_pt
         auto pending = std::make_shared<PendingAuth>();
         {
             std::lock_guard<std::mutex> lock(m_pendingMutex);
+            if (m_shutdown) return false;
             m_pendingAuths[mac] = pending;
         }
 
         m_callbacks.onPairingRequest(devId, name, deviceType, vendorId, deviceAddress, "", false, 0);
 
-        std::unique_lock<std::mutex> lk(m_pendingMutex);
-        bool timedOut = !pending->cv.wait_for(lk,
-            std::chrono::seconds(AUTH_TIMEOUT_SECONDS),
-            [&pending]{ return pending->resolved; });
-        lk.unlock();
+        bool answered = false;
+        bool accepted = false;
+        {
+            std::unique_lock<std::mutex> lk(m_pendingMutex);
+            answered = pending->cv.wait_for(lk,
+                std::chrono::seconds(AUTH_TIMEOUT_SECONDS),
+                [this, &pending]{ return pending->resolved || m_shutdown; });
+            accepted = pending->resolved && pending->accepted;
+        }
         erasePending(mac, pending);
 
-        if (timedOut) {
+        if (!answered) {
             LOGERR("Auth timeout for pairing request from %s, auto-rejecting", mac.c_str());
-            return false;
         }
-        return pending->accepted;
+        return accepted;
     }
 
     // ── ConnectionRequest ────────────────────────────────────────────────────
@@ -186,21 +194,35 @@ AuthBridge::ConnectDecision AuthBridge::decideConnection(std::shared_ptr<bluetoo
     auto pending = std::make_shared<PendingAuth>();
     {
         std::lock_guard<std::mutex> lock(m_pendingMutex);
+        if (m_shutdown) return ConnectDecision::Rejected;
         m_pendingAuths[mac] = pending;
     }
 
     m_callbacks.onConnectionRequest(devId, name, deviceType, 0, deviceAddress, "");
 
-    std::unique_lock<std::mutex> lk(m_pendingMutex);
-    bool timedOut = !pending->cv.wait_for(lk, clientTimeout, [&pending]{ return pending->resolved; });
-    lk.unlock();
+    bool answered = false;
+    bool accepted = false;
+    {
+        std::unique_lock<std::mutex> lk(m_pendingMutex);
+        answered = pending->cv.wait_for(lk, clientTimeout,
+                                        [this, &pending]{ return pending->resolved || m_shutdown; });
+        accepted = pending->resolved && pending->accepted;
+    }
     erasePending(mac, pending);
 
-    if (timedOut) {
+    if (!answered) {
         LOGERR("Auth timeout for connection request from %s, auto-rejecting", mac.c_str());
         return ConnectDecision::TimedOut;
     }
-    return pending->accepted ? ConnectDecision::AcceptedByClient : ConnectDecision::Rejected;
+    return accepted ? ConnectDecision::AcceptedByClient : ConnectDecision::Rejected;
+}
+
+void AuthBridge::shutdown() {
+    std::lock_guard<std::mutex> lock(m_pendingMutex);
+    m_shutdown = true;
+    for (auto& entry : m_pendingAuths) {
+        entry.second->cv.notify_all();
+    }
 }
 
 // Erases only this request's entry: a newer request for the same MAC may have replaced it.
@@ -213,7 +235,7 @@ void AuthBridge::erasePending(const std::string& mac, const std::shared_ptr<Pend
 bool AuthBridge::onRespondToEvent(const std::string& mac, bool accepted) {
     std::lock_guard<std::mutex> lock(m_pendingMutex);
     auto it = m_pendingAuths.find(mac);
-    if (it == m_pendingAuths.end()) return false;
+    if (it == m_pendingAuths.end() || m_shutdown) return false;
 
     it->second->accepted  = accepted;
     it->second->resolved  = true;

@@ -255,16 +255,22 @@ std::vector<IBtAdapter::BtDeviceInfo> BtMgrAdapterImpl::getDiscoveredDevices() c
 
 std::vector<IBtAdapter::BtDeviceInfo> BtMgrAdapterImpl::getPairedDevices() const {
     std::vector<BtDeviceInfo> result;
+    queryPairedDevices(result);
+    return result;
+}
+
+bool BtMgrAdapterImpl::queryPairedDevices(std::vector<BtDeviceInfo>& out) const {
+    out.clear();
     BTRMGR_PairedDevicesList_t list;
     memset(&list, 0, sizeof(list));
-    if (BTRMGR_GetPairedDevices(0, &list) != BTRMGR_RESULT_SUCCESS) return result;
+    if (BTRMGR_GetPairedDevices(0, &list) != BTRMGR_RESULT_SUCCESS) return false;
     const size_t count = std::min<size_t>(list.m_numOfDevices, std::size(list.m_deviceProperty));
     for (size_t i = 0; i < count; ++i) {
         auto info = deviceInfoFromBtmgr(list.m_deviceProperty[i], true);
         cacheHandleToMac(info.handleStr, info.mac);
-        result.push_back(std::move(info));
+        out.push_back(std::move(info));
     }
-    return result;
+    return true;
 }
 
 std::vector<IBtAdapter::BtDeviceInfo> BtMgrAdapterImpl::getConnectedDevices() const {

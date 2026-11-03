@@ -17,8 +17,6 @@
 
 project(Bluetooth)
 
-message(WARNING "*** _DEBUG: Bluetooth cmake: entry")
-
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -36,7 +34,6 @@ set(BLUETOOTH_PLUGIN_SOURCES
         BtAdapter.cpp
         DeviceRegistry.cpp
         Module.cpp
-        BtMgrAdapterImpl.cpp
         BtSdkAdapterImpl.cpp
         EventBridge.cpp
         AuthBridge.cpp
@@ -71,14 +68,24 @@ if (RDK_SERVICES_L1_TEST OR RDK_SERVICE_L2_TEST)
     list(APPEND BLUETOOTH_PLUGIN_SOURCES
         ${CMAKE_SOURCE_DIR}/Tests/mocks/bluetoothSDK.cpp
     )
+
+    # BTMgr is mocked in test builds, so the BTMgr adapter is always available.
+    set(BLUETOOTH_USE_BTMGR TRUE)
 else()
-    # Production builds always link BTMGR and the selected Bluetooth SDK
-    # library, regardless of the backend selected at runtime.
-    find_package(BTMGR REQUIRED)
+    # The legacy BTMgr library is optional: SDK-only products do not ship it.
+    find_package(BTMGR)
 
-    message(WARNING "*** _DEBUG: Bluetooth cmake: Mark 1")
+    if (BTMGR_FOUND)
+        set(BLUETOOTH_USE_BTMGR TRUE)
+        message(STATUS "Bluetooth plugin: production build - compiling BTMGR adapter and SDK adapter, linking both backends")
+    else()
+        set(BLUETOOTH_USE_BTMGR FALSE)
+        message(STATUS "Bluetooth plugin: production build - BTMGR not found, building SDK-only backend")
+    endif()
+endif()
 
-    message(STATUS "Bluetooth plugin: production build - compiling BTMGR adapter and SDK adapter, linking both backends")
+if (BLUETOOTH_USE_BTMGR)
+    list(APPEND BLUETOOTH_PLUGIN_SOURCES BtMgrAdapterImpl.cpp)
 endif()
 
 
@@ -128,13 +135,16 @@ if (RDK_SERVICES_L1_TEST OR RDK_SERVICE_L2_TEST)
 else()
     # Production builds use the headers and library selected by the SDK
     # package. The full-stack recipe supplies either the real SDK or its stub.
-    target_compile_definitions(${MODULE_NAME} PRIVATE BLUETOOTH_HAS_BTMGR=1 BLUETOOTH_HAS_SDK=1)
+    target_compile_definitions(${MODULE_NAME} PRIVATE BLUETOOTH_HAS_SDK=1)
     target_include_directories(${MODULE_NAME} BEFORE PRIVATE
         ${BLUETOOTH_SDK_INCLUDE_DIRS})
-    target_include_directories(${MODULE_NAME} PRIVATE ${BTMGR_INCLUDE_DIRS})
-    
-    # Link against the Bluetooth SDK (always the bundled stub)
-    target_link_libraries(${MODULE_NAME} PRIVATE ${BTMGR_LIBRARIES} rdk_bluetooth)
+    target_link_libraries(${MODULE_NAME} PRIVATE ${BLUETOOTH_SDK_LIBRARIES})
+
+    if (BLUETOOTH_USE_BTMGR)
+        target_compile_definitions(${MODULE_NAME} PRIVATE BLUETOOTH_HAS_BTMGR=1)
+        target_include_directories(${MODULE_NAME} PRIVATE ${BTMGR_INCLUDE_DIRS})
+        target_link_libraries(${MODULE_NAME} PRIVATE ${BTMGR_LIBRARIES})
+    endif()
 endif()
 
 find_package(IARMBus)

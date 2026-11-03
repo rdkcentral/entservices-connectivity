@@ -25,6 +25,7 @@
 #include <core/core.h>
 #include <sys/syscall.h>
 #include <unistd.h>
+#include <algorithm>
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
@@ -94,6 +95,9 @@ std::string BtSdkAdapterImpl::init(PluginHost::IShell* /* service */,
     LOGINFO("BtSdkAdapterImpl::init: entry");
     // Cleared before the SDK callbacks are registered below, so events from this init are not dropped.
     m_shuttingDown = false;
+    if (m_callbackGate) m_callbackGate->closeAndDrain();
+    m_callbackGate = std::make_shared<CallbackGate>();
+    const auto gate = m_callbackGate;
     m_eventBridge = std::make_unique<EventBridge>(m_registry, std::move(eventCallbacks));
     m_authBridge  = std::make_unique<AuthBridge>(m_registry, std::move(authCallbacks));
     m_authBridge->setOperationInProgressPredicate([this](const std::string& mac) { return isOperationInProgress(mac); });
@@ -101,8 +105,10 @@ std::string BtSdkAdapterImpl::init(PluginHost::IShell* /* service */,
     // Intentionally unchanged: the debug code and commented-out alternatives (LogRedirect, AutoAccept Manager)
     // below are deliberately left in place for now.
     // <pca> debug
-    auto authCb = [this](bluetooth::AuthorisationType type,
-                         std::shared_ptr<bluetooth::Device> device) -> bool {
+    auto authCb = [this, gate](bluetooth::AuthorisationType type,
+                               std::shared_ptr<bluetooth::Device> device) -> bool {
+        CallbackGate::Entry entry(*gate);
+        if (!entry) return false;
         return m_authBridge->onAuthRequest(type, std::move(device));
     };
     // </pca>
@@ -159,7 +165,9 @@ std::string BtSdkAdapterImpl::init(PluginHost::IShell* /* service */,
     }
 
     m_adapter->registerForEvents(
-        [this](bluetooth::AdapterEvent ev, bluetooth::AdapterEventData data) {
+        [this, gate](bluetooth::AdapterEvent ev, bluetooth::AdapterEventData data) {
+            CallbackGate::Entry entry(*gate);
+            if (!entry) return;
             onAdapterEvent(ev, std::move(data));
         });
 
@@ -182,6 +190,14 @@ void BtSdkAdapterImpl::deinit() {
         }
         m_adapter->unregisterForEvents();
     }
+    // Unregistering does not stop callbacks already running (the SDK copies them before invoking), and the
+    // Manager may still hold the auth callback. Close the gate and wait so none touches the bridges or this
+    // object once they are reset below; later callbacks are rejected without dereferencing the adapter.
+    // Must not be called from an SDK callback.
+    // A callback may be blocked in the auth bridge waiting for the client (up to AUTH_TIMEOUT_SECONDS), which
+    // would stall the drain; cancel those waits first so they return promptly with a rejection.
+    if (m_authBridge) m_authBridge->shutdown();
+    if (m_callbackGate) m_callbackGate->closeAndDrain();
     // The workers emit through the event bridge and read devices, so they must stop before it and the adapter go.
     stopAutoConnectWorker();
     stopPendingWorker();
@@ -359,16 +375,21 @@ std::vector<IBtAdapter::BtDeviceInfo> BtSdkAdapterImpl::getDiscoveredDevices() c
     return result;
 }
 std::vector<IBtAdapter::BtDeviceInfo> BtSdkAdapterImpl::getPairedDevices() const {
-    LOGINFO("BtSdkAdapterImpl::getPairedDevices: entry");
     std::vector<BtDeviceInfo> result;
+    queryPairedDevices(result);
+    return result;
+}
+bool BtSdkAdapterImpl::queryPairedDevices(std::vector<BtDeviceInfo>& out) const {
+    LOGINFO("BtSdkAdapterImpl::getPairedDevices: entry");
+    out.clear();
     if (!m_adapter) {
         LOGERR("BtSdkAdapterImpl::getPairedDevices: exit with error: adapter is unavailable");
-        return result;
+        return false;
     }
     for (auto& d : m_adapter->getDevices(bluetooth::DeviceState::Paired))
-        result.push_back(deviceToInfo(d));
-    LOGINFO("BtSdkAdapterImpl::getPairedDevices: exit count=%zu", result.size());
-    return result;
+        out.push_back(deviceToInfo(d));
+    LOGINFO("BtSdkAdapterImpl::getPairedDevices: exit count=%zu", out.size());
+    return true;
 }
 std::vector<IBtAdapter::BtDeviceInfo> BtSdkAdapterImpl::getConnectedDevices() const {
     LOGINFO("BtSdkAdapterImpl::getConnectedDevices: entry");
@@ -670,14 +691,36 @@ bool BtSdkAdapterImpl::runAutoConnectPass(bool secondAttempt) {
         }
     }
 
+    // Only audio output devices with a persisted last-connect time are candidates, most recently used first.
+    struct Candidate {
+        std::shared_ptr<bluetooth::Device> device;
+        std::string mac;
+        std::string handle;
+        std::string type;
+        long long lastConnectTimeUtc;
+    };
+    std::vector<Candidate> candidates;
     for (auto& device : m_adapter->getDevices(bluetooth::DeviceState::Paired)) {
-        if (stopRequested()) return false;
-
         std::string mac;
         device->address(mac);
         const std::string handle = DeviceRegistry::deriveHandle(mac);
         const std::string type = m_authBridge->resolveDeviceType(device, handle);
         if (!AuthBridge::isAudioOutputType(type)) continue;
+
+        long long lastConnectTimeUtc = 0;
+        if (!m_authBridge->getLastConnectTime(handle, lastConnectTimeUtc)) continue;
+        candidates.push_back({device, mac, handle, type, lastConnectTimeUtc});
+    }
+    std::stable_sort(candidates.begin(), candidates.end(),
+                     [](const Candidate& a, const Candidate& b) { return a.lastConnectTimeUtc > b.lastConnectTimeUtc; });
+
+    for (auto& candidate : candidates) {
+        if (stopRequested()) return false;
+
+        const auto& device = candidate.device;
+        const std::string& mac = candidate.mac;
+        const std::string& handle = candidate.handle;
+        const std::string& type = candidate.type;
 
         const auto decision = m_authBridge->decideConnection(
             device, std::chrono::milliseconds(AuthBridge::AUDIO_AUTH_TIMEOUT_MS));
@@ -794,7 +837,10 @@ void BtSdkAdapterImpl::registerDeviceEvents(std::shared_ptr<bluetooth::Device> d
     }
 
     device->registerForEvents(
-        [this](bluetooth::DeviceEvent ev, std::shared_ptr<bluetooth::Device> dev) {
+        [this, gate = m_callbackGate](bluetooth::DeviceEvent ev, std::shared_ptr<bluetooth::Device> dev) {
+            if (!gate) return;
+            CallbackGate::Entry entry(*gate);
+            if (!entry) return;
             if (m_eventBridge) m_eventBridge->onDeviceEvent(ev, std::move(dev));
         });
     LOGINFO("BtSdkAdapterImpl::registerDeviceEvents: exit handle=%s", handle.c_str());

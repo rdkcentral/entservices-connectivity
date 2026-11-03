@@ -33,22 +33,18 @@ class Manager::Impl {
   Impl(Manager* owner, AuthorisationMode, std::function<bool(AuthorisationType, std::shared_ptr<Device>)>,
       LogLocation, std::variant<std::string, std::unique_ptr<LogRedirect>>, std::string)
       : m_owner(owner) {
-    m_adapters.push_back(std::make_shared<Adapter>(0));
   }
 
-  Status getDefaultAdapter(std::shared_ptr<bluetooth::Adapter>& adapter) {
-    if (m_adapters.empty()) {
-      return Status(StatusCodes::BLUETOOTH_ERROR, "NO ADAPTER FOUND");
-    }
-    adapter = m_adapters[0];
-    return Status();
+  // The stub has no Bluetooth backend, so it never provides an adapter. Consumers (e.g. the Bluetooth
+  // plugin's BtAdapter::init) rely on this failing to detect that the real SDK is not installed.
+  Status getDefaultAdapter(std::shared_ptr<bluetooth::Adapter>&) {
+    return Status(StatusCodes::BLUETOOTH_ERROR, "bluetooth-sdk stub: no Bluetooth backend available");
   }
 
-  std::vector<std::shared_ptr<bluetooth::Adapter>> getAdapters() { return m_adapters; }
+  std::vector<std::shared_ptr<bluetooth::Adapter>> getAdapters() { return {}; }
 
  private:
   Manager* m_owner;
-  std::vector<std::shared_ptr<bluetooth::Adapter>> m_adapters;
 };
 
 Manager::Manager(AuthorisationMode isAuthManager,

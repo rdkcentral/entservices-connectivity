@@ -74,8 +74,11 @@ namespace WPEFramework {
             }
 
             // Build a mapping from device address to device handle via the implementation-agnostic adapter.
-            auto sdkPairedDevices = _btAdapter->getPairedDevices();
-
+            std::vector<IBtAdapter::BtDeviceInfo> sdkPairedDevices;
+            if (!_btAdapter->queryPairedDevices(sdkPairedDevices)) {
+                LOGERR("Failed to query paired devices from BtAdapter during filesystem persistence import");
+                return Core::ERROR_GENERAL;
+            }
             std::unordered_map<std::string, std::string> addrToDeviceId;
             addrToDeviceId.reserve(sdkPairedDevices.size());
             for (const auto& info : sdkPairedDevices) {
@@ -396,7 +399,11 @@ namespace WPEFramework {
                 return Core::ERROR_GENERAL;
             }
 
-            auto sdkPairedDevices = _btAdapter->getPairedDevices();
+            std::vector<IBtAdapter::BtDeviceInfo> sdkPairedDevices;
+            if (!_btAdapter->queryPairedDevices(sdkPairedDevices)) {
+                LOGERR("Failed to query paired devices from BtAdapter in updateCacheFromDevice; leaving cache unchanged");
+                return Core::ERROR_GENERAL;
+            }
 
             _adminLock.Lock();
 

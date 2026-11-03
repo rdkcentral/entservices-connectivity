@@ -74,6 +74,7 @@ public:
 
     std::vector<BtDeviceInfo> getDiscoveredDevices() const override;
     std::vector<BtDeviceInfo> getPairedDevices()     const override;
+    bool queryPairedDevices(std::vector<BtDeviceInfo>& out) const override;
     std::vector<BtDeviceInfo> getConnectedDevices()  const override;
 
     bool pairDevice(const std::string& handleStr) override;
@@ -149,6 +150,49 @@ private:
     void pendingWorker();
     void stopPendingWorker();
     void releaseDevice(bluetooth::AdapterEventData&& event);
+
+    // Guards SDK callbacks, which run on SDK threads and capture the adapter. Callbacks hold the gate by
+    // shared_ptr and only touch the adapter while inside an Entry; deinit() closes the gate and waits for
+    // in-flight callbacks to finish, so none can reach a destroyed bridge or adapter, even a late one.
+    class CallbackGate {
+    public:
+        class Entry {
+        public:
+            explicit Entry(CallbackGate& gate) : m_gate(gate), m_entered(gate.enter()) {}
+            ~Entry() { if (m_entered) m_gate.leave(); }
+            Entry(const Entry&)            = delete;
+            Entry& operator=(const Entry&) = delete;
+            explicit operator bool() const { return m_entered; }
+        private:
+            CallbackGate& m_gate;
+            bool          m_entered;
+        };
+
+        // Rejects new entries, then blocks until every entered callback has left.
+        void closeAndDrain() {
+            std::unique_lock<std::mutex> lock(m_mutex);
+            m_closed = true;
+            m_cv.wait(lock, [this] { return m_inFlight == 0; });
+        }
+
+    private:
+        bool enter() {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            if (m_closed) return false;
+            ++m_inFlight;
+            return true;
+        }
+        void leave() {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            if (--m_inFlight == 0 && m_closed) m_cv.notify_all();
+        }
+
+        std::mutex              m_mutex;
+        std::condition_variable m_cv;
+        unsigned                m_inFlight{0};
+        bool                    m_closed{false};
+    };
+    std::shared_ptr<CallbackGate> m_callbackGate;
 
     // Keep SDK objects unset until init(); this type is constructed at plugin load.
     std::unique_ptr<bluetooth::Manager> m_manager;

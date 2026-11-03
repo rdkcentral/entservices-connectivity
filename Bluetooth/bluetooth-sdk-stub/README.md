@@ -201,7 +201,7 @@ target_link_libraries(btmgr PRIVATE ${RDK_BLUETOOTH})
 
 The stub implements these key classes:
 
-- **Manager:** Adapter lifecycle and WirePlumber integration (stub: no-op).
+- **Manager:** Adapter lifecycle and WirePlumber integration (stub: `getDefaultAdapter()` always fails with `BLUETOOTH_ERROR` and `getAdapters()` is empty, so consumers can detect the stub and fall back to another backend).
 - **Adapter:** Discovery, power, and device enumeration (stub: basic state management).
 - **Device:** Pairing, connection, properties, and GATT (stub: no-op with state tracking).
 - **GattClient / GattServer:** GATT operations (stub: minimal).

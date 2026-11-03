@@ -21,7 +21,9 @@
 #include "BtAdapter.h"
 #include "DeviceRegistry.h"
 #include "BtSdkAdapterImpl.h"
+#ifdef BLUETOOTH_HAS_BTMGR
 #include "BtMgrAdapterImpl.h"
+#endif
 
 #include <atomic>
 #include <cassert>
@@ -73,9 +75,12 @@ namespace Plugin {
 std::atomic<IBtAdapter*> BtAdapter::impl{nullptr};
 std::atomic<bool> BtAdapter::injected{false};
 
-// Both backends are always linked/compiled in now; only one is ever selected
-// (see ensureImpl()).
+// The SDK backend is always compiled in; the BTMgr backend only when the
+// legacy BTMgr library is available (BLUETOOTH_HAS_BTMGR). Only one is ever
+// selected (see ensureImpl()).
+#ifdef BLUETOOTH_HAS_BTMGR
 static BtMgrAdapterImpl g_btMgrAdapterImpl;
+#endif
 static BtSdkAdapterImpl g_btSdkAdapterImpl;
 
 void BtAdapter::setImpl(IBtAdapter* newImpl) {
@@ -90,8 +95,12 @@ void BtAdapter::ensureImpl() {
         return;
     }
 
+#ifdef BLUETOOTH_HAS_BTMGR
     IBtAdapter* chosen = useSdkBackend() ? static_cast<IBtAdapter*>(&g_btSdkAdapterImpl)
                                          : static_cast<IBtAdapter*>(&g_btMgrAdapterImpl);
+#else
+    IBtAdapter* chosen = &g_btSdkAdapterImpl;
+#endif
     // Never overwrite an impl published concurrently (e.g. by init()).
     IBtAdapter* expected = nullptr;
     impl.compare_exchange_strong(expected, chosen, std::memory_order_acq_rel, std::memory_order_acquire);
@@ -118,7 +127,11 @@ std::string BtAdapter::init(PluginHost::IShell* service,
         return injectedImpl->init(service, std::move(evtCbs), std::move(authCbs));
     }
 
+#ifdef BLUETOOTH_HAS_BTMGR
     if (useSdkBackend()) {
+#else
+    {
+#endif
         // librdk_bluetooth.so.1 may resolve to the real vendor SDK or to the
         // always-unavailable bundled stub, depending on what this product's
         // build/image actually installed. getDefaultAdapter() succeeding is
@@ -133,10 +146,16 @@ std::string BtAdapter::init(PluginHost::IShell* service,
         // Release whatever the failed init partially constructed (e.g. the
         // Manager/D-Bus connection) before falling back to BTMgr.
         g_btSdkAdapterImpl.deinit();
+#ifndef BLUETOOTH_HAS_BTMGR
+        // SDK-only build: there is no legacy backend to fall back to.
+        return sdkError;
+#endif
     }
 
+#ifdef BLUETOOTH_HAS_BTMGR
     impl.store(&g_btMgrAdapterImpl, std::memory_order_release);
     return g_btMgrAdapterImpl.init(service, std::move(evtCbs), std::move(authCbs));
+#endif
 }
 
 void BtAdapter::deinit() {
@@ -161,6 +180,7 @@ bool BtAdapter::stopScan()                             { return getImpl().stopSc
 
 std::vector<IBtAdapter::BtDeviceInfo> BtAdapter::getDiscoveredDevices() const { return getImpl().getDiscoveredDevices(); }
 std::vector<IBtAdapter::BtDeviceInfo> BtAdapter::getPairedDevices()     const { return getImpl().getPairedDevices(); }
+bool BtAdapter::queryPairedDevices(std::vector<IBtAdapter::BtDeviceInfo>& out) const { return getImpl().queryPairedDevices(out); }
 std::vector<IBtAdapter::BtDeviceInfo> BtAdapter::getConnectedDevices()  const { return getImpl().getConnectedDevices(); }
 
 bool BtAdapter::pairDevice(const std::string& h)     { return getImpl().pairDevice(h); }

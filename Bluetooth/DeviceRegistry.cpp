@@ -50,7 +50,7 @@ std::string DeviceRegistry::deriveHandle(const std::string& mac) {
     hexStr[8]  = mac[12]; hexStr[9]  = mac[13];
     hexStr[10] = mac[15]; hexStr[11] = mac[16];
     hexStr[12] = '\0';
-    uint64_t handle = static_cast<uint64_t>(strtoll(hexStr, nullptr, 16));
+    uint64_t handle = static_cast<uint64_t>(strtoull(hexStr, nullptr, 16));
     return std::to_string(handle);
 }
 

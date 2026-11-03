@@ -31,7 +31,14 @@ namespace Plugin {
 
 class BtAdapterImplMock : public IBtAdapter {
 public:
-    BtAdapterImplMock() = default;
+    BtAdapterImplMock() {
+        // Delegate to the mocked getPairedDevices() so existing expectations keep driving reconciliation.
+        ON_CALL(*this, queryPairedDevices(::testing::_))
+            .WillByDefault(::testing::Invoke([this](std::vector<IBtAdapter::BtDeviceInfo>& out) {
+                out = getPairedDevices();
+                return true;
+            }));
+    }
     virtual ~BtAdapterImplMock() = default;
 
     MOCK_METHOD(std::string, init,
@@ -51,6 +58,7 @@ public:
 
     MOCK_METHOD(std::vector<IBtAdapter::BtDeviceInfo>, getDiscoveredDevices, (), (const, override));
     MOCK_METHOD(std::vector<IBtAdapter::BtDeviceInfo>, getPairedDevices,     (), (const, override));
+    MOCK_METHOD(bool, queryPairedDevices, (std::vector<IBtAdapter::BtDeviceInfo>&), (const, override));
     MOCK_METHOD(std::vector<IBtAdapter::BtDeviceInfo>, getConnectedDevices,  (), (const, override));
 
     MOCK_METHOD(bool, pairDevice,       (const std::string&), (override));
