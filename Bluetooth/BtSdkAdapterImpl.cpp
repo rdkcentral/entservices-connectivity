@@ -594,7 +594,14 @@ IBtAdapter::BtMediaTrackInfo BtSdkAdapterImpl::getMediaTrackInfo(long long int d
 // Mirrors BTRMGR_StartAudioStreamingOut_StartUp: BTMgr asks for each previously used audio output device
 // (RECEIVED_EXTERNAL_CONNECT_REQUEST), waits briefly for the answer and, if the client is not up yet,
 // asks again once after kAutoConnectRetrySeconds.
-namespace { constexpr int kAutoConnectRetrySeconds = 40; }
+// A connect to a device that is not up yet fails with "Host is down" (page timeout). BTMgr probes with
+// l2ping (2 s apart) and retries the connect BTRMGR_CONNECT_RETRY_ATTEMPTS (2) times; here the connect
+// attempt itself is the probe, so it is retried the same number of times, kAutoConnectAttemptDelaySeconds apart.
+namespace {
+constexpr int kAutoConnectRetrySeconds        = 40;
+constexpr int kAutoConnectMaxAttempts         = 3;
+constexpr int kAutoConnectAttemptDelaySeconds = 2;
+}
 
 void BtSdkAdapterImpl::startAutoConnect() {
     LOGINFO("BtSdkAdapterImpl::startAutoConnect: entry");
@@ -676,7 +683,17 @@ bool BtSdkAdapterImpl::runAutoConnectPass(bool secondAttempt) {
             device, std::chrono::milliseconds(AuthBridge::AUDIO_AUTH_TIMEOUT_MS));
         switch (decision) {
             case AuthBridge::ConnectDecision::AcceptedAuto:
-                if (connectDevice(handle, type)) return false;
+                for (int attempt = 1; attempt <= kAutoConnectMaxAttempts; ++attempt) {
+                    if (connectDevice(handle, type)) return false;
+                    if (attempt == kAutoConnectMaxAttempts) break;
+                    LOGWARN("BtSdkAdapterImpl::runAutoConnectPass: connect attempt %d/%d failed for %s, retrying",
+                            attempt, kAutoConnectMaxAttempts, mac.c_str());
+                    std::unique_lock<std::mutex> lock(m_autoConnectMutex);
+                    if (m_autoConnectCv.wait_for(lock, std::chrono::seconds(kAutoConnectAttemptDelaySeconds),
+                                                 [this] { return m_autoConnectStop; })) {
+                        return false;
+                    }
+                }
                 break;
             case AuthBridge::ConnectDecision::AcceptedByClient:
                 // The client connects the device, as with BTMgr.
