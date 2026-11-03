@@ -41,7 +41,7 @@ void populateDeviceFields(std::shared_ptr<bluetooth::Device> device,
     outName = deviceDisplayName(device);
 
     bluetooth::DeviceProperties props;
-    const bool havePropsRead = device->getAllProperties(props);
+    const bool havePropsRead = static_cast<bool>(device->getAllProperties(props));
     if (havePropsRead) {
         outRaw = props.classOfDevice.value_or(0);
         outBle = props.appearance.value_or(0);
