@@ -148,10 +148,10 @@ std::string BtMgrAdapterImpl::init(PluginHost::IShell* /* service */,
 void BtMgrAdapterImpl::deinit() {
     s_instance = nullptr;
     BTRMGR_UnRegisterFromCallbacks(kIarmClientName);
-}
 
-void BtSdkAdapterImpl::autoConnectWorker() {
-    // Must not be called from the BTRMGR event thread, or this wait never completes.
+    // Wait for dispatches admitted before s_instance was cleared; they may still call
+    // the stored callbacks. Must not be called from the BTRMGR event thread, or this
+    // wait never completes.
     std::unique_lock<std::mutex> lk(s_inflightMutex);
     while (s_inflightCount != 0) {
         s_inflightCv.wait(lk);
