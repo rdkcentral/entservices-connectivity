@@ -26,6 +26,7 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 #include <algorithm>
+#include <utility>
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
@@ -97,7 +98,7 @@ std::string BtSdkAdapterImpl::init(PluginHost::IShell* /* service */,
     m_shuttingDown = false;
     if (m_callbackGate) m_callbackGate->closeAndDrain();
     m_callbackGate = std::make_shared<CallbackGate>();
-    const auto gate = m_callbackGate;
+    auto gate = m_callbackGate;
     m_eventBridge = std::make_unique<EventBridge>(m_registry, std::move(eventCallbacks));
     m_authBridge  = std::make_unique<AuthBridge>(m_registry, std::move(authCallbacks));
     m_authBridge->setOperationInProgressPredicate([this](const std::string& mac) { return isOperationInProgress(mac); });
@@ -153,7 +154,7 @@ std::string BtSdkAdapterImpl::init(PluginHost::IShell* /* service */,
     }
 
     m_adapter->registerForEvents(
-        [this, gate](bluetooth::AdapterEvent ev, bluetooth::AdapterEventData data) {
+        [this, gate = std::move(gate)](bluetooth::AdapterEvent ev, bluetooth::AdapterEventData data) {
             CallbackGate::Entry entry(*gate);
             if (!entry) return;
             onAdapterEvent(ev, std::move(data));
@@ -693,13 +694,13 @@ bool BtSdkAdapterImpl::runAutoConnectPass(bool secondAttempt) {
     for (auto& device : m_adapter->getDevices(bluetooth::DeviceState::Paired)) {
         std::string mac;
         device->address(mac);
-        const std::string handle = DeviceRegistry::deriveHandle(mac);
-        const std::string type = m_authBridge->resolveDeviceType(device, handle);
+        std::string handle = DeviceRegistry::deriveHandle(mac);
+        std::string type = m_authBridge->resolveDeviceType(device, handle);
         if (!AuthBridge::isAudioOutputType(type)) continue;
 
         long long lastConnectTimeUtc = 0;
         if (!m_authBridge->getLastConnectTime(handle, lastConnectTimeUtc)) continue;
-        candidates.push_back({device, mac, handle, type, lastConnectTimeUtc});
+        candidates.push_back({device, std::move(mac), std::move(handle), std::move(type), lastConnectTimeUtc});
     }
     std::stable_sort(candidates.begin(), candidates.end(),
                      [](const Candidate& a, const Candidate& b) { return a.lastConnectTimeUtc > b.lastConnectTimeUtc; });
@@ -771,7 +772,7 @@ void BtSdkAdapterImpl::onAdapterEvent(bluetooth::AdapterEvent event,
             if (!isReadyToReport(data.device, mac, 0, kind)) {
                 // BlueZ has not named it yet; the worker reports it once it has a name or its wait expires.
                 LOGINFO("BtSdkAdapterImpl::onAdapterEvent: exit device held until it is named mac=%s", mac.c_str());
-                holdDevice(mac, std::move(data));
+                holdDevice(std::move(mac), std::move(data));
                 return;
             }
         }
@@ -891,7 +892,7 @@ void BtSdkAdapterImpl::pruneDiscoveredDevices() {
         for (auto& d : m_adapter->getDevices(bluetooth::DeviceState::Discovered)) {
             std::string mac;
             d->address(mac);
-            m_suppressedMacs.insert(mac);
+            m_suppressedMacs.insert(std::move(mac));
         }
     }
     m_adapter->pruneDiscoveredDevices(nullptr, 0);
@@ -1059,7 +1060,7 @@ void BtSdkAdapterImpl::releaseDevice(bluetooth::AdapterEventData&& event) {
     // The scan filter could not judge the type yet when the device was first seen.
     if (isFilteredFromDiscovery(device, /*typeSettled=*/true)) {
         std::lock_guard<std::mutex> lock(m_suppressedMutex);
-        m_suppressedMacs.insert(mac);
+        m_suppressedMacs.insert(std::move(mac));
         return;
     }
 

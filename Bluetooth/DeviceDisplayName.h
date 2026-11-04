@@ -39,15 +39,15 @@ inline std::string deviceDisplayName(const std::shared_ptr<bluetooth::Device>& d
 
     bluetooth::DeviceProperties props;
     if (device->getAllProperties(props)) {
-        const std::string alias = props.alias.value_or("");
-        const std::string name  = DiscoveryNameGate::effectiveName(props.name.value_or(""), alias);
-        if (!name.empty() && !DiscoveryNameGate::isNameSameAsAddress(name, mac)) return name;
-        return DiscoveryNameGate::fallbackName(alias, mac, props.classOfDevice.value_or(0));
+        std::string alias = props.alias.value_or("");
+        std::string name  = DiscoveryNameGate::effectiveName(props.name.value_or(""), alias);
+        if (!name.empty() && !DiscoveryNameGate::isNameSameAsAddress(name, mac)) return std::move(name);
+        return DiscoveryNameGate::fallbackName(std::move(alias), mac, props.classOfDevice.value_or(0));
     }
 
     std::string name;
-    if (device->name(name) && !name.empty() && name != "Unnamed Advertisement" && !DiscoveryNameGate::isNameSameAsAddress(name, mac)) return name;
-    return DiscoveryNameGate::fallbackName("", mac, 0);
+    if (device->name(name) && !name.empty() && name != "Unnamed Advertisement" && !DiscoveryNameGate::isNameSameAsAddress(name, mac)) return std::move(name);
+    return DiscoveryNameGate::fallbackName("", std::move(mac), 0);
 }
 
 } // namespace Plugin

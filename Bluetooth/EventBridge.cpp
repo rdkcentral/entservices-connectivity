@@ -50,10 +50,10 @@ void populateDeviceFields(std::shared_ptr<bluetooth::Device> device,
     outType = registry.getDeviceType(outId);
     // A cached "UNKNOWN DEVICE" may predate the device's properties, so it is classified again.
     if ((outType.empty() || outType == "UNKNOWN DEVICE") && havePropsRead) {
-        const std::string classified = DeviceTypeClassifier::classify(outBle, outRaw,
+        std::string classified = DeviceTypeClassifier::classify(outBle, outRaw,
                                                                       props.uuids.value_or(std::vector<std::string>{}));
         if (classified != "UNKNOWN DEVICE") {
-            outType = classified;
+            outType = std::move(classified);
             // A device that is no longer registered (e.g. DeviceDisappeared) must not get its type cached again.
             if (!registry.getHandleForMac(mac).empty()) registry.setDeviceType(outId, outType);
         }
@@ -211,7 +211,7 @@ void EventBridge::completeDeviceOperation(bluetooth::DeviceEvent event, std::sha
     // Status changes keep being held until the release runs, so ones the SDK raises just after the request
     // returned (it can return before raising them) are still delivered after the response, not ahead of it.
     enqueue(std::chrono::steady_clock::now() + kCompletionDelay,
-            [this, mac, event, device = std::move(device), succeeded]() mutable {
+            [this, mac = std::move(mac), event, device = std::move(device), succeeded]() mutable {
                 releaseDeviceOperation(mac, event, std::move(device), succeeded);
             });
 }
