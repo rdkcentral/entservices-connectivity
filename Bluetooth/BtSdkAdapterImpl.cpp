@@ -153,7 +153,7 @@ std::string BtSdkAdapterImpl::init(PluginHost::IShell* /* service */,
         std::string error = std::string("Failed to construct Bluetooth Manager: ") + e.what();
         reportManagerConstructionFailure();
         LOGERR("BtSdkAdapterImpl::init: exit with error: %s", error.c_str());
-        return std::move(error);
+        return error;
     }
 
     Status s = m_manager->getDefaultAdapter(m_adapter);
@@ -161,7 +161,7 @@ std::string BtSdkAdapterImpl::init(PluginHost::IShell* /* service */,
         std::string error = std::string("No Bluetooth adapter found: ") + s.get_message();
         sendTelemetry("BT_ERR_GetBTAdapterFail");
         LOGERR("BtSdkAdapterImpl::init: exit with error: %s", error.c_str());
-        return std::move(error);
+        return error;
     }
 
     m_adapter->registerForEvents(
