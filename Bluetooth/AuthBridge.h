@@ -54,8 +54,10 @@ namespace Plugin {
  *     (BTMgr: 200 ms), classic gamepads GAMEPAD_AUTH_TIMEOUT_MS (BTMgr: 2 s), LE gamepads
  *     LE_GAMEPAD_AUTH_TIMEOUT_MS (BTMgr: 20 s); every other type waits AUTH_TIMEOUT_SECONDS.
  *   Gamepads are never auto-accepted, even though they are HID devices. RDK remote controls are not
- *   gamepads. Unlike BTMgr, a gamepad that is not paired follows the same escalation rather than being
- *   rejected outright, and BTMgr's gamepad RFC, standby-mode and last-disconnected special cases are not mirrored.
+ *   gamepads. While gamepad standby mode is on (see setGamepadStandbyPredicate), a connection from a gamepad
+ *   is rejected, as in BTMgr, unless the plugin itself is connecting it. Unlike BTMgr, a gamepad that is not
+ *   paired follows the same escalation rather than being rejected outright, and BTMgr's gamepad RFC and
+ *   last-disconnected special cases are not mirrored.
  *
  * PairingRequest always escalates to client.
  *
@@ -109,10 +111,23 @@ public:
 
     static bool isAudioOutputType(const std::string& deviceType);
 
+    // LE gamepad or classic Joystick/Gamepad class of device, excluding RDK remote controls.
+    static bool isGamepad(const std::string& mac, const bluetooth::DeviceProperties& props);
+    // HID device that is not an RDK remote control, as BTMgr's standby handling selects: remote controls
+    // are needed to wake the box and are left alone.
+    static bool isManagedHidDevice(const std::string& deviceType, const std::string& mac,
+                                   const bluetooth::DeviceProperties& props);
+
     // Set by the adapter before the SDK can call back: true while the plugin itself is pairing or
     // connecting the device with this MAC. Must be cheap and must not call back into the SDK.
     void setOperationInProgressPredicate(std::function<bool(const std::string& mac)> predicate) {
         m_isOperationInProgress = std::move(predicate);
+    }
+
+    // Set by the adapter before the SDK can call back: true while gamepad standby mode is on, during which
+    // connections from gamepads are rejected. Must be cheap and must not call back into the SDK.
+    void setGamepadStandbyPredicate(std::function<bool()> predicate) {
+        m_isGamepadStandby = std::move(predicate);
     }
 
 private:
@@ -122,8 +137,6 @@ private:
     static bool isRemoteControl(const std::string& mac, const bluetooth::DeviceProperties& props);
     // LE gamepad, identified by its BLE appearance as BTMgr does.
     static bool isLeGamepad(const bluetooth::DeviceProperties& props);
-    // LE gamepad or classic Joystick/Gamepad class of device, excluding RDK remote controls.
-    static bool isGamepad(const std::string& mac, const bluetooth::DeviceProperties& props);
 
     struct PendingAuth {
         bool resolved{false};
@@ -138,6 +151,7 @@ private:
     BtAuthCallbacks m_callbacks;
     // Set once, before the SDK callbacks are registered, and read-only afterwards.
     std::function<bool(const std::string& mac)> m_isOperationInProgress;
+    std::function<bool()> m_isGamepadStandby;
 
     mutable std::mutex m_pendingMutex;
     std::unordered_map<std::string, std::shared_ptr<PendingAuth>> m_pendingAuths;

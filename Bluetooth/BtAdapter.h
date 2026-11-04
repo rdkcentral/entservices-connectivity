@@ -91,6 +91,7 @@ public:
     IBtAdapter::BtMediaTrackInfo   getMediaTrackInfo(long long int deviceID) const override;
 
     void startAutoConnect() override;
+    void setGamepadStandbyMode(bool standby) override;
 
     // Derive the stable numeric handle string from a MAC address.
     static std::string handleForMac(const std::string& mac);

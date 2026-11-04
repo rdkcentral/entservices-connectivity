@@ -173,6 +173,14 @@ Required transition matrix:
 
 HID-class devices MAY be exempt from selected disconnect behavior depending on implementation policy.
 
+Gamepad handling MUST apply on every power transition regardless of persistence migration state (BTMgr parity):
+
+| Transition | Required behavior |
+| --- | --- |
+| to STANDBY or STANDBY_LIGHT_SLEEP | Plugin MUST stop non-remote-control HID devices from reconnecting and disconnect them, and MUST suppress discovery events and incoming connections of gamepads. RDK remote controls MUST NOT be disconnected. |
+| to ON | Plugin MUST end the suppression, allow those devices to reconnect, and report found events for gamepads that are connected again. |
+| to DEEP_SLEEP or OFF | Plugin MUST leave the gamepad standby state unchanged. |
+
 #### Scenario: Non-HID managed disconnect path
 - GIVEN power transition requires disconnect handling
 - WHEN connected device is not HID-exempt

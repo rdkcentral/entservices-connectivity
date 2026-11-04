@@ -104,6 +104,10 @@ public:
     virtual Status pair(bool sync = false, uint8_t timeout = 10) = 0;
     virtual Status disconnect(bool sync = false, uint8_t timeout = 10) = 0;
     virtual Status unpair() = 0;
+
+    // Non-pure so existing Device test doubles need not implement them.
+    virtual Status setAutoconnectOn() { return Status(); }
+    virtual Status setAutoconnectOff() { return Status(); }
 };
 
 } // namespace bluetooth

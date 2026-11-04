@@ -137,6 +137,12 @@ public:
     // Reconnects the previously used audio output device at startup / power-on, as BTMgr does internally.
     // Backends that do this themselves (BTMgr) keep the default no-op.
     virtual void startAutoConnect() {}
+
+    // Gamepad handling on a power state change, as BTMgr does internally. Standby (STANDBY or LIGHT_SLEEP):
+    // non-remote HID devices are disconnected and kept from reconnecting, and their discovery and incoming
+    // connections are suppressed. On (ON): the suppression ends and the devices may reconnect.
+    // Backends that do this themselves (BTMgr) keep the default no-op.
+    virtual void setGamepadStandbyMode(bool /*standby*/) {}
 };
 
 } // namespace Plugin

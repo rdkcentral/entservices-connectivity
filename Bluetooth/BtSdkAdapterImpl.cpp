@@ -102,6 +102,9 @@ std::string BtSdkAdapterImpl::init(PluginHost::IShell* /* service */,
     m_eventBridge = std::make_unique<EventBridge>(m_registry, std::move(eventCallbacks));
     m_authBridge  = std::make_unique<AuthBridge>(m_registry, std::move(authCallbacks));
     m_authBridge->setOperationInProgressPredicate([this](const std::string& mac) { return isOperationInProgress(mac); });
+    // Reset here, as the power handler applies the current state again after the plugin is activated.
+    m_gamepadStandby = false;
+    m_authBridge->setGamepadStandbyPredicate([this] { return m_gamepadStandby.load(); });
 
     auto authCb = [this, gate](bluetooth::AuthorisationType type,
                                std::shared_ptr<bluetooth::Device> device) -> bool {
@@ -204,6 +207,10 @@ void BtSdkAdapterImpl::deinit() {
     {
         std::lock_guard<std::mutex> lock(m_suppressedMutex);
         m_suppressedMacs.clear();
+    }
+    {
+        std::lock_guard<std::mutex> lock(m_standbyHeldMutex);
+        m_standbyHeld.clear();
     }
     std::lock_guard<std::mutex> lock(m_devicesMutex);
     m_devicesByHandle.clear();
@@ -746,6 +753,101 @@ bool BtSdkAdapterImpl::runAutoConnectPass(bool secondAttempt) {
     return false;
 }
 
+// ── Gamepad standby mode ─────────────────────────────────────────────────────
+
+// Mirrors BTMgr's reaction to the box entering standby (STANDBY / LIGHT_SLEEP) and returning to ON:
+//   standby: gamepads are kept from reconnecting (BTRCore_clearLEActionListForGamepads), disconnected, and
+//            neither their discovery nor their incoming connections are reported or accepted;
+//   on:      the suppression ends, gamepads may reconnect (BTRCore_refreshLEActionListForGamepads), and the
+//            found events suppressed for gamepads that are connected again are reported (BTRMGR_ConnectGamepads_StartUp).
+// Remote controls are never touched: they are needed to wake the box.
+void BtSdkAdapterImpl::setGamepadStandbyMode(bool standby) {
+    LOGINFO("BtSdkAdapterImpl::setGamepadStandbyMode: entry standby=%d", standby);
+    std::lock_guard<std::mutex> modeLock(m_gamepadStandbyModeMutex);
+    if (m_shuttingDown || !m_adapter || !m_authBridge) {
+        LOGERR("BtSdkAdapterImpl::setGamepadStandbyMode: exit with error: adapter is unavailable");
+        return;
+    }
+
+    // Before the loops below, so a gamepad connecting meanwhile is already rejected.
+    if (standby) m_gamepadStandby = true;
+
+    // BTMgr's auto-connect list only holds LE devices (no Class of Device).
+    struct Managed { std::shared_ptr<bluetooth::Device> device; std::string handle; std::string type; bool le; };
+    std::vector<Managed> managed;
+    for (auto& device : managedHidDevices()) {
+        std::string mac;
+        device->address(mac);
+        bluetooth::DeviceProperties props;
+        const bool le = device->getAllProperties(props) && props.classOfDevice.value_or(0) == 0;
+        std::string handle = DeviceRegistry::deriveHandle(mac);
+        std::string type = m_authBridge->resolveDeviceType(device, handle);
+        managed.push_back({device, std::move(handle), std::move(type), le});
+    }
+
+    if (standby) {
+        for (auto& m : managed) {
+            if (!m.le) continue;
+            const Status status = m.device->setAutoconnectOff();
+            if (!status) LOGWARN("BtSdkAdapterImpl::setGamepadStandbyMode: could not clear auto-connect for %s: %s",
+                                 m.handle.c_str(), status.get_message().c_str());
+        }
+        for (auto& m : managed) {
+            if (m.device->state() != bluetooth::DeviceState::Connected) continue;
+            if (!disconnectDevice(m.handle, m.type)) {
+                LOGERR("BtSdkAdapterImpl::setGamepadStandbyMode: failed to disconnect %s", m.handle.c_str());
+            }
+        }
+    } else {
+        m_gamepadStandby = false;
+        for (auto& m : managed) {
+            if (!m.le) continue;
+            const Status status = m.device->setAutoconnectOn();
+            if (!status) LOGWARN("BtSdkAdapterImpl::setGamepadStandbyMode: could not restore auto-connect for %s: %s",
+                                 m.handle.c_str(), status.get_message().c_str());
+        }
+
+        std::unordered_map<std::string, bluetooth::AdapterEventData> held;
+        {
+            std::lock_guard<std::mutex> lock(m_standbyHeldMutex);
+            held.swap(m_standbyHeld);
+        }
+        // Only gamepads that are connected again are reported; the rest are found again by the next scan.
+        for (auto& entry : held) {
+            const auto& device = entry.second.device;
+            if (!device || device->state() != bluetooth::DeviceState::Connected) continue;
+            if (m_eventBridge) m_eventBridge->onAdapterEvent(bluetooth::AdapterEvent::DeviceDiscovered, std::move(entry.second));
+        }
+    }
+    LOGINFO("BtSdkAdapterImpl::setGamepadStandbyMode: exit successfully");
+}
+
+std::vector<std::shared_ptr<bluetooth::Device>> BtSdkAdapterImpl::managedHidDevices() {
+    std::vector<std::shared_ptr<bluetooth::Device>> result;
+    if (!m_adapter || !m_authBridge) return result;
+    // Paired includes connected devices.
+    for (auto& device : m_adapter->getDevices(bluetooth::DeviceState::Paired)) {
+        std::string mac;
+        device->address(mac);
+        bluetooth::DeviceProperties props;
+        if (!device->getAllProperties(props)) continue;
+        const std::string type = m_authBridge->resolveDeviceType(device, DeviceRegistry::deriveHandle(mac));
+        if (AuthBridge::isManagedHidDevice(type, mac, props)) result.push_back(device);
+    }
+    return result;
+}
+
+bool BtSdkAdapterImpl::suppressInStandby(bluetooth::AdapterEventData& event) {
+    if (!m_gamepadStandby || !event.device) return false;
+    std::string mac;
+    event.device->address(mac);
+    bluetooth::DeviceProperties props;
+    if (!event.device->getAllProperties(props) || !AuthBridge::isGamepad(mac, props)) return false;
+    std::lock_guard<std::mutex> lock(m_standbyHeldMutex);
+    m_standbyHeld[mac] = std::move(event);
+    return true;
+}
+
 // ── Private helpers ──────────────────────────────────────────────────────────
 
 void BtSdkAdapterImpl::onAdapterEvent(bluetooth::AdapterEvent event,
@@ -775,6 +877,10 @@ void BtSdkAdapterImpl::onAdapterEvent(bluetooth::AdapterEvent event,
                 holdDevice(std::move(mac), std::move(data));
                 return;
             }
+            if (suppressInStandby(data)) {
+                LOGINFO("BtSdkAdapterImpl::onAdapterEvent: exit gamepad discovery suppressed in standby");
+                return;
+            }
         }
     } else if (event == bluetooth::AdapterEvent::DeviceDisappeared && data.device) {
         std::string mac;
@@ -788,6 +894,11 @@ void BtSdkAdapterImpl::onAdapterEvent(bluetooth::AdapterEvent event,
             // Still held by the name gate: never announced either.
             std::lock_guard<std::mutex> lock(m_pendingMutex);
             if (m_pending.erase(mac) > 0) filtered = true;
+        }
+        {
+            // Suppressed in standby: never announced either.
+            std::lock_guard<std::mutex> lock(m_standbyHeldMutex);
+            if (m_standbyHeld.erase(mac) > 0) filtered = true;
         }
         m_registry.unregisterDevice(mac);
         std::string handle = DeviceRegistry::deriveHandle(mac);
@@ -1061,6 +1172,11 @@ void BtSdkAdapterImpl::releaseDevice(bluetooth::AdapterEventData&& event) {
     if (isFilteredFromDiscovery(device, /*typeSettled=*/true)) {
         std::lock_guard<std::mutex> lock(m_suppressedMutex);
         m_suppressedMacs.insert(std::move(mac));
+        return;
+    }
+
+    if (suppressInStandby(event)) {
+        LOGINFO("BtSdkAdapterImpl::releaseDevice: gamepad discovery suppressed in standby mac=%s", mac.c_str());
         return;
     }
 

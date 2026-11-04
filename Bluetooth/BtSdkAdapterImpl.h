@@ -101,12 +101,21 @@ public:
     // Reconnects the previously used audio output device (see runAutoConnectPass). Runs on a worker thread.
     void startAutoConnect() override;
 
+    // Mirrors BTMgr's gamepad standby handling (see IBtAdapter::setGamepadStandbyMode).
+    void setGamepadStandbyMode(bool standby) override;
+
 private:
     void onAdapterEvent(bluetooth::AdapterEvent event, bluetooth::AdapterEventData data);
     void autoConnectWorker();
     // Returns true if the client did not answer and the pass should be retried later.
     bool runAutoConnectPass(bool secondAttempt);
     void stopAutoConnectWorker();
+
+    // Paired HID devices that are not RDK remote controls: what BTMgr's standby handling manages.
+    std::vector<std::shared_ptr<bluetooth::Device>> managedHidDevices();
+    // While gamepad standby mode is on, takes a discovered gamepad's event out of `event` and keeps it
+    // instead of reporting it (BTMgr does not post the found event in standby). Returns true if it did.
+    bool suppressInStandby(bluetooth::AdapterEventData& event);
     void registerDeviceEvents(std::shared_ptr<bluetooth::Device> device);
     void unregisterDeviceEvents(std::shared_ptr<bluetooth::Device> device);
     bluetooth::ScanFilter buildScanFilter(ScanFilterPolicy::Mode mode) const;
@@ -227,6 +236,12 @@ private:
     std::thread                              m_autoConnectThread;
     bool                                     m_autoConnectRunning{false};
     bool                                     m_autoConnectStop{false};
+
+    // Gamepad standby mode: set while the box is in STANDBY or LIGHT_SLEEP.
+    std::mutex                               m_gamepadStandbyModeMutex;   // serialises setGamepadStandbyMode()
+    std::atomic<bool>                        m_gamepadStandby{false};
+    std::mutex                               m_standbyHeldMutex;
+    std::unordered_map<std::string, bluetooth::AdapterEventData> m_standbyHeld;   // keyed by MAC
 
     DeviceRegistry m_registry;
     std::unique_ptr<EventBridge> m_eventBridge;

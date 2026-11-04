@@ -96,4 +96,6 @@ public:
     MOCK_METHOD(Status, pair,       (bool, uint8_t), (override));
     MOCK_METHOD(Status, disconnect, (bool, uint8_t), (override));
     MOCK_METHOD(Status, unpair,     (),              (override));
+    MOCK_METHOD(Status, setAutoconnectOn,  (),       (override));
+    MOCK_METHOD(Status, setAutoconnectOff, (),       (override));
 };

@@ -61,6 +61,11 @@ bool AuthBridge::isGamepad(const std::string& mac, const bluetooth::DeviceProper
     return isLeGamepad(props) || DiscoveryNameGate::isController(props.classOfDevice.value_or(0));
 }
 
+bool AuthBridge::isManagedHidDevice(const std::string& deviceType, const std::string& mac,
+                                    const bluetooth::DeviceProperties& props) {
+    return isHidType(deviceType) && !isRemoteControl(mac, props);
+}
+
 std::string AuthBridge::resolveDeviceType(const std::shared_ptr<bluetooth::Device>& device, const std::string& handleStr) {
     std::string type = m_registry.getDeviceType(handleStr);
     if (!device || (!type.empty() && type != "UNKNOWN DEVICE")) return type;
@@ -148,6 +153,13 @@ bool AuthBridge::onAuthRequest(bluetooth::AuthorisationType type, std::shared_pt
 
     bluetooth::DeviceProperties props;
     const bool gamepad = device->getAllProperties(props) && isGamepad(mac, props);
+
+    // BTMgr does not let a gamepad connect while the box is in standby.
+    if (gamepad && m_isGamepadStandby && m_isGamepadStandby()) {
+        LOGINFO("AuthBridge: rejecting connection from gamepad %s (%s), gamepad standby mode is on",
+                mac.c_str(), deviceType.c_str());
+        return false;
+    }
 
     // Auto-accept policy for paired HID devices that are not gamepads and not in cooldown.
     if (!gamepad && isAutoAcceptDevice(deviceType, device)) {

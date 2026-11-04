@@ -1566,6 +1566,30 @@ namespace WPEFramework
         void Bluetooth::onPowerModeChanged(const WPEFramework::Exchange::IPowerManager::PowerState currentState, const WPEFramework::Exchange::IPowerManager::PowerState newState)
         {
             std::lock_guard<std::mutex> lock(m_powerModeLock);
+            applyDevicePowerPolicy(currentState, newState);
+            // Independent of the persistence migration: BTMgr handles gamepads on every power change.
+            // After the device policy, which may have enabled Bluetooth on wake.
+            applyGamepadPowerPolicy(currentState, newState);
+        }
+
+        // Mirrors BTMgr's gamepad handling: standby is STANDBY or LIGHT_SLEEP only, so DEEP_SLEEP and OFF leave
+        // the mode as it is, and only ON ends it. Backends that handle this themselves ignore the call.
+        void Bluetooth::applyGamepadPowerPolicy(const WPEFramework::Exchange::IPowerManager::PowerState currentState, const WPEFramework::Exchange::IPowerManager::PowerState newState)
+        {
+            if (newState == currentState) {
+                return;
+            }
+
+            if (WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_STANDBY == newState ||
+                WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_STANDBY_LIGHT_SLEEP == newState) {
+                m_btAdapter.setGamepadStandbyMode(true);
+            } else if (WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_ON == newState) {
+                m_btAdapter.setGamepadStandbyMode(false);
+            }
+        }
+
+        void Bluetooth::applyDevicePowerPolicy(const WPEFramework::Exchange::IPowerManager::PowerState currentState, const WPEFramework::Exchange::IPowerManager::PowerState newState)
+        {
             // BTMgr reconnects the previous audio device whenever the box powers on, independent of migration.
             // Runs after the adapter has been powered on, so it is invoked from each return path below.
             const auto reconnectOnPowerOn = [&]() {

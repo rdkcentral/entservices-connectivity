@@ -345,6 +345,10 @@ namespace WPEFramework {
             bool m_discoveryRunning;
             DiscoveryTimer m_discoveryTimer;
             friend class DiscoveryTimer;
+            // Parts of onPowerModeChanged(), which holds m_powerModeLock around both.
+            void applyDevicePowerPolicy(const WPEFramework::Exchange::IPowerManager::PowerState currentState, const WPEFramework::Exchange::IPowerManager::PowerState newState);
+            void applyGamepadPowerPolicy(const WPEFramework::Exchange::IPowerManager::PowerState currentState, const WPEFramework::Exchange::IPowerManager::PowerState newState);
+
             PowerManagerInterfaceRef m_powerManagerPlugin;
             Core::Sink<PowerManagerNotification> m_powerManagerNotification;
             // Guards the m_powerModeEventQueue pointer (read by the notification callback, reset by Deinitialize()).

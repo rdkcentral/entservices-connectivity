@@ -1002,6 +1002,64 @@ TEST_F(BluetoothTest, onPowerModeChanged_UnhandledTransition_NoAction)
         WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY_LIGHT_SLEEP);
 }
 
+// --- onPowerModeChanged: gamepad standby mode (applies with or without persistence migration) ---
+
+TEST_F(BluetoothTest, onPowerModeChanged_OnToStandby_EntersGamepadStandbyMode)
+{
+    EXPECT_CALL(*p_btSdkMock, setGamepadStandbyMode(true)).Times(1);
+    plugin->onPowerModeChanged(
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_ON,
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY);
+}
+
+TEST_F(BluetoothTest, onPowerModeChanged_OnToStandbyLightSleep_EntersGamepadStandbyMode)
+{
+    EXPECT_CALL(*p_btSdkMock, setGamepadStandbyMode(true)).Times(1);
+    plugin->onPowerModeChanged(
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_ON,
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY_LIGHT_SLEEP);
+}
+
+TEST_F(BluetoothTest, onPowerModeChanged_StandbyToOn_LeavesGamepadStandbyMode)
+{
+    EXPECT_CALL(*p_btSdkMock, setGamepadStandbyMode(false)).Times(1);
+    plugin->onPowerModeChanged(
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY,
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_ON);
+}
+
+TEST_F(BluetoothTest, onPowerModeChanged_DeepSleepToOn_LeavesGamepadStandbyMode)
+{
+    EXPECT_CALL(*p_btSdkMock, setGamepadStandbyMode(false)).Times(1);
+    plugin->onPowerModeChanged(
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY_DEEP_SLEEP,
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_ON);
+}
+
+TEST_F(BluetoothTest, onPowerModeChanged_SameState_NoGamepadStandbyChange)
+{
+    EXPECT_CALL(*p_btSdkMock, setGamepadStandbyMode(::testing::_)).Times(0);
+    plugin->onPowerModeChanged(
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY,
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY);
+}
+
+TEST_F(BluetoothTest, onPowerModeChanged_OnToDeepSleep_NoGamepadStandbyChange)
+{
+    EXPECT_CALL(*p_btSdkMock, setGamepadStandbyMode(::testing::_)).Times(0);
+    plugin->onPowerModeChanged(
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_ON,
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY_DEEP_SLEEP);
+}
+
+TEST_F(BluetoothTest, onPowerModeChanged_OnToOff_NoGamepadStandbyChange)
+{
+    EXPECT_CALL(*p_btSdkMock, setGamepadStandbyMode(::testing::_)).Times(0);
+    plugin->onPowerModeChanged(
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_ON,
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_OFF);
+}
+
 #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
 class BluetoothLegacyPersistenceMigrationParseTest : public BluetoothTest {
 protected:
