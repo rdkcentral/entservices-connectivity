@@ -102,16 +102,12 @@ std::string BtSdkAdapterImpl::init(PluginHost::IShell* /* service */,
     m_authBridge  = std::make_unique<AuthBridge>(m_registry, std::move(authCallbacks));
     m_authBridge->setOperationInProgressPredicate([this](const std::string& mac) { return isOperationInProgress(mac); });
 
-    // Intentionally unchanged: the debug code and commented-out alternatives (LogRedirect, AutoAccept Manager)
-    // below are deliberately left in place for now.
-    // <pca> debug
     auto authCb = [this, gate](bluetooth::AuthorisationType type,
                                std::shared_ptr<bluetooth::Device> device) -> bool {
         CallbackGate::Entry entry(*gate);
         if (!entry) return false;
         return m_authBridge->onAuthRequest(type, std::move(device));
     };
-    // </pca>
 
     // <pca> debug - Strip-out noise for now
     // auto logRedirect = std::make_unique<LogRedirect>(
@@ -135,20 +131,12 @@ std::string BtSdkAdapterImpl::init(PluginHost::IShell* /* service */,
     // </pca>
 
     try {
-        // <pca> debug - This is throwing, simplify for now to narrow-down the problem
         m_manager = std::make_unique<bluetooth::Manager>(
             bluetooth::AuthorisationMode::ExternalAuthorisation,
             std::move(authCb),
             LogLocation::LogRedirect,
             std::move(logRedirect)
         );
-        // m_manager = std::make_unique<bluetooth::Manager>(
-        //     bluetooth::AuthorisationMode::AutoAccept,
-        //     nullptr,
-        //     LogLocation::LogRedirect,
-        //     std::move(logRedirect)
-        //);
-        // </pca>
     } catch (const std::exception& e) {
         std::string error = std::string("Failed to construct Bluetooth Manager: ") + e.what();
         reportManagerConstructionFailure();

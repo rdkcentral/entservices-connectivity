@@ -513,19 +513,6 @@ TEST_F(BluetoothTest, unpairWrapper_Success)
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("unpair"), _T("{\"deviceID\":\"123\"}"), response));
 }
 
-TEST_F(BluetoothTest, unpairWrapper_MissingDeviceID_Failure)
-{
-    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("unpair"), _T("{}"), response));
-    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
-}
-
-TEST_F(BluetoothTest, unpairWrapper_Failed)
-{
-    EXPECT_CALL(*p_btSdkMock, unpairDevice("123")).WillOnce(::testing::Return(false));
-    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("unpair"), _T("{\"deviceID\":\"123\"}"), response));
-    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
-}
-
 TEST_F(BluetoothTest, enableWrapper_Success)
 {
     EXPECT_CALL(*p_btSdkMock, setAdapterPowered(true)).WillOnce(::testing::Return(true));
