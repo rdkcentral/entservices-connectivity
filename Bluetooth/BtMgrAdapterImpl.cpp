@@ -148,6 +148,7 @@ std::string BtMgrAdapterImpl::init(PluginHost::IShell* /* service */,
 void BtMgrAdapterImpl::deinit() {
     s_instance = nullptr;
     BTRMGR_UnRegisterFromCallbacks(kIarmClientName);
+}
 
 void BtSdkAdapterImpl::autoConnectWorker() {
     // Must not be called from the BTRMGR event thread, or this wait never completes.
