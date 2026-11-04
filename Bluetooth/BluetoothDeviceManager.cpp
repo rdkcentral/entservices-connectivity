@@ -657,6 +657,8 @@ namespace WPEFramework {
 
         Core::hresult BluetoothDeviceManager::getPairedDeviceInfo(const std::string& deviceID, BluetoothDeviceInfo& deviceInfo)
         {
+            // The critical section is recursive; setters retain their outer lock for atomic updates.
+            Core::SafeSyncType<Core::CriticalSection> lock(_adminLock);
             auto it = _pairedDeviceCache.find(deviceID);
             const bool bFound = (it != _pairedDeviceCache.end());
 

@@ -763,7 +763,7 @@ void BtSdkAdapterImpl::onAdapterEvent(bluetooth::AdapterEvent event,
             std::string mac;
             data.device->address(mac);
             std::lock_guard<std::mutex> lock(m_suppressedMutex);
-            m_suppressedMacs.insert(mac);
+            m_suppressedMacs.insert(std::move(mac));
         }
         if (!filtered) {
             std::string mac;
