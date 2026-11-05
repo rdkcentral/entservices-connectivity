@@ -88,6 +88,14 @@ bool AuthBridge::getLastConnectTime(const std::string& handleStr, long long& las
     return m_callbacks.getLastConnectTime && m_callbacks.getLastConnectTime(handleStr, lastConnectTimeUtc);
 }
 
+bool AuthBridge::isLegacyAutoConnect(const std::string& handleStr) const {
+    return m_callbacks.isLegacyAutoConnect && m_callbacks.isLegacyAutoConnect(handleStr);
+}
+
+void AuthBridge::onAutoConnected(const std::string& handleStr) const {
+    if (m_callbacks.onAutoConnected) m_callbacks.onAutoConnected(handleStr);
+}
+
 bool AuthBridge::onAuthRequest(bluetooth::AuthorisationType type, std::shared_ptr<bluetooth::Device> device) {
     if (!device) return false;
 

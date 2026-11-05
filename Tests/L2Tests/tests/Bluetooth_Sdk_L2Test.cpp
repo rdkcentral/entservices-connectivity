@@ -24,8 +24,14 @@
 #include "BtSdkAdapterImpl.h"
 
 #include <chrono>
+#include <functional>
+#include <initializer_list>
+#include <map>
 #include <memory>
+#include <mutex>
+#include <string>
 #include <thread>
+#include <vector>
 
 using namespace WPEFramework;
 
@@ -203,4 +209,361 @@ TEST_F(Bluetooth_Sdk_L2Test, BluetoothDiscoverableUnsupportedAndScan)
     EXPECT_EQ(Core::ERROR_NONE,
               InvokeServiceMethod("org.rdk.Bluetooth.1", "stopScan", result));
     EXPECT_TRUE(result["success"].Boolean());
+}
+
+namespace {
+
+using namespace std::chrono_literals;
+
+// Drives the startup reconnect of a standalone BtSdkAdapterImpl, so that each test decides what the plugin
+// side reports (last connect time, legacy autoconnect mark, autoconnect status) and how the client answers.
+// All identifiers it records are device handles.
+class StartupReconnectHarness {
+public:
+    enum class Answer { Accept, Reject, None, AutoAccept };
+
+    struct Spec {
+        Spec(const std::string& macAddress, long long lastConnect, Answer clientAnswer)
+            : mac(macAddress), lastConnectTimeUtc(lastConnect), answer(clientAnswer) {}
+        Spec& legacyMarked() { marked = true; return *this; }
+        Spec& connectFails() { connectSucceeds = false; return *this; }
+        Spec& alreadyConnected() { connectedProperty = true; return *this; }
+        Spec& listedAsConnected() { listedConnected = true; return *this; }
+
+        std::string mac;
+        long long lastConnectTimeUtc;
+        Answer answer;
+        bool marked = false;
+        bool connectSucceeds = true;
+        bool connectedProperty = false;
+        bool listedConnected = false;
+    };
+
+    static std::string handleOf(const std::string& mac) { return Plugin::DeviceRegistry::deriveHandle(mac); }
+
+    ~StartupReconnectHarness()
+    {
+        m_adapter.deinit();
+        const std::vector<std::shared_ptr<bluetooth::Device>> none;
+        ON_CALL(*g_adapter, getDevices()).WillByDefault(::testing::Return(none));
+        ON_CALL(*g_adapter, getDevices(::testing::_)).WillByDefault(::testing::Return(none));
+        ON_CALL(*g_adapter, getPowered(::testing::_)).WillByDefault(::testing::Return(Status{}));
+    }
+
+    void addDevice(const Spec& spec)
+    {
+        auto device = std::make_shared<::testing::NiceMock<MockDevice>>();
+        const std::string mac = spec.mac;
+        bluetooth::DeviceProperties props;
+        props.uuids = std::vector<std::string>{"0000110b-0000-1000-8000-00805f9b34fb"};
+        props.connected = spec.connectedProperty;
+
+        ON_CALL(*device, address(::testing::_))
+            .WillByDefault(::testing::DoAll(::testing::SetArgReferee<0>(mac), ::testing::Return(Status{})));
+        ON_CALL(*device, name(::testing::_))
+            .WillByDefault(::testing::DoAll(::testing::SetArgReferee<0>(std::string("Speaker ") + mac),
+                                            ::testing::Return(Status{})));
+        ON_CALL(*device, getAllProperties(::testing::_))
+            .WillByDefault(::testing::DoAll(::testing::SetArgReferee<0>(props), ::testing::Return(Status{})));
+        ON_CALL(*device, connect(::testing::_, ::testing::_))
+            .WillByDefault(::testing::Invoke([this, mac, ok = spec.connectSucceeds](bool, uint8_t) {
+                {
+                    std::lock_guard<std::mutex> lock(m_mutex);
+                    m_connects.push_back(handleOf(mac));
+                }
+                return ok ? Status{} : Status(StatusCodes::BLUETOOTH_ERROR, "connect failed");
+            }));
+
+        m_devices.push_back(device);
+        if (spec.listedConnected) m_connectedDevices.push_back(device);
+        m_specs.emplace(handleOf(mac), spec);
+    }
+
+    // Initializes the adapter and starts the startup reconnect. False if the adapter did not initialize.
+    bool start(bool systemPowerOn = true)
+    {
+        ON_CALL(*g_adapter, getPowered(::testing::_))
+            .WillByDefault(::testing::DoAll(::testing::SetArgReferee<0>(true), ::testing::Return(Status{})));
+        ON_CALL(*g_adapter, getDevices()).WillByDefault(::testing::Return(m_devices));
+        ON_CALL(*g_adapter, getDevices(bluetooth::DeviceState::Paired)).WillByDefault(::testing::Return(m_devices));
+        ON_CALL(*g_adapter, getDevices(bluetooth::DeviceState::Connected))
+            .WillByDefault(::testing::Return(m_connectedDevices));
+
+        Plugin::BtAuthCallbacks auth;
+        auth.onConnectionRequest = [this](const std::string& deviceId, const std::string&, const std::string&,
+                                          uint32_t, const std::string&, const std::string&) {
+            Answer answer = Answer::None;
+            {
+                std::lock_guard<std::mutex> lock(m_mutex);
+                m_requests.push_back(deviceId);
+                auto it = m_specs.find(deviceId);
+                if (it != m_specs.end()) answer = it->second.answer;
+            }
+            if (answer == Answer::Accept || answer == Answer::Reject) {
+                m_adapter.respondToEvent(deviceId, "", answer == Answer::Accept);
+            }
+        };
+        auth.getConnectAutoResponse = [this](const std::string& handle, bool& accept) {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            auto it = m_specs.find(handle);
+            if (it == m_specs.end() || it->second.answer != Answer::AutoAccept) return false;
+            accept = true;
+            return true;
+        };
+        auth.getLastConnectTime = [this](const std::string& handle, long long& lastConnectTimeUtc) {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            auto it = m_specs.find(handle);
+            if (it == m_specs.end() || it->second.lastConnectTimeUtc <= 0) return false;
+            lastConnectTimeUtc = it->second.lastConnectTimeUtc;
+            return true;
+        };
+        auth.isLegacyAutoConnect = [this](const std::string& handle) {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            auto it = m_specs.find(handle);
+            return it != m_specs.end() && it->second.marked;
+        };
+        auth.onAutoConnected = [this](const std::string& handle) {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            m_autoConnected.push_back(handle);
+        };
+
+        if (!m_adapter.init(nullptr, Plugin::BtEventCallbacks{}, std::move(auth)).empty()) return false;
+        m_adapter.setSystemPowerOn(systemPowerOn);
+        m_adapter.startAutoConnect();
+        return true;
+    }
+
+    void setSystemPowerOn(bool on) { m_adapter.setSystemPowerOn(on); }
+    void startAutoConnect() { m_adapter.startAutoConnect(); }
+
+    std::vector<std::string> requests() const { return snapshot(m_requests); }
+    std::vector<std::string> connects() const { return snapshot(m_connects); }
+    std::vector<std::string> autoConnected() const { return snapshot(m_autoConnected); }
+
+    bool waitUntil(const std::function<bool()>& condition, std::chrono::milliseconds timeout) const
+    {
+        const auto deadline = std::chrono::steady_clock::now() + timeout;
+        while (std::chrono::steady_clock::now() < deadline) {
+            if (condition()) return true;
+            std::this_thread::sleep_for(20ms);
+        }
+        return condition();
+    }
+
+private:
+    std::vector<std::string> snapshot(const std::vector<std::string>& list) const
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        return list;
+    }
+
+    Plugin::BtSdkAdapterImpl m_adapter;
+    mutable std::mutex m_mutex;
+    std::map<std::string, Spec> m_specs;
+    std::vector<std::shared_ptr<bluetooth::Device>> m_devices;
+    std::vector<std::shared_ptr<bluetooth::Device>> m_connectedDevices;
+    std::vector<std::string> m_requests;
+    std::vector<std::string> m_connects;
+    std::vector<std::string> m_autoConnected;
+};
+
+using Answer = StartupReconnectHarness::Answer;
+using Spec = StartupReconnectHarness::Spec;
+
+const std::string kSpeakerA = "AA:00:00:00:00:01";
+const std::string kSpeakerB = "AA:00:00:00:00:02";
+
+std::vector<std::string> handles(std::initializer_list<std::string> macs)
+{
+    std::vector<std::string> result;
+    for (const auto& mac : macs) result.push_back(StartupReconnectHarness::handleOf(mac));
+    return result;
+}
+
+// Lets a pass that has finished its decisions end, before asserting that nothing more happened.
+void settle()
+{
+    std::this_thread::sleep_for(500ms);
+}
+
+} // namespace
+
+TEST_F(Bluetooth_Sdk_L2Test, StartupReconnect_ClientAccepts_PluginConnectsTheDevice)
+{
+    StartupReconnectHarness harness;
+    harness.addDevice(Spec(kSpeakerA, 1000, Answer::Accept));
+    ASSERT_TRUE(harness.start());
+
+    ASSERT_TRUE(harness.waitUntil([&] { return !harness.connects().empty(); }, 10s));
+    EXPECT_EQ(handles({kSpeakerA}), harness.requests());
+    EXPECT_EQ(handles({kSpeakerA}), harness.connects());
+    EXPECT_EQ(handles({kSpeakerA}), harness.autoConnected());
+}
+
+TEST_F(Bluetooth_Sdk_L2Test, StartupReconnect_ClientRejects_DeviceIsNotConnected)
+{
+    StartupReconnectHarness harness;
+    harness.addDevice(Spec(kSpeakerA, 1000, Answer::Reject));
+    ASSERT_TRUE(harness.start());
+
+    ASSERT_TRUE(harness.waitUntil([&] { return !harness.requests().empty(); }, 10s));
+    settle();
+    EXPECT_EQ(handles({kSpeakerA}), harness.requests());
+    EXPECT_TRUE(harness.connects().empty());
+    EXPECT_TRUE(harness.autoConnected().empty());
+}
+
+TEST_F(Bluetooth_Sdk_L2Test, StartupReconnect_ClientRejectsLegacyMarkedDevice_RejectionIsHonoured)
+{
+    StartupReconnectHarness harness;
+    harness.addDevice(Spec(kSpeakerA, 1000, Answer::Reject).legacyMarked());
+    ASSERT_TRUE(harness.start());
+
+    ASSERT_TRUE(harness.waitUntil([&] { return !harness.requests().empty(); }, 10s));
+    settle();
+    EXPECT_TRUE(harness.connects().empty());
+}
+
+TEST_F(Bluetooth_Sdk_L2Test, StartupReconnect_TwoDevices_NewestIsTriedFirstAndOnlyOneIsConnected)
+{
+    StartupReconnectHarness harness;
+    harness.addDevice(Spec(kSpeakerA, 1000, Answer::Accept));
+    harness.addDevice(Spec(kSpeakerB, 2000, Answer::Accept));
+    ASSERT_TRUE(harness.start());
+
+    ASSERT_TRUE(harness.waitUntil([&] { return !harness.connects().empty(); }, 10s));
+    settle();
+    EXPECT_EQ(handles({kSpeakerB}), harness.requests());
+    EXPECT_EQ(handles({kSpeakerB}), harness.connects());
+}
+
+TEST_F(Bluetooth_Sdk_L2Test, StartupReconnect_NewestRejected_NextDeviceIsConnected)
+{
+    StartupReconnectHarness harness;
+    harness.addDevice(Spec(kSpeakerA, 1000, Answer::Accept));
+    harness.addDevice(Spec(kSpeakerB, 2000, Answer::Reject));
+    ASSERT_TRUE(harness.start());
+
+    ASSERT_TRUE(harness.waitUntil([&] { return !harness.connects().empty(); }, 10s));
+    EXPECT_EQ(handles({kSpeakerB, kSpeakerA}), harness.requests());
+    EXPECT_EQ(handles({kSpeakerA}), harness.connects());
+}
+
+TEST_F(Bluetooth_Sdk_L2Test, StartupReconnect_NewestFailsToConnect_NextDeviceIsConnected)
+{
+    StartupReconnectHarness harness;
+    harness.addDevice(Spec(kSpeakerA, 1000, Answer::Accept));
+    harness.addDevice(Spec(kSpeakerB, 2000, Answer::Accept).connectFails());
+    ASSERT_TRUE(harness.start());
+
+    // Three attempts on the newest device, two seconds apart, before moving on.
+    ASSERT_TRUE(harness.waitUntil([&] { return harness.connects().size() >= 4; }, 20s));
+    EXPECT_EQ(handles({kSpeakerB, kSpeakerB, kSpeakerB, kSpeakerA}), harness.connects());
+    EXPECT_EQ(handles({kSpeakerA}), harness.autoConnected());
+}
+
+TEST_F(Bluetooth_Sdk_L2Test, StartupReconnect_AutoAcceptedDevice_IsConnectedWithoutAskingTheClient)
+{
+    StartupReconnectHarness harness;
+    harness.addDevice(Spec(kSpeakerA, 1000, Answer::AutoAccept));
+    ASSERT_TRUE(harness.start());
+
+    ASSERT_TRUE(harness.waitUntil([&] { return !harness.connects().empty(); }, 10s));
+    EXPECT_TRUE(harness.requests().empty());
+    EXPECT_EQ(handles({kSpeakerA}), harness.connects());
+    EXPECT_EQ(handles({kSpeakerA}), harness.autoConnected());
+}
+
+TEST_F(Bluetooth_Sdk_L2Test, StartupReconnect_AcceptedDeviceThatIsAlreadyConnected_IsNotConnectedAgain)
+{
+    StartupReconnectHarness harness;
+    harness.addDevice(Spec(kSpeakerA, 1000, Answer::Accept).alreadyConnected());
+    ASSERT_TRUE(harness.start());
+
+    ASSERT_TRUE(harness.waitUntil([&] { return !harness.requests().empty(); }, 10s));
+    settle();
+    EXPECT_TRUE(harness.connects().empty());
+    EXPECT_TRUE(harness.autoConnected().empty());
+}
+
+TEST_F(Bluetooth_Sdk_L2Test, StartupReconnect_AudioOutputAlreadyConnected_PassDoesNothing)
+{
+    StartupReconnectHarness harness;
+    harness.addDevice(Spec(kSpeakerA, 1000, Answer::Accept).listedAsConnected());
+    harness.addDevice(Spec(kSpeakerB, 2000, Answer::Accept));
+    ASSERT_TRUE(harness.start());
+
+    settle();
+    EXPECT_TRUE(harness.requests().empty());
+    EXPECT_TRUE(harness.connects().empty());
+}
+
+TEST_F(Bluetooth_Sdk_L2Test, StartupReconnect_DeviceNeverConnectedBefore_IsNotACandidate)
+{
+    StartupReconnectHarness harness;
+    harness.addDevice(Spec(kSpeakerA, 0, Answer::Accept).legacyMarked());
+    ASSERT_TRUE(harness.start());
+
+    settle();
+    EXPECT_TRUE(harness.requests().empty());
+    EXPECT_TRUE(harness.connects().empty());
+}
+
+TEST_F(Bluetooth_Sdk_L2Test, StartupReconnect_BoxNotInPowerStateOn_PassDoesNothing)
+{
+    StartupReconnectHarness harness;
+    harness.addDevice(Spec(kSpeakerA, 1000, Answer::Accept).legacyMarked());
+    ASSERT_TRUE(harness.start(false));
+
+    settle();
+    EXPECT_TRUE(harness.requests().empty());
+    EXPECT_TRUE(harness.connects().empty());
+}
+
+TEST_F(Bluetooth_Sdk_L2Test, StartupReconnect_PowerLeavesOnWhileWaitingToAskAgain_NoSecondPassAndNextPowerOnStartsANewOne)
+{
+    StartupReconnectHarness harness;
+    harness.addDevice(Spec(kSpeakerA, 1000, Answer::None).legacyMarked());
+    ASSERT_TRUE(harness.start());
+
+    ASSERT_TRUE(harness.waitUntil([&] { return harness.requests().size() == 1; }, 10s));
+    harness.setSystemPowerOn(false);
+    settle();
+    settle();
+
+    // The pass that was waiting 40 s has ended, so a power on starts a new one at once.
+    harness.setSystemPowerOn(true);
+    harness.startAutoConnect();
+    EXPECT_TRUE(harness.waitUntil([&] { return harness.requests().size() == 2; }, 10s));
+    EXPECT_TRUE(harness.connects().empty());
+}
+
+TEST_F(Bluetooth_Sdk_L2Test, StartupReconnect_PowerLeavesOnBetweenConnectAttempts_NoFurtherAttempts)
+{
+    StartupReconnectHarness harness;
+    harness.addDevice(Spec(kSpeakerA, 1000, Answer::Accept).connectFails());
+    ASSERT_TRUE(harness.start());
+
+    ASSERT_TRUE(harness.waitUntil([&] { return harness.connects().size() == 1; }, 10s));
+    harness.setSystemPowerOn(false);
+
+    // Without the power check the two remaining attempts follow two and four seconds after the first.
+    std::this_thread::sleep_for(5s);
+    EXPECT_EQ(handles({kSpeakerA}), harness.connects());
+    EXPECT_TRUE(harness.autoConnected().empty());
+}
+
+// Takes about 41 seconds: the pass asks again once after kAutoConnectRetrySeconds (40 s) before it falls back
+// on the legacy autoconnect mark.
+TEST_F(Bluetooth_Sdk_L2Test, StartupReconnect_ClientNeverAnswers_OnlyTheLegacyMarkedDeviceIsConnectedOnTheSecondPass)
+{
+    StartupReconnectHarness harness;
+    harness.addDevice(Spec(kSpeakerA, 1000, Answer::None).legacyMarked());
+    harness.addDevice(Spec(kSpeakerB, 2000, Answer::None));
+    ASSERT_TRUE(harness.start());
+
+    ASSERT_TRUE(harness.waitUntil([&] { return !harness.connects().empty(); }, 60s));
+    EXPECT_EQ(handles({kSpeakerB, kSpeakerB, kSpeakerA}), harness.requests());
+    EXPECT_EQ(handles({kSpeakerA}), harness.connects());
+    EXPECT_EQ(handles({kSpeakerA}), harness.autoConnected());
 }

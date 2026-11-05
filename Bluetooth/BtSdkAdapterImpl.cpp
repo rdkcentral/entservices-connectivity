@@ -105,6 +105,11 @@ std::string BtSdkAdapterImpl::init(PluginHost::IShell* /* service */,
     // Reset here, as the power handler applies the current state again after the plugin is activated.
     m_gamepadStandby = false;
     m_authBridge->setGamepadStandbyPredicate([this] { return m_gamepadStandby.load(); });
+    {
+        // Likewise: the plugin applies the current power state again after activation.
+        std::lock_guard<std::mutex> lock(m_autoConnectMutex);
+        m_systemPowerOn = true;
+    }
 
     auto authCb = [this, gate](bluetooth::AuthorisationType type,
                                std::shared_ptr<bluetooth::Device> device) -> bool {
@@ -611,6 +616,9 @@ IBtAdapter::BtMediaTrackInfo BtSdkAdapterImpl::getMediaTrackInfo(long long int d
 // Mirrors BTRMGR_StartAudioStreamingOut_StartUp: BTMgr asks for each previously used audio output device
 // (RECEIVED_EXTERNAL_CONNECT_REQUEST), waits briefly for the answer and, if the client is not up yet,
 // asks again once after kAutoConnectRetrySeconds.
+// Unlike BTMgr, the plugin connects the device itself once it is accepted, by the autoconnect status or by the
+// client, and stops after the first device that connects. A client that never answers is overridden on the second
+// pass only for a device the legacy (AS) record marks for autoconnect; an explicit rejection is always honoured.
 // A connect to a device that is not up yet fails with "Host is down" (page timeout). BTMgr probes with
 // l2ping (2 s apart) and retries the connect BTRMGR_CONNECT_RETRY_ATTEMPTS (2) times; here the connect
 // attempt itself is the probe, so it is retried the same number of times, kAutoConnectAttemptDelaySeconds apart.
@@ -649,32 +657,47 @@ void BtSdkAdapterImpl::stopAutoConnectWorker() {
     m_autoConnectRunning = false;
 }
 
+void BtSdkAdapterImpl::setSystemPowerOn(bool on) {
+    LOGINFO("BtSdkAdapterImpl::setSystemPowerOn: on=%d", on);
+    {
+        std::lock_guard<std::mutex> lock(m_autoConnectMutex);
+        m_systemPowerOn = on;
+    }
+    // Ends the waits of a pass that is already running, which then stops without trying again.
+    if (!on) m_autoConnectCv.notify_all();
+}
+
 void BtSdkAdapterImpl::autoConnectWorker() {
     if (runAutoConnectPass(false)) {
-        bool stopped = false;
+        bool cancelled = false;
         {
             std::unique_lock<std::mutex> lock(m_autoConnectMutex);
-            stopped = m_autoConnectCv.wait_for(lock, std::chrono::seconds(kAutoConnectRetrySeconds),
-                                               [this] { return m_autoConnectStop; });
+            cancelled = m_autoConnectCv.wait_for(lock, std::chrono::seconds(kAutoConnectRetrySeconds),
+                                                 [this] { return m_autoConnectStop || !m_systemPowerOn; });
         }
-        if (!stopped) runAutoConnectPass(true);
+        if (!cancelled) runAutoConnectPass(true);
     }
     std::lock_guard<std::mutex> lock(m_autoConnectMutex);
     m_autoConnectRunning = false;
 }
 
 bool BtSdkAdapterImpl::runAutoConnectPass(bool secondAttempt) {
-    LOGINFO("BtSdkAdapterImpl::runAutoConnectPass: entry secondAttempt=%d", secondAttempt);
-    auto stopRequested = [this] {
+    LOGINFO("entry: secondAttempt=%d", secondAttempt);
+    auto cancelRequested = [this] {
         std::lock_guard<std::mutex> lock(m_autoConnectMutex);
-        return m_autoConnectStop;
+        return m_autoConnectStop || !m_systemPowerOn;
     };
     if (!m_adapter || !m_authBridge) return false;
+
+    if (cancelRequested()) {
+        LOGINFO("exit: stopped, or the box is not in power state ON");
+        return false;
+    }
 
     bool powered = false;
     Status powerStatus = m_adapter->getPowered(powered);
     if (powerStatus && !powered) {
-        LOGINFO("BtSdkAdapterImpl::runAutoConnectPass: exit, adapter is powered off");
+        LOGINFO("exit: adapter is powered off");
         return false;
     }
 
@@ -684,7 +707,7 @@ bool BtSdkAdapterImpl::runAutoConnectPass(bool secondAttempt) {
         device->address(mac);
         const std::string handle = DeviceRegistry::deriveHandle(mac);
         if (AuthBridge::isAudioOutputType(m_authBridge->resolveDeviceType(device, handle))) {
-            LOGINFO("BtSdkAdapterImpl::runAutoConnectPass: exit, an audio output device is already connected");
+            LOGINFO("exit: an audio output device is already connected");
             return false;
         }
     }
@@ -703,6 +726,8 @@ bool BtSdkAdapterImpl::runAutoConnectPass(bool secondAttempt) {
         device->address(mac);
         std::string handle = DeviceRegistry::deriveHandle(mac);
         std::string type = m_authBridge->resolveDeviceType(device, handle);
+        LOGINFO("paired device: mac=%s handle=%s type=%s audioOutput=%d",
+                mac.c_str(), handle.c_str(), type.c_str(), AuthBridge::isAudioOutputType(type));
         if (!AuthBridge::isAudioOutputType(type)) continue;
 
         long long lastConnectTimeUtc = 0;
@@ -712,44 +737,59 @@ bool BtSdkAdapterImpl::runAutoConnectPass(bool secondAttempt) {
     std::stable_sort(candidates.begin(), candidates.end(),
                      [](const Candidate& a, const Candidate& b) { return a.lastConnectTimeUtc > b.lastConnectTimeUtc; });
 
-    for (auto& candidate : candidates) {
-        if (stopRequested()) return false;
+    // Connects the candidate, retrying like BTMgr. True once it is connected (also if it already was), false if
+    // every attempt failed or a stop was requested.
+    auto connectCandidate = [&](const Candidate& candidate) {
+        bluetooth::DeviceProperties props;
+        if (candidate.device->getAllProperties(props) && props.connected.value_or(false)) {
+            LOGINFO("%s is already connected", candidate.mac.c_str());
+            return true;
+        }
+        for (int attempt = 1; attempt <= kAutoConnectMaxAttempts; ++attempt) {
+            if (connectDevice(candidate.handle, candidate.type)) {
+                m_authBridge->onAutoConnected(candidate.handle);
+                return true;
+            }
+            if (attempt == kAutoConnectMaxAttempts) break;
+            LOGWARN("BtSdkAdapterImpl::runAutoConnectPass: connect attempt %d/%d failed for %s, retrying",
+                    attempt, kAutoConnectMaxAttempts, candidate.mac.c_str());
+            std::unique_lock<std::mutex> lock(m_autoConnectMutex);
+            if (m_autoConnectCv.wait_for(lock, std::chrono::seconds(kAutoConnectAttemptDelaySeconds),
+                                         [this] { return m_autoConnectStop || !m_systemPowerOn; })) {
+                return false;
+            }
+        }
+        return false;
+    };
 
-        const auto& device = candidate.device;
+    for (auto& candidate : candidates) {
+        if (cancelRequested()) return false;
+
         const std::string& mac = candidate.mac;
-        const std::string& handle = candidate.handle;
-        const std::string& type = candidate.type;
 
         const auto decision = m_authBridge->decideConnection(
-            device, std::chrono::milliseconds(AuthBridge::AUDIO_AUTH_TIMEOUT_MS));
+            candidate.device, std::chrono::milliseconds(AuthBridge::AUDIO_AUTH_TIMEOUT_MS));
         switch (decision) {
             case AuthBridge::ConnectDecision::AcceptedAuto:
-                for (int attempt = 1; attempt <= kAutoConnectMaxAttempts; ++attempt) {
-                    if (connectDevice(handle, type)) return false;
-                    if (attempt == kAutoConnectMaxAttempts) break;
-                    LOGWARN("BtSdkAdapterImpl::runAutoConnectPass: connect attempt %d/%d failed for %s, retrying",
-                            attempt, kAutoConnectMaxAttempts, mac.c_str());
-                    std::unique_lock<std::mutex> lock(m_autoConnectMutex);
-                    if (m_autoConnectCv.wait_for(lock, std::chrono::seconds(kAutoConnectAttemptDelaySeconds),
-                                                 [this] { return m_autoConnectStop; })) {
-                        return false;
-                    }
-                }
-                break;
             case AuthBridge::ConnectDecision::AcceptedByClient:
-                // The client connects the device, as with BTMgr.
-                return false;
+                if (connectCandidate(candidate)) return false;
+                break;
             case AuthBridge::ConnectDecision::TimedOut:
                 if (!secondAttempt) {
-                    LOGINFO("BtSdkAdapterImpl::runAutoConnectPass: exit, no response from the client for %s, retrying later", mac.c_str());
+                    LOGINFO("exit no response from the client for %s, retrying later", mac.c_str());
                     return true;
+                }
+                if (m_authBridge->isLegacyAutoConnect(candidate.handle)) {
+                    LOGINFO("no response from the client for %s, connecting it as the legacy record marks it for autoconnect",
+                            mac.c_str());
+                    if (connectCandidate(candidate)) return false;
                 }
                 break;
             case AuthBridge::ConnectDecision::Rejected:
                 break;
         }
     }
-    LOGINFO("BtSdkAdapterImpl::runAutoConnectPass: exit, nothing to connect");
+    LOGINFO("exit: nothing to connect");
     return false;
 }
 

@@ -250,6 +250,20 @@ From available files only:
 | Build with BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION=OFF | Migration and rollback ticket-specific behavior is inactive and not required for baseline operation. |
 | Baseline persistence under OFF build | Core Bluetooth persistence workflows remain functional. |
 
+### Startup reconnect before migration (flag ON, not migrated)
+
+| Scenario | L1 coverage expectation |
+| --- | --- |
+| AS file with a device marked for autoconnect | `init()` loads it read-only: `isLegacyAutoConnect` is true and `getLastConnectTime` returns the file's value; an unmarked device has a last connect time but no mark. |
+| Persistence untouched | No `SetValue`/`DeleteKey` on PersistentStore and the AS file content is identical after `init()`. |
+| Missing AS file, failed adapter query | `init()` still succeeds with an empty cache. |
+| Connection requests | `getConnectAutoResponse` still returns false for a marked device, so the client is asked. |
+| Pairing the device again, `performMigration` | Pairing resets the device's mark; after `performMigration` the AS mark is no longer reported. |
+| `onAutoConnected` | Records the connect time in memory only; with the flag OFF it records and persists it, and `isLegacyAutoConnect` is always false. |
+| Power state changes | Every `onPowerModeChanged` reports `setSystemPowerOn(newState == ON)` before the power-on reconnect; leaving ON never reconnects, and a transition to ON from any other state calls `startAutoConnect()` (also not migrated, where no disconnect or reconnect of individual devices happens). |
+
+The reconnect pass itself (candidate order, accept/reject handling, connect retries, the 40 s second pass) runs in `BtSdkAdapterImpl`, which L1 replaces with a mock, so it is covered in `Tests/L2Tests/tests/Bluetooth_Sdk_L2Test.cpp` (`StartupReconnect_*`; the second-pass test takes about 41 seconds), including the power-state cases (not started while the box is not ON, ended while waiting to ask again, ended between connect attempts).
+
 ### ON/OFF execution guidance
 
 - Flag ON run: execute L1 suite with migration-enabled build settings and verify AC1+AC2 paths.

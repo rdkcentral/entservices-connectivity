@@ -10,8 +10,8 @@ Bluetooth initialization SHALL read PersistentStore device info to seed the in-m
 
 #### Scenario: Initialization with no PersistentStore data
 - **WHEN** initialization finds no Bluetooth/deviceInfo data in PersistentStore
-- **THEN** the cache starts empty
-- **THEN** no migration import is attempted (filesystem import is deferred to an explicit client invocation of `performMigration()`)
+- **THEN** the cache is not seeded from PersistentStore
+- **THEN** no migration import is attempted: nothing is written to PersistentStore or the AS file, and the AS file is only read, into the in-memory cache, so the startup reconnect can use it (filesystem import into PersistentStore is deferred to an explicit client invocation of `performMigration()`)
 
 ### Requirement: `performMigration` SHALL use migrationVersion-based import semantics
 The `performMigration()` API SHALL determine whether to import from the filesystem source by checking both the presence and value of the `migrationVersion` key in PersistentStore. If `migrationVersion` is present and its value equals `"1"`, migration is considered complete and no import is performed. If absent, or if the stored value does not equal `"1"`, migration data is imported and `migrationVersion` is set to `"1"` on success.
@@ -113,15 +113,33 @@ When `BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION` is enabled and migration has been 
 - **THEN** the plugin treats the device as autoconnect-disabled and rejects the connection without emitting an `onConnectionRequest` event
 
 ### Requirement: SDK backend SHALL reconnect the previous audio output device at startup and power-on
-With the bluetooth-sdk backend there is no BTMgr daemon to ask about the previously used audio output device after boot, so the plugin SHALL do so itself, after `Initialize()` and when the platform transitions to power ON. Each paired audio output device SHALL be run through the same connect-request decision as an incoming connection (autoconnect status when migrated, otherwise `onConnectionRequest` to the client with a 200 ms wait). Devices auto-accepted from the autoconnect status SHALL be connected by the plugin; devices accepted by the client are connected by the client. If the client does not answer, the plugin SHALL retry once after 40 seconds.
+With the bluetooth-sdk backend there is no BTMgr daemon to ask about the previously used audio output device after boot, so the plugin SHALL do so itself, after `Initialize()` and when the platform transitions to power ON. Each paired audio output device SHALL be run through the same connect-request decision as an incoming connection (autoconnect status when migrated, otherwise `onConnectionRequest` to the client with a 200 ms wait). A device accepted by the autoconnect status or by the client SHALL be connected by the plugin, which retries a failed connect up to three attempts two seconds apart, and the pass SHALL stop after the first device that is connected. A device the client rejects SHALL NOT be connected. If the client does not answer, the plugin SHALL retry once after 40 seconds; on that second pass, and only while migration has not been performed, a device that the legacy AS file marks for autoconnect SHALL be connected anyway.
+
+While migration has not been performed, the plugin SHALL load the AS file into the in-memory paired-device cache at `Initialize()`, read-only: nothing is written to PersistentStore or to the AS file. This gives the reconnect each device's last connect time and legacy autoconnect mark. Stale PersistentStore `deviceInfo` remains ignored, and the client-visible autoconnect status remains disabled until migration.
 
 #### Scenario: Migrated, autoconnect enabled
 - **WHEN** the platform starts, migration has been performed and a paired audio output device has autoconnect enabled
 - **THEN** the plugin connects the device without emitting `onConnectionRequest`
 
-#### Scenario: Not migrated
-- **WHEN** the platform starts and migration has not been performed
-- **THEN** the plugin emits `onConnectionRequest` for the paired audio output device and does not connect it itself
+#### Scenario: Not migrated, client accepts
+- **WHEN** the platform starts, migration has not been performed, a paired audio output device has a last-connect time in the AS file and the client answers its `onConnectionRequest` with accept
+- **THEN** the plugin connects the device itself and records its last-connect time
+
+#### Scenario: Not migrated, client rejects
+- **WHEN** the platform starts, migration has not been performed and the client answers `onConnectionRequest` with reject
+- **THEN** the plugin does not connect the device, even if the AS file marks it for autoconnect
+
+#### Scenario: Not migrated, AS file marks the device for autoconnect and the client does not answer
+- **WHEN** migration has not been performed, the AS file marks a paired audio output device for autoconnect, and the client does not answer `onConnectionRequest` on either the first pass or the second pass 40 seconds later
+- **THEN** the client has been sent `onConnectionRequest` on each pass, and on the second pass the plugin connects the device
+
+#### Scenario: Not migrated, device not marked and the client does not answer
+- **WHEN** migration has not been performed, the AS file does not mark the device for autoconnect, and the client does not answer on the second pass
+- **THEN** the plugin does not connect the device
+
+#### Scenario: Not migrated, AS file loaded at startup
+- **WHEN** migration has not been performed and the plugin initializes
+- **THEN** the paired-device cache is filled from the AS file for devices the adapter reports as paired, no PersistentStore or AS file write occurs, and a missing, unreadable or malformed AS file, or a failed adapter query, leaves the cache empty without failing initialization
 
 #### Scenario: Client not ready
 - **WHEN** the client does not answer within 200 ms
@@ -129,7 +147,23 @@ With the bluetooth-sdk backend there is no BTMgr daemon to ask about the previou
 
 #### Scenario: Several paired audio output devices
 - **WHEN** more than one paired audio output device exists and last-connect times are known
-- **THEN** only devices with a known last-connect time are asked about, most recent first, and a device that does not answer a ping is skipped
+- **THEN** only devices with a known last-connect time are asked about, most recent first, a device the client rejects or that fails to connect after three attempts is skipped, and no further device is asked about once one is connected
+
+#### Scenario: Accepted device already connected
+- **WHEN** the device is already connected when the plugin is about to connect it
+- **THEN** the plugin does not connect it again and the pass ends
+
+#### Scenario: Audio output device already connected
+- **WHEN** a pass starts and an audio output device is already connected
+- **THEN** no device is asked about or connected
+
+#### Scenario: Box not in power state ON
+- **WHEN** the platform is in any power state other than ON (STANDBY, STANDBY_LIGHT_SLEEP, STANDBY_DEEP_SLEEP or OFF), whether or not migration has been performed
+- **THEN** a reconnect pass does not start, and the plugin reports the power state to the adapter before it applies the power-on reconnect
+
+#### Scenario: Power state leaves ON during a pass
+- **WHEN** the platform leaves power state ON while a pass is waiting to ask again after 40 seconds, or between connect attempts
+- **THEN** the pass ends without asking again or connecting, and the next transition to ON starts a new pass
 
 #### Scenario: Gamepad connected at startup or connecting later
 - **WHEN** a gamepad (not an RDK remote control) is connected at startup or connects, and the connect-request decision rejects it or the client does not answer within 20 seconds

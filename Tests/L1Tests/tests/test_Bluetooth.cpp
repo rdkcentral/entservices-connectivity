@@ -1060,6 +1060,55 @@ TEST_F(BluetoothTest, onPowerModeChanged_OnToOff_NoGamepadStandbyChange)
         WPEFramework::Exchange::IPowerManager::POWER_STATE_OFF);
 }
 
+// --- onPowerModeChanged: the startup reconnect is told whether the box is ON ---
+
+TEST_F(BluetoothTest, onPowerModeChanged_LeavingOn_ReportsPowerOffAndDoesNotReconnect)
+{
+    EXPECT_CALL(*p_btSdkMock, setSystemPowerOn(false)).Times(4);
+    EXPECT_CALL(*p_btSdkMock, setSystemPowerOn(true)).Times(0);
+    EXPECT_CALL(*p_btSdkMock, startAutoConnect()).Times(0);
+
+    for (const auto newState : {
+             WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY,
+             WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY_LIGHT_SLEEP,
+             WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY_DEEP_SLEEP,
+             WPEFramework::Exchange::IPowerManager::POWER_STATE_OFF}) {
+        plugin->onPowerModeChanged(WPEFramework::Exchange::IPowerManager::POWER_STATE_ON, newState);
+    }
+}
+
+TEST_F(BluetoothTest, onPowerModeChanged_StandbyToOn_ReportsPowerOnBeforeReconnecting)
+{
+    ::testing::InSequence sequence;
+    EXPECT_CALL(*p_btSdkMock, setSystemPowerOn(true)).Times(1);
+    EXPECT_CALL(*p_btSdkMock, startAutoConnect()).Times(1);
+
+    plugin->onPowerModeChanged(
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY,
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_ON);
+}
+
+TEST_F(BluetoothTest, onPowerModeChanged_DeepSleepToOn_ReportsPowerOnBeforeReconnecting)
+{
+    ::testing::InSequence sequence;
+    EXPECT_CALL(*p_btSdkMock, setSystemPowerOn(true)).Times(1);
+    EXPECT_CALL(*p_btSdkMock, startAutoConnect()).Times(1);
+
+    plugin->onPowerModeChanged(
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY_DEEP_SLEEP,
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_ON);
+}
+
+TEST_F(BluetoothTest, onPowerModeChanged_OnToOn_ReportsPowerOnWithoutReconnecting)
+{
+    EXPECT_CALL(*p_btSdkMock, setSystemPowerOn(true)).Times(1);
+    EXPECT_CALL(*p_btSdkMock, startAutoConnect()).Times(0);
+
+    plugin->onPowerModeChanged(
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_ON,
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_ON);
+}
+
 #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
 class BluetoothLegacyPersistenceMigrationParseTest : public BluetoothTest {
 protected:
@@ -2186,6 +2235,203 @@ TEST_F(BluetoothClearMigrationTest, clearMigrationWrapper_ReEnablesGuard_SetAuto
     EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
+/* -------------------------------------------------------------------------
+ * Not migrated: the AS file is loaded read-only at init so the startup reconnect
+ * can see each device's last connect time and autoconnect mark.
+ * ---------------------------------------------------------------------- */
+namespace {
+const std::string kLegacyMarkedPayload =
+    "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"friendlyName\":\"MigrationTestDevice\","
+    "\"deviceType\":\"HEADPHONES\",\"lastVolumeSetting\":10,\"autoConnectStatus\":true,"
+    "\"lastConnectionTimeUTC\":1712345680}]}";
+const std::string kLegacyUnmarkedPayload =
+    "{\"pairedDevices\":[{\"deviceAddr\":\"123\",\"friendlyName\":\"MigrationTestDevice\","
+    "\"deviceType\":\"HEADPHONES\",\"lastVolumeSetting\":10,\"autoConnectStatus\":false,"
+    "\"lastConnectionTimeUTC\":1712345680}]}";
+}
+
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, notMigrated_InitLoadsLegacyFile_StartupCallbacksSeeMarkedDevice)
+{
+    if (!initializeFromFilesystemPersistencePayload(kLegacyMarkedPayload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    ASSERT_TRUE(static_cast<bool>(p_btSdkMock->m_authCbs.isLegacyAutoConnect));
+    ASSERT_TRUE(static_cast<bool>(p_btSdkMock->m_authCbs.getLastConnectTime));
+
+    EXPECT_TRUE(p_btSdkMock->m_authCbs.isLegacyAutoConnect("123"));
+    EXPECT_FALSE(p_btSdkMock->m_authCbs.isLegacyAutoConnect("999"));
+
+    long long lastConnectTimeUtc = 0;
+    EXPECT_TRUE(p_btSdkMock->m_authCbs.getLastConnectTime("123", lastConnectTimeUtc));
+    EXPECT_EQ(1712345680, lastConnectTimeUtc);
+    EXPECT_FALSE(p_btSdkMock->m_authCbs.getLastConnectTime("999", lastConnectTimeUtc));
+}
+
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, notMigrated_InitLoadsLegacyFile_UnmarkedDeviceIsNotMarkedButHasLastConnectTime)
+{
+    if (!initializeFromFilesystemPersistencePayload(kLegacyUnmarkedPayload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    EXPECT_FALSE(p_btSdkMock->m_authCbs.isLegacyAutoConnect("123"));
+
+    long long lastConnectTimeUtc = 0;
+    EXPECT_TRUE(p_btSdkMock->m_authCbs.getLastConnectTime("123", lastConnectTimeUtc));
+    EXPECT_EQ(1712345680, lastConnectTimeUtc);
+}
+
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, notMigrated_InitLoadsLegacyFile_DoesNotWriteStoreOrFile)
+{
+    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, ::testing::_, ::testing::_))
+        .Times(0);
+    EXPECT_CALL(*p_storeMock, DeleteKey(::testing::_, ::testing::_))
+        .Times(0);
+
+    if (!initializeFromFilesystemPersistencePayload(kLegacyMarkedPayload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    EXPECT_TRUE(p_btSdkMock->m_authCbs.isLegacyAutoConnect("123"));
+
+    std::string payloadAfterInit;
+    ASSERT_TRUE(readFilesystemPersistencePayload(payloadAfterInit));
+    EXPECT_EQ(kLegacyMarkedPayload, payloadAfterInit);
+}
+
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, notMigrated_MarkedDevice_ConnectionRequestStillEscalatedToClient)
+{
+    if (!initializeFromFilesystemPersistencePayload(kLegacyMarkedPayload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    ASSERT_TRUE(static_cast<bool>(p_btSdkMock->m_authCbs.getConnectAutoResponse));
+
+    bool accept = true;
+    EXPECT_FALSE(p_btSdkMock->m_authCbs.getConnectAutoResponse("123", accept));
+}
+
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, notMigrated_NoLegacyFile_NothingMarkedAndNoLastConnectTime)
+{
+    if (std::remove(kFilesystemPersistenceFile) != 0 && errno != ENOENT) {
+        GTEST_SKIP() << "Unable to remove pre-existing test persistence file";
+    }
+
+    EXPECT_TRUE(plugin->Initialize(&service).empty());
+
+    EXPECT_FALSE(p_btSdkMock->m_authCbs.isLegacyAutoConnect("123"));
+    long long lastConnectTimeUtc = 0;
+    EXPECT_FALSE(p_btSdkMock->m_authCbs.getLastConnectTime("123", lastConnectTimeUtc));
+}
+
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, notMigrated_AdapterQueryFails_InitSucceedsWithEmptyCache)
+{
+    ON_CALL(*p_btSdkMock, queryPairedDevices(::testing::_))
+        .WillByDefault(::testing::Return(false));
+
+    if (!initializeFromFilesystemPersistencePayload(kLegacyMarkedPayload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    EXPECT_FALSE(p_btSdkMock->m_authCbs.isLegacyAutoConnect("123"));
+    long long lastConnectTimeUtc = 0;
+    EXPECT_FALSE(p_btSdkMock->m_authCbs.getLastConnectTime("123", lastConnectTimeUtc));
+}
+
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, notMigrated_PairingTheDeviceAgainDropsItsLegacyMark)
+{
+    if (!initializeFromFilesystemPersistencePayload(kLegacyMarkedPayload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+    ASSERT_TRUE(p_btSdkMock->m_authCbs.isLegacyAutoConnect("123"));
+
+    setupDevice();
+
+    EXPECT_FALSE(p_btSdkMock->m_authCbs.isLegacyAutoConnect("123"));
+}
+
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, notMigrated_OnAutoConnected_RecordsLastConnectTimeInMemoryOnly)
+{
+    EXPECT_CALL(*p_storeMock, SetValue(::testing::_, ::testing::_, ::testing::_))
+        .Times(0);
+
+    if (!initializeFromFilesystemPersistencePayload(kLegacyMarkedPayload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+    ASSERT_TRUE(static_cast<bool>(p_btSdkMock->m_authCbs.onAutoConnected));
+
+    p_btSdkMock->m_authCbs.onAutoConnected("123");
+
+    long long lastConnectTimeUtc = 0;
+    EXPECT_TRUE(p_btSdkMock->m_authCbs.getLastConnectTime("123", lastConnectTimeUtc));
+    EXPECT_GT(lastConnectTimeUtc, 1712345680);
+}
+
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, notMigrated_GetPairedDevices_ReportsLegacyLastConnectTimeAndAutoconnectFalse)
+{
+    if (!initializeFromFilesystemPersistencePayload(kLegacyMarkedPayload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    IBtAdapter::BtDeviceInfo pDev;
+    pDev.handleStr = "123"; pDev.deviceType = "HEADPHONES"; pDev.name = "MigrationTestDevice";
+    EXPECT_CALL(*p_btSdkMock, getPairedDevices())
+        .WillOnce(::testing::Return(std::vector<IBtAdapter::BtDeviceInfo>{pDev}));
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getPairedDevices"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"lastConnectTimeUtc\":\"1712345680\"") != string::npos);
+    EXPECT_TRUE(response.find("\"autoconnect\":false") != string::npos);
+}
+
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, afterPerformMigration_LegacyMarkIsNoLongerReported)
+{
+    if (!initializeFromFilesystemPersistencePayload(kLegacyMarkedPayload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+    ASSERT_TRUE(p_btSdkMock->m_authCbs.isLegacyAutoConnect("123"));
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("performMigration"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":true") != string::npos);
+
+    EXPECT_FALSE(p_btSdkMock->m_authCbs.isLegacyAutoConnect("123"));
+}
+
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, notMigrated_PowerStateChanges_ReportPowerStateAndReconnectOnlyOnPowerOn)
+{
+    if (!initializeFromFilesystemPersistencePayload(kLegacyMarkedPayload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    {
+        ::testing::InSequence sequence;
+        EXPECT_CALL(*p_btSdkMock, setSystemPowerOn(false)).Times(1);
+        EXPECT_CALL(*p_btSdkMock, setSystemPowerOn(true)).Times(1);
+        EXPECT_CALL(*p_btSdkMock, startAutoConnect()).Times(1);
+    }
+
+    plugin->onPowerModeChanged(
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_ON,
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY_DEEP_SLEEP);
+    plugin->onPowerModeChanged(
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY_DEEP_SLEEP,
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_ON);
+}
+
+TEST_F(BluetoothLegacyPersistenceMigrationParseTest, notMigrated_PowerOff_DoesNotDisconnectOrReconnectAnyDevice)
+{
+    if (!initializeFromFilesystemPersistencePayload(kLegacyMarkedPayload)) {
+        GTEST_SKIP() << "Unable to prepare filesystem persistence migration file on this test host";
+    }
+
+    EXPECT_CALL(*p_btSdkMock, disconnectDevice(::testing::_, ::testing::_)).Times(0);
+    EXPECT_CALL(*p_btSdkMock, connectDevice(::testing::_, ::testing::_)).Times(0);
+    EXPECT_CALL(*p_btSdkMock, startAutoConnect()).Times(0);
+
+    plugin->onPowerModeChanged(
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_ON,
+        WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY);
+}
+
 TEST_F(BluetoothTest, featureGateCompileCoverage_FlagOn)
 {
     constexpr bool migrationFlagEnabled = true;
@@ -2225,6 +2471,23 @@ TEST_F(BluetoothTest, featureGateCompileCoverage_BaselinePersistenceFunctionalWh
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getAutoConnect"),
         _T("{\"deviceID\":\"123\"}"), response));
     EXPECT_TRUE(response.find("\"autoconnect\":true") != string::npos);
+}
+
+TEST_F(BluetoothTest, flagOff_StartupCallbacks_NoLegacyMarkAndConnectTimeRecorded)
+{
+    setupDevice();
+
+    ASSERT_TRUE(static_cast<bool>(p_btSdkMock->m_authCbs.isLegacyAutoConnect));
+    ASSERT_TRUE(static_cast<bool>(p_btSdkMock->m_authCbs.onAutoConnected));
+    EXPECT_FALSE(p_btSdkMock->m_authCbs.isLegacyAutoConnect("123"));
+
+    long long lastConnectTimeUtc = 0;
+    EXPECT_FALSE(p_btSdkMock->m_authCbs.getLastConnectTime("123", lastConnectTimeUtc));
+
+    p_btSdkMock->m_authCbs.onAutoConnected("123");
+
+    EXPECT_TRUE(p_btSdkMock->m_authCbs.getLastConnectTime("123", lastConnectTimeUtc));
+    EXPECT_GT(lastConnectTimeUtc, 0);
 }
 #endif
 

@@ -101,6 +101,8 @@ public:
     // Reconnects the previously used audio output device (see runAutoConnectPass). Runs on a worker thread.
     void startAutoConnect() override;
 
+    // Stops the startup reconnect from starting, or a running pass from continuing, while the box is not ON.
+    void setSystemPowerOn(bool on) override;
     // Mirrors BTMgr's gamepad standby handling (see IBtAdapter::setGamepadStandbyMode).
     void setGamepadStandbyMode(bool standby) override;
 
@@ -236,6 +238,7 @@ private:
     std::thread                              m_autoConnectThread;
     bool                                     m_autoConnectRunning{false};
     bool                                     m_autoConnectStop{false};
+    bool                                     m_systemPowerOn{true};   // guarded by m_autoConnectMutex
 
     // Gamepad standby mode: set while the box is in STANDBY or LIGHT_SLEEP.
     std::mutex                               m_gamepadStandbyModeMutex;   // serialises setGamepadStandbyMode()

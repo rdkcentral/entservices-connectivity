@@ -109,6 +109,12 @@ public:
     // True and sets lastConnectTimeUtc only if a last-connect time is persisted for the device.
     bool getLastConnectTime(const std::string& handleStr, long long& lastConnectTimeUtc) const;
 
+    // True while the plugin is not migrated and the legacy (AS) record marks the device for autoconnect.
+    bool isLegacyAutoConnect(const std::string& handleStr) const;
+
+    // Tells the plugin the startup reconnect connected the device itself.
+    void onAutoConnected(const std::string& handleStr) const;
+
     static bool isAudioOutputType(const std::string& deviceType);
 
     // LE gamepad or classic Joystick/Gamepad class of device, excluding RDK remote controls.

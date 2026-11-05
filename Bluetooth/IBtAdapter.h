@@ -138,6 +138,10 @@ public:
     // Backends that do this themselves (BTMgr) keep the default no-op.
     virtual void startAutoConnect() {}
 
+    // Whether the box is in power state ON. The startup reconnect does not start, and a running pass stops, while it
+    // is not. Defaults to on. Backends that do this themselves (BTMgr) keep the default no-op.
+    virtual void setSystemPowerOn(bool /*on*/) {}
+
     // Gamepad handling on a power state change, as BTMgr does internally. Standby (STANDBY or LIGHT_SLEEP):
     // non-remote HID devices are disconnected and kept from reconnecting, and their discovery and incoming
     // connections are suppressed. On (ON): the suppression ends and the devices may reconnect.

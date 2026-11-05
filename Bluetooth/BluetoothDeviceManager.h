@@ -79,6 +79,10 @@ namespace WPEFramework {
                 Core::hresult getAutoConnect(const std::string& deviceID, AutoConnectStatus& status);
                 void setLastConnectTimeUtc(const std::string& deviceID);
                 Core::hresult getLastConnectTimeUtc(const std::string& deviceID, std::string& lastConnectTimeUtc);
+        #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+                // True only while not migrated and the legacy (AS) record loaded at init() marks the device for autoconnect.
+                bool isLegacyAutoConnect(const std::string& deviceID);
+        #endif
                 Core::hresult setLastVolumeSetting(const std::string& deviceID, long long volumeSetting);
                 Core::hresult addDevice(const std::string& deviceID);
                 Core::hresult removeDevice(const std::string& deviceID);
@@ -108,6 +112,8 @@ namespace WPEFramework {
                 void ReleaseService();
         #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
                 Core::hresult writeCacheFromFilesystemPersistence(const std::string& rawContent);
+                // Read-only: fills the cache from the AS file for a plugin that is not migrated. Best effort.
+                void loadCacheFromLegacyFile();
                 void writeFilesystemPersistenceFromCache(std::unordered_map<std::string, BluetoothDeviceInfo> cacheSnapshot);
                 Core::hresult readMigrationVersionFromStorage(std::string& version) const;
                 Core::hresult writeMigrationVersionToStorage();

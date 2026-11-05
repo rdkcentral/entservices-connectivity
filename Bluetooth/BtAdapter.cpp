@@ -213,6 +213,7 @@ IBtAdapter::BtDeviceVolumeMute BtAdapter::getDeviceVolumeMute(long long int d, c
 IBtAdapter::BtMediaTrackInfo   BtAdapter::getMediaTrackInfo(long long int d) const    { return getImpl().getMediaTrackInfo(d); }
 
 void BtAdapter::startAutoConnect() { getImpl().startAutoConnect(); }
+void BtAdapter::setSystemPowerOn(bool on) { getImpl().setSystemPowerOn(on); }
 void BtAdapter::setGamepadStandbyMode(bool standby) { getImpl().setGamepadStandbyMode(standby); }
 
 } // namespace Plugin

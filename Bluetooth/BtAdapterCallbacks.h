@@ -97,6 +97,14 @@ struct BtAuthCallbacks {
     // Returns true and sets lastConnectTimeUtc (seconds since the epoch) only when a connection time is
     // persisted for the device; false when the device is not cached or has never been connected.
     std::function<bool(const std::string& handleStr, long long& lastConnectTimeUtc)> getLastConnectTime;
+
+    // True only while the plugin is not migrated and the legacy (AS) record marks the device for autoconnect.
+    // The startup reconnect connects such a device when the client did not answer its connection request.
+    std::function<bool(const std::string& handleStr)> isLegacyAutoConnect;
+
+    // Called after the startup reconnect connected a device itself, so the plugin records the connection time
+    // as it does for a connect requested through the API.
+    std::function<void(const std::string& handleStr)> onAutoConnected;
 };
 
 } // namespace Plugin

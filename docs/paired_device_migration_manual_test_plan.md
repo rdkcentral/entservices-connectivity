@@ -19,7 +19,7 @@ This plan was reviewed against the current implementation in `Bluetooth/Bluetoot
 - `performMigration()` reads `migrationVersion` from PersistentStore first. If it is already present and equals `1`, it short-circuits with `migration already completed (migrationVersion=1 present), no sync needed` and sets `_isMigrated=true` without re-importing the AS file.
 - `performMigration()` only imports the AS file when `migrationVersion` is absent or not equal to `1`; the import is followed by BTRMGR enrichment, then `deviceInfo` is written to PersistentStore, then `migrationVersion` is written last.
 - `clearMigration()` deletes both `deviceInfo` and `migrationVersion`, clears the in-memory `_pairedDeviceCache`, and sets `_isMigrated=false`.
-- `init()` re-derives migration state from `migrationVersion` at startup; if the marker is absent, any stale `deviceInfo` is ignored and the cache remains empty until a successful migration occurs.
+- `init()` re-derives migration state from `migrationVersion` at startup; if the marker is absent, any stale `deviceInfo` is ignored and the cache is loaded read-only from the AS file (nothing is written to PersistentStore or the AS file) until a successful migration replaces it.
 - `setAutoConnect()`, `addDevice()`, `removeDevice()`, `setLastConnectTimeUtc()`, and `setLastVolumeSetting()` all skip persistence writes while `_isMigrated` is false; the AS filesystem sync is also gated by `_isMigrated`.
 
 These checks are the authoritative behavior for this manual test plan and supersede any older or inferred migration expectations.
@@ -153,7 +153,7 @@ Note the device addresses, `autoConnectStatus`, and `lastConnectionTimeUTC` valu
 
 **Steps:**
 1. Reboot device and wait for Bluetooth plugin activation.
-2. Verify `migrationVersion` is absent from PS. When the migration-enabled build runs `init` with no valid `migrationVersion` present, the cache is left empty and no data is written to PersistentStore — `deviceInfo` will also be absent (or contain only stale data from a prior firmware, not from this boot):
+2. Verify `migrationVersion` is absent from PS. When the migration-enabled build runs `init` with no valid `migrationVersion` present, the cache is loaded read-only from the AS file and no data is written to PersistentStore — `deviceInfo` will also be absent (or contain only stale data from a prior firmware, not from this boot):
    ```bash
    curl --header "Content-Type: application/json" --request POST \
      --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.PersistentStore.getValue","params":{"namespace":"Bluetooth","key":"migrationVersion"}}' \
@@ -466,7 +466,7 @@ curl --header "Content-Type: application/json" --request POST \
 
 **Expected Results:**
 - `getAutoConnect` DOES have a migration state check. When `_isMigrated=false`, the code immediately returns `AUTO_CONNECT_STATUS_DISABLED` with success — it bypasses the cache lookup entirely. No device-not-found error is returned.
-- Response: `{"success": true, "autoconnect": false}` for any `deviceID` when migration has not been performed, regardless of whether the device exists in the (empty) cache.
+- Response: `{"success": true, "autoconnect": false}` for any `deviceID` when migration has not been performed, regardless of whether the device exists in the cache (which holds only the AS file's contents before migration).
 - This distinguishes it from `setAutoConnect`: `setAutoConnect` explicitly rejects with an error when not migrated; `getAutoConnect` silently returns disabled.
 
 ---

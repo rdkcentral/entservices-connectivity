@@ -425,6 +425,16 @@ namespace WPEFramework
                 lastConnectTimeUtc = value;
                 return true;
             };
+            authCbs.isLegacyAutoConnect = [this](const std::string& handleStr) -> bool {
+#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+                return m_bluetoothDeviceManager.isLegacyAutoConnect(handleStr);
+#else
+                return false;
+#endif
+            };
+            authCbs.onAutoConnected = [this](const std::string& handleStr) {
+                m_bluetoothDeviceManager.setLastConnectTimeUtc(handleStr);
+            };
 
             message = m_btAdapter.init(service, std::move(evtCbs), std::move(authCbs));
             if (!message.empty()) {
@@ -1566,6 +1576,8 @@ namespace WPEFramework
         void Bluetooth::onPowerModeChanged(const WPEFramework::Exchange::IPowerManager::PowerState currentState, const WPEFramework::Exchange::IPowerManager::PowerState newState)
         {
             std::lock_guard<std::mutex> lock(m_powerModeLock);
+            // First: a startup reconnect started below, or one still running, must see the new state.
+            m_btAdapter.setSystemPowerOn(WPEFramework::Exchange::IPowerManager::PowerState::POWER_STATE_ON == newState);
             applyDevicePowerPolicy(currentState, newState);
             // Independent of the persistence migration: BTMgr handles gamepads on every power change.
             // After the device policy, which may have enabled Bluetooth on wake.

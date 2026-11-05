@@ -110,6 +110,30 @@ namespace WPEFramework {
             return Core::ERROR_NONE;
         }
 
+        void BluetoothDeviceManager::loadCacheFromLegacyFile()
+        {
+            BluetoothPersistenceAdapter adapter;
+            std::string rawContent;
+            const Core::hresult readResult = adapter.ReadRaw(rawContent);
+            if (Core::ERROR_NONE != readResult) {
+                if (Core::ERROR_NOT_EXIST != readResult) {
+                    LOGWARN("not migrated: failed to read the AS filesystem persistence file, hresult=%d", readResult);
+                }
+                return;
+            }
+
+            const Core::hresult importResult = writeCacheFromFilesystemPersistence(rawContent);
+            if (Core::ERROR_NONE != importResult) {
+                LOGWARN("not migrated: failed to load the AS filesystem persistence file, hresult=%d", importResult);
+                return;
+            }
+
+            const Core::hresult deviceResult = updateCacheFromDevice(/* backfillOnly= */ true);
+            if (Core::ERROR_NONE != deviceResult) {
+                LOGWARN("not migrated: adapter enrichment of the AS cache failed, hresult=%d", deviceResult);
+            }
+        }
+
         void BluetoothDeviceManager::writeFilesystemPersistenceFromCache(std::unordered_map<std::string, BluetoothDeviceInfo> cacheSnapshot)
         {
             BluetoothPersistenceAdapter adapter;
@@ -592,8 +616,11 @@ namespace WPEFramework {
                         return storageResult;
                     }
                 } else {
-                    // No valid migration marker: any store data is stale/untrusted. Cache stays empty.
+                    // No valid migration marker: any store data is stale/untrusted, so the cache is not warmed from it.
+                    // The AS file is still the live record, so it is loaded read-only (nothing is written to the store
+                    // or the file): the startup reconnect needs each device's last connect time and autoconnect mark.
                     LOGINFO("migration not yet complete, ignoring any stale store data");
+                    loadCacheFromLegacyFile();
                 }
 
                 return Core::ERROR_NONE;
@@ -657,6 +684,7 @@ namespace WPEFramework {
 
         Core::hresult BluetoothDeviceManager::getPairedDeviceInfo(const std::string& deviceID, BluetoothDeviceInfo& deviceInfo)
         {
+            LOGINFO("deviceID=%s", deviceID.c_str());
             // The critical section is recursive; setters retain their outer lock for atomic updates.
             Core::SafeSyncType<Core::CriticalSection> lock(_adminLock);
             auto it = _pairedDeviceCache.find(deviceID);
@@ -665,6 +693,8 @@ namespace WPEFramework {
             if (bFound) {
                 deviceInfo = it->second;
             }
+
+            LOGINFO("bFound=%d", bFound);
 
             return bFound ? Core::ERROR_NONE : Core::ERROR_NOT_EXIST;
         }
@@ -814,6 +844,19 @@ namespace WPEFramework {
             
             return result;
         }
+
+#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+        bool BluetoothDeviceManager::isLegacyAutoConnect(const std::string& deviceID)
+        {
+            if (_isMigrated.load()) {
+                return false;
+            }
+
+            Core::SafeSyncType<Core::CriticalSection> lock(_adminLock);
+            const auto it = _pairedDeviceCache.find(deviceID);
+            return (it != _pairedDeviceCache.end()) && (AUTO_CONNECT_STATUS_ENABLED == it->second.autoConnectStatus);
+        }
+#endif
 
         Core::hresult BluetoothDeviceManager::addDevice(const std::string& deviceID)
         {
