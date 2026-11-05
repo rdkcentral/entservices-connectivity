@@ -2376,7 +2376,7 @@ TEST_F(BluetoothLegacyPersistenceMigrationParseTest, notMigrated_GetPairedDevice
     IBtAdapter::BtDeviceInfo pDev;
     pDev.handleStr = "123"; pDev.deviceType = "HEADPHONES"; pDev.name = "MigrationTestDevice";
     EXPECT_CALL(*p_btSdkMock, getPairedDevices())
-        .WillOnce(::testing::Return(std::vector<IBtAdapter::BtDeviceInfo>{pDev}));
+        .WillOnce(::testing::Return(std::vector<IBtAdapter::BtDeviceInfo>{std::move(pDev)}));
 
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getPairedDevices"), _T("{}"), response));
     EXPECT_TRUE(response.find("\"lastConnectTimeUtc\":\"1712345680\"") != string::npos);
