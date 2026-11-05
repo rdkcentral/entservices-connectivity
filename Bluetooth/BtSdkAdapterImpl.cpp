@@ -288,15 +288,13 @@ bool BtSdkAdapterImpl::startScan(const std::string& profile) {
         LOGERR("BtSdkAdapterImpl::startScan: exit with error: adapter is unavailable");
         return false;
     }
-    // Intentionally unchanged: the hard-coded mode is kept while this debug filtering is in use (reduces discovery noise);
-    // ScanFilterPolicy::modeFromProfile(profile) is unused here until the override is removed.
-    // <pca> debug - Just AudioOutput for now to reduce discovery noise
-    //const ScanFilterPolicy::Mode mode = ScanFilterPolicy::modeFromProfile(profile);
-    const ScanFilterPolicy::Mode mode = ScanFilterPolicy::Mode::AudioOutput;
-    // </pca>
+    
+    const ScanFilterPolicy::Mode mode = ScanFilterPolicy::modeFromProfile(profile);
+    
     // Each legacy scan starts from an empty discovered list.
     clearHeldDevices();
     pruneDiscoveredDevices();
+
     // Set before the scan starts so early discovery events are judged against the new mode.
     m_scanMode = mode;
     Status status = m_adapter->startScan(buildScanFilter(mode));
