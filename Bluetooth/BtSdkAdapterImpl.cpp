@@ -616,8 +616,10 @@ IBtAdapter::BtMediaTrackInfo BtSdkAdapterImpl::getMediaTrackInfo(long long int d
 // Mirrors BTRMGR_StartAudioStreamingOut_StartUp: BTMgr asks for each previously used audio output device
 // (RECEIVED_EXTERNAL_CONNECT_REQUEST), waits briefly for the answer and, if the client is not up yet,
 // asks again once after kAutoConnectRetrySeconds.
-// Unlike BTMgr, the plugin connects the device itself once it is accepted, by the autoconnect status or by the
-// client, and stops after the first device that connects. A client that never answers is overridden on the second
+// Unlike BTMgr, the plugin connects the device itself once the autoconnect status accepts it, and stops after the
+// first device that connects. A device the client accepts is left to the client, which is expected to follow its
+// answer with its own connect request; the plugin does not connect it, as that would overlap the client's connect.
+// The pass stops after the first device the client accepts. A client that never answers is overridden on the second
 // pass only for a device the legacy (AS) record marks for autoconnect; an explicit rejection is always honoured.
 // A connect to a device that is not up yet fails with "Host is down" (page timeout). BTMgr probes with
 // l2ping (2 s apart) and retries the connect BTRMGR_CONNECT_RETRY_ATTEMPTS (2) times; here the connect
@@ -771,9 +773,11 @@ bool BtSdkAdapterImpl::runAutoConnectPass(bool secondAttempt) {
             candidate.device, std::chrono::milliseconds(AuthBridge::AUDIO_AUTH_TIMEOUT_MS));
         switch (decision) {
             case AuthBridge::ConnectDecision::AcceptedAuto:
-            case AuthBridge::ConnectDecision::AcceptedByClient:
                 if (connectCandidate(candidate)) return false;
                 break;
+            case AuthBridge::ConnectDecision::AcceptedByClient:
+                LOGINFO("exit: the client accepted %s and is responsible for connecting it", mac.c_str());
+                return false;
             case AuthBridge::ConnectDecision::TimedOut:
                 if (!secondAttempt) {
                     LOGINFO("exit no response from the client for %s, retrying later", mac.c_str());

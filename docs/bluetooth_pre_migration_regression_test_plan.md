@@ -34,7 +34,7 @@ These are the **only** code paths in `BluetoothDeviceManager`/`Bluetooth` that c
 | `writeStorageFromCache` → `writeFilesystemPersistenceFromCache` | The AS filesystem file write is only ever triggered from inside `writeStorageFromCache`, and only `if (_isMigrated)`. Pre-migration, this code path is simply never reached. |
 | `onPowerModeChanged` | Returns immediately (`if (!isMigrated()) return;`) before evaluating any power-state transition. The entire power-mode-triggered disconnect feature (`disconnectExternallyConnectedDevices`) is inert pre-migration. |
 | Plugin `init()` | Cache is **not** warmed from `PersistentStore` even if stale `deviceInfo` exists from a different firmware; init logs `migration not yet complete, ignoring any stale store data`. The AS file is then read (never written) into the in-memory cache, so the startup reconnect (Section 13) can see each device's last connect time and autoconnect mark; a missing or malformed file, or a failed adapter query, leaves the cache empty. |
-| Startup reconnect (bluetooth-sdk backend) | Asks the client for each audio output device with a known last connect time and connects the accepted one itself; see Section 13. |
+| Startup reconnect (bluetooth-sdk backend) | Asks the client for each audio output device with a known last connect time; the client connects the device it accepts, and the plugin only connects one the autoconnect status accepts; see Section 13. |
 
 Everything else — `startScan`/`stopScan`, `getDiscoveredDevices`, `getPairedDevices`/`getConnectedDevices` (device enumeration itself, which is always sourced live from BTRMGR, not the cache), `connect`/`disconnect`, `pair`/`unpair` (BTRMGR side-effects), `enable`/`disable`, `setDiscoverable`/`isDiscoverable`, `getName`/`setName`, `setAudioStream`, `sendAudioPlaybackCommand`, `respondToEvent`, `getDeviceInfo`, `getAudioInfo`, `getDeviceVolumeMuteInfo`/`setDeviceVolumeMuteInfo` (the actual BTRMGR volume/mute control), and all plugin events — has **no** migration-state check anywhere in the call path.
 
@@ -396,14 +396,14 @@ md5sum /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
 **Steps:**
 1. With the device powered on and in range, reboot the box (or deactivate and reactivate the Bluetooth plugin).
 2. Wait for `onConnectionRequest` for the device.
-3. Within 200 ms, call `respondToEvent` with `{"deviceID":"<ID>","eventType":"onConnectionRequest","responseValue":"ACCEPTED"}`. Do **not** call `connect`.
-4. Call `getConnectedDevices`.
+3. Within 200 ms, call `respondToEvent` with `{"deviceID":"<ID>","eventType":"onConnectionRequest","responseValue":"ACCEPTED"}`.
+4. Call `getConnectedDevices`, then call `connect` for the device and call `getConnectedDevices` again.
 
 **Expected Results:**
-- The plugin connects the device itself: it is listed by `getConnectedDevices` without any `connect` call from the client.
-- Logs show `BtSdkAdapterImpl::connectDevice: exit successfully` for the device.
-- A transient connect failure is retried up to three attempts, two seconds apart.
-- Only one device is connected, even if several audio output devices are paired.
+- The plugin does not connect the device itself: after step 3 the device is not listed by `getConnectedDevices`, and the log shows `the client accepted <MAC> and is responsible for connecting it`.
+- Exactly one `BtSdkAdapterImpl::connectDevice` entry is logged, from the client's `connect` call; there is no overlapping `connectDevice` and no `In Progress` error.
+- The device is listed by `getConnectedDevices` after the client's `connect`.
+- Only one device is asked about, even if several audio output devices are paired.
 
 ---
 
@@ -415,7 +415,7 @@ md5sum /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
 
 **Expected Results:**
 - The device is not connected, even though the AS file marks it for autoconnect. An explicit rejection is always honoured.
-- If other paired audio output devices have a last connect time, the next most recent one is asked about.
+- If other paired audio output devices have a last connect time, the next most recent one is asked about (and, if the client accepts it, left to the client to connect).
 
 ---
 

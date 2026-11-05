@@ -113,7 +113,7 @@ When `BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION` is enabled and migration has been 
 - **THEN** the plugin treats the device as autoconnect-disabled and rejects the connection without emitting an `onConnectionRequest` event
 
 ### Requirement: SDK backend SHALL reconnect the previous audio output device at startup and power-on
-With the bluetooth-sdk backend there is no BTMgr daemon to ask about the previously used audio output device after boot, so the plugin SHALL do so itself, after `Initialize()` and when the platform transitions to power ON. Each paired audio output device SHALL be run through the same connect-request decision as an incoming connection (autoconnect status when migrated, otherwise `onConnectionRequest` to the client with a 200 ms wait). A device accepted by the autoconnect status or by the client SHALL be connected by the plugin, which retries a failed connect up to three attempts two seconds apart, and the pass SHALL stop after the first device that is connected. A device the client rejects SHALL NOT be connected. If the client does not answer, the plugin SHALL retry once after 40 seconds; on that second pass, and only while migration has not been performed, a device that the legacy AS file marks for autoconnect SHALL be connected anyway.
+With the bluetooth-sdk backend there is no BTMgr daemon to ask about the previously used audio output device after boot, so the plugin SHALL do so itself, after `Initialize()` and when the platform transitions to power ON. Each paired audio output device SHALL be run through the same connect-request decision as an incoming connection (autoconnect status when migrated, otherwise `onConnectionRequest` to the client with a 200 ms wait). A device accepted by the autoconnect status SHALL be connected by the plugin, which retries a failed connect up to three attempts two seconds apart, and the pass SHALL stop after the first device that is connected. A device accepted by the client SHALL NOT be connected by the plugin: the client is expected to follow its accept with its own connect request, and a second connect by the plugin would overlap it. The pass SHALL stop after the first device the client accepts. A device the client rejects SHALL NOT be connected. If the client does not answer, the plugin SHALL retry once after 40 seconds; on that second pass, and only while migration has not been performed, a device that the legacy AS file marks for autoconnect SHALL be connected anyway.
 
 While migration has not been performed, the plugin SHALL load the AS file into the in-memory paired-device cache at `Initialize()`, read-only: nothing is written to PersistentStore or to the AS file. This gives the reconnect each device's last connect time and legacy autoconnect mark. Stale PersistentStore `deviceInfo` remains ignored, and the client-visible autoconnect status remains disabled until migration.
 
@@ -123,7 +123,7 @@ While migration has not been performed, the plugin SHALL load the AS file into t
 
 #### Scenario: Not migrated, client accepts
 - **WHEN** the platform starts, migration has not been performed, a paired audio output device has a last-connect time in the AS file and the client answers its `onConnectionRequest` with accept
-- **THEN** the plugin connects the device itself and records its last-connect time
+- **THEN** the plugin does not connect the device; connecting it, and recording its last-connect time, is left to the client's own connect request
 
 #### Scenario: Not migrated, client rejects
 - **WHEN** the platform starts, migration has not been performed and the client answers `onConnectionRequest` with reject
@@ -147,10 +147,10 @@ While migration has not been performed, the plugin SHALL load the AS file into t
 
 #### Scenario: Several paired audio output devices
 - **WHEN** more than one paired audio output device exists and last-connect times are known
-- **THEN** only devices with a known last-connect time are asked about, most recent first, a device the client rejects or that fails to connect after three attempts is skipped, and no further device is asked about once one is connected
+- **THEN** only devices with a known last-connect time are asked about, most recent first, a device the client rejects or that the plugin fails to connect after three attempts (autoconnect status accepted) is skipped, and no further device is asked about once one is connected or accepted by the client
 
 #### Scenario: Accepted device already connected
-- **WHEN** the device is already connected when the plugin is about to connect it
+- **WHEN** the device is already connected when the plugin is about to connect it after the autoconnect status accepted it
 - **THEN** the plugin does not connect it again and the pass ends
 
 #### Scenario: Audio output device already connected

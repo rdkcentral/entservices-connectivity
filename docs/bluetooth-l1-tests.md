@@ -262,7 +262,7 @@ From available files only:
 | `onAutoConnected` | Records the connect time in memory only; with the flag OFF it records and persists it, and `isLegacyAutoConnect` is always false. |
 | Power state changes | Every `onPowerModeChanged` reports `setSystemPowerOn(newState == ON)` before the power-on reconnect; leaving ON never reconnects, and a transition to ON from any other state calls `startAutoConnect()` (also not migrated, where no disconnect or reconnect of individual devices happens). |
 
-The reconnect pass itself (candidate order, accept/reject handling, connect retries, the 40 s second pass) runs in `BtSdkAdapterImpl`, which L1 replaces with a mock, so it is covered in `Tests/L2Tests/tests/Bluetooth_Sdk_L2Test.cpp` (`StartupReconnect_*`; the second-pass test takes about 41 seconds), including the power-state cases (not started while the box is not ON, ended while waiting to ask again, ended between connect attempts).
+The reconnect pass itself (candidate order, accept/reject handling, with a client-accepted device left to the client to connect and connect retries only for a device the autoconnect status accepts, the 40 s second pass) runs in `BtSdkAdapterImpl`, which L1 replaces with a mock, so it is covered in `Tests/L2Tests/tests/Bluetooth_Sdk_L2Test.cpp` (`StartupReconnect_*`; the second-pass test takes about 41 seconds), including the power-state cases (not started while the box is not ON, ended while waiting to ask again, ended between connect attempts).
 
 ### ON/OFF execution guidance
 

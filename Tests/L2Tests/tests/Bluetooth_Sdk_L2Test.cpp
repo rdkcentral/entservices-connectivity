@@ -388,16 +388,17 @@ void settle()
 
 } // namespace
 
-TEST_F(Bluetooth_Sdk_L2Test, StartupReconnect_ClientAccepts_PluginConnectsTheDevice)
+TEST_F(Bluetooth_Sdk_L2Test, StartupReconnect_ClientAccepts_PluginLeavesTheConnectToTheClient)
 {
     StartupReconnectHarness harness;
     harness.addDevice(Spec(kSpeakerA, 1000, Answer::Accept));
     ASSERT_TRUE(harness.start());
 
-    ASSERT_TRUE(harness.waitUntil([&] { return !harness.connects().empty(); }, 10s));
+    ASSERT_TRUE(harness.waitUntil([&] { return !harness.requests().empty(); }, 10s));
+    settle();
     EXPECT_EQ(handles({kSpeakerA}), harness.requests());
-    EXPECT_EQ(handles({kSpeakerA}), harness.connects());
-    EXPECT_EQ(handles({kSpeakerA}), harness.autoConnected());
+    EXPECT_TRUE(harness.connects().empty());
+    EXPECT_TRUE(harness.autoConnected().empty());
 }
 
 TEST_F(Bluetooth_Sdk_L2Test, StartupReconnect_ClientRejects_DeviceIsNotConnected)
@@ -424,36 +425,37 @@ TEST_F(Bluetooth_Sdk_L2Test, StartupReconnect_ClientRejectsLegacyMarkedDevice_Re
     EXPECT_TRUE(harness.connects().empty());
 }
 
-TEST_F(Bluetooth_Sdk_L2Test, StartupReconnect_TwoDevices_NewestIsTriedFirstAndOnlyOneIsConnected)
+TEST_F(Bluetooth_Sdk_L2Test, StartupReconnect_TwoDevices_NewestIsAskedFirstAndOnlyOneIsAsked)
 {
     StartupReconnectHarness harness;
     harness.addDevice(Spec(kSpeakerA, 1000, Answer::Accept));
     harness.addDevice(Spec(kSpeakerB, 2000, Answer::Accept));
     ASSERT_TRUE(harness.start());
 
-    ASSERT_TRUE(harness.waitUntil([&] { return !harness.connects().empty(); }, 10s));
+    ASSERT_TRUE(harness.waitUntil([&] { return !harness.requests().empty(); }, 10s));
     settle();
     EXPECT_EQ(handles({kSpeakerB}), harness.requests());
-    EXPECT_EQ(handles({kSpeakerB}), harness.connects());
+    EXPECT_TRUE(harness.connects().empty());
 }
 
-TEST_F(Bluetooth_Sdk_L2Test, StartupReconnect_NewestRejected_NextDeviceIsConnected)
+TEST_F(Bluetooth_Sdk_L2Test, StartupReconnect_NewestRejected_NextDeviceIsAskedAndLeftToTheClient)
 {
     StartupReconnectHarness harness;
     harness.addDevice(Spec(kSpeakerA, 1000, Answer::Accept));
     harness.addDevice(Spec(kSpeakerB, 2000, Answer::Reject));
     ASSERT_TRUE(harness.start());
 
-    ASSERT_TRUE(harness.waitUntil([&] { return !harness.connects().empty(); }, 10s));
+    ASSERT_TRUE(harness.waitUntil([&] { return harness.requests().size() == 2; }, 10s));
+    settle();
     EXPECT_EQ(handles({kSpeakerB, kSpeakerA}), harness.requests());
-    EXPECT_EQ(handles({kSpeakerA}), harness.connects());
+    EXPECT_TRUE(harness.connects().empty());
 }
 
 TEST_F(Bluetooth_Sdk_L2Test, StartupReconnect_NewestFailsToConnect_NextDeviceIsConnected)
 {
     StartupReconnectHarness harness;
-    harness.addDevice(Spec(kSpeakerA, 1000, Answer::Accept));
-    harness.addDevice(Spec(kSpeakerB, 2000, Answer::Accept).connectFails());
+    harness.addDevice(Spec(kSpeakerA, 1000, Answer::AutoAccept));
+    harness.addDevice(Spec(kSpeakerB, 2000, Answer::AutoAccept).connectFails());
     ASSERT_TRUE(harness.start());
 
     // Three attempts on the newest device, two seconds apart, before moving on.
@@ -474,14 +476,14 @@ TEST_F(Bluetooth_Sdk_L2Test, StartupReconnect_AutoAcceptedDevice_IsConnectedWith
     EXPECT_EQ(handles({kSpeakerA}), harness.autoConnected());
 }
 
-TEST_F(Bluetooth_Sdk_L2Test, StartupReconnect_AcceptedDeviceThatIsAlreadyConnected_IsNotConnectedAgain)
+TEST_F(Bluetooth_Sdk_L2Test, StartupReconnect_AutoAcceptedDeviceThatIsAlreadyConnected_IsNotConnectedAgain)
 {
     StartupReconnectHarness harness;
-    harness.addDevice(Spec(kSpeakerA, 1000, Answer::Accept).alreadyConnected());
+    harness.addDevice(Spec(kSpeakerA, 1000, Answer::AutoAccept).alreadyConnected());
     ASSERT_TRUE(harness.start());
 
-    ASSERT_TRUE(harness.waitUntil([&] { return !harness.requests().empty(); }, 10s));
     settle();
+    EXPECT_TRUE(harness.requests().empty());
     EXPECT_TRUE(harness.connects().empty());
     EXPECT_TRUE(harness.autoConnected().empty());
 }
@@ -541,7 +543,7 @@ TEST_F(Bluetooth_Sdk_L2Test, StartupReconnect_PowerLeavesOnWhileWaitingToAskAgai
 TEST_F(Bluetooth_Sdk_L2Test, StartupReconnect_PowerLeavesOnBetweenConnectAttempts_NoFurtherAttempts)
 {
     StartupReconnectHarness harness;
-    harness.addDevice(Spec(kSpeakerA, 1000, Answer::Accept).connectFails());
+    harness.addDevice(Spec(kSpeakerA, 1000, Answer::AutoAccept).connectFails());
     ASSERT_TRUE(harness.start());
 
     ASSERT_TRUE(harness.waitUntil([&] { return harness.connects().size() == 1; }, 10s));
