@@ -69,6 +69,7 @@ public:
 
     MOCK_METHOD(Status, getPowered,  (bool&),        (override));
     MOCK_METHOD(Status, setPowered,  (bool),         (override));
+    MOCK_METHOD(Status, setName,     (const std::string&), (override));
 
     MOCK_METHOD(void, registerForEvents,
         (std::function<void(bluetooth::AdapterEvent, bluetooth::AdapterEventData)>),

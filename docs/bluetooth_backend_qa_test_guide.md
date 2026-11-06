@@ -43,13 +43,14 @@ The SDK stack currently has these documented gaps. Confirm that they behave as d
 
 | Feature | BTMgr stack | SDK stack (today) |
 |---|---|---|
-| Get/set the box's Bluetooth name (`getName`, `setName`) | Works | Fails (reported as unsupported) |
+| Get the box's Bluetooth name (`getName`) | Works | Fails (reported as unsupported) |
+| Set the box's Bluetooth name (`setName`) | Works (names longer than 63 bytes are cut) | Works the same; as `getName` is unsupported on this stack, confirm the new name with `bluetoothctl show` (the `Alias` line) |
 | Discoverable mode (`isDiscoverable`, `setDiscoverable`) | Works | Fails (reported as unsupported) |
 | Audio control: `setAudioStream`, `sendAudioPlaybackCommand`, volume/mute (`getDeviceVolumeMuteInfo`, `setDeviceVolumeMuteInfo`), track info (`getAudioInfo`) | Works | Fails / returns nothing (audio not yet available in the SDK) |
-| Playback/media notifications (`onPlaybackChange`, `onPlaybackPosition`, `onPlaybackNewTrack`, `onDeviceMediaStatus`, `onPlaybackRequest`) | Sent | Not sent |
-| `activeState` value shown for devices | Real value | Always `0` |
-| `signalStrength` in `getDeviceInfo` | Real value | Always `0` |
+| Playback/media notifications (`onPlaybackChange`, `onPlaybackProgress`, `onPlaybackNewTrack`, `onDeviceMediaStatus`, `onPlaybackRequest`) | Sent | Not sent |
 | Incoming connection from an **unpaired gamepad** | Handled by BTMgr's gamepad-specific rules | Treated like any other device (client is asked) |
+
+Not differences (a mismatch here **is** a defect): `activeState` in `getConnectedDevices` is `"1"` for every connected device, and `getDeviceInfo` reports `rssi` and `signalStrength` exactly as the baseline does. For a **paired** device both are `"0"` on every stack. For a device that is **not paired** (for example found by a scan), `rssi` is the raw value and `signalStrength` is 1 to 4 (4 at -60 or stronger, 3 at -70, 2 at -90, otherwise 1); when no RSSI is known the baseline shows `-2147483648` and `1`.
 
 Also, **do not file** these either:
 
@@ -126,9 +127,9 @@ Use [bluetooth_pre_migration_regression_test_plan.md](./bluetooth_pre_migration_
 | 3. Pairing & unpairing | Pair/unpair | Run | Run | Watch notification order |
 | 4. Connection management | Connect/disconnect | Run | Run | |
 | 5. AutoConnect guard | Expected "divergence" for auto-connect | Run | Run | Same on both; not a bug |
-| 6. Device info, audio & playback | Device info, audio, playback commands, responding to requests | Run | **Partly** | Audio items and `getAudioInfo` are known differences on SDK; `getDeviceInfo`'s `signalStrength` too. Responding to requests must pass |
+| 6. Device info, audio & playback | Device info, audio, playback commands, responding to requests | Run | **Partly** | Audio items and `getAudioInfo` are known differences on SDK. `getDeviceInfo` (including `rssi` and `signalStrength`) and responding to requests must pass |
 | 7. Volume & mute | Volume/mute | Run | **Known difference** | Record as "known gap – confirmed" |
-| 8. Adapter control | Enable/disable, discoverable, name | Run | **Partly** | `enable`/`disable` must pass; name and discoverable are known differences on SDK |
+| 8. Adapter control | Enable/disable, discoverable, name | Run | **Partly** | `enable`/`disable` and `setName` must pass; `getName` and discoverable are known differences on SDK |
 | 9. Gamepad / HID | Pairing and connecting HID/gamepads | Run | Run | Device type must read `HUMAN INTERFACE DEVICE` on both |
 | 10. Power management | Behavior on power state changes | Run | Run | Also see Part 2 (gamepads and reconnect) |
 | 11. No unwanted saved data | Nothing written to stored device data | Run | Run | |

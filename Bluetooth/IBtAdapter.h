@@ -91,7 +91,7 @@ public:
         bool        isGamePad{false};
         uint32_t    classOfDevice{0};
         uint16_t    appearance{0};
-        int16_t     rssi{0};
+        int32_t     rssi{0};
         int16_t     signalLevel{0};
         uint16_t    vendorId{0};
         uint8_t     batteryLevel{0};
@@ -115,6 +115,7 @@ public:
     struct BtMediaTrackInfo {
         std::string album, genre, title, artist;
         uint32_t    duration{0}, trackNumber{0}, numberOfTracks{0};
+        bool        valid{false};   // false on backend failure
     };
 
     struct BtDeviceVolumeMute {

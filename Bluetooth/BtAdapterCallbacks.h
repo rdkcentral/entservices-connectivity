@@ -52,7 +52,7 @@ struct BtEventCallbacks {
     std::function<void(const std::string& newStatus, const std::string& deviceId,
                        const std::string& name, const std::string& deviceType,
                        uint32_t rawDeviceType, uint16_t rawBleDeviceType,
-                       bool paired, bool connected)> onRequestFailed;
+                       bool lastConnectedState, bool paired, bool connected)> onRequestFailed;
 
     std::function<bool(const std::string& handleStr, bool& autoConnect)> getAutoConnect;
 

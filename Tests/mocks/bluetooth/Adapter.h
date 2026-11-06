@@ -81,6 +81,7 @@ public:
 
     virtual Status getPowered(bool& powered) = 0;
     virtual Status setPowered(bool powered) = 0;
+    virtual Status setName(const std::string& name) = 0;
 
     // EventEmitter<AdapterEvent, AdapterEventData> interface
     virtual void registerForEvents(

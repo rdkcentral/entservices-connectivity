@@ -370,7 +370,7 @@ bool BtMgrAdapterImpl::getDeviceProperties(const std::string& handleStr,
     const char* dt     = BTRMGR_GetDeviceTypeAsString(p.m_deviceType);
     props.deviceType   = dt ? dt : "UNKNOWN";
     props.isGamePad    = (p.m_deviceType == BTRMGR_DEVICE_TYPE_HID_GAMEPAD);
-    props.rssi         = static_cast<int16_t>(p.m_rssi);
+    props.rssi         = p.m_rssi;
     props.signalLevel  = static_cast<int16_t>(p.m_signalLevel);
     props.batteryLevel = p.m_batteryLevel;
     props.vendorId     = static_cast<uint16_t>(p.m_vendorID);
@@ -456,7 +456,7 @@ bool BtMgrAdapterImpl::setDeviceVolumeMute(long long int deviceID,
                                              uint8_t volume, bool mute) {
     BTRMgrDeviceHandle h = static_cast<BTRMgrDeviceHandle>(deviceID);
     BTRMGR_DeviceOperationType_t opType =
-        static_cast<BTRMGR_DeviceOperationType_t>(deviceOpTypeFromProfile(profile));
+        static_cast<BTRMGR_DeviceOperationType_t>(volumeOpTypeFromDeviceType(profile));
     return BTRMGR_SetDeviceVolumeMute(0, h, opType, volume, mute ? 1 : 0) == BTRMGR_RESULT_SUCCESS;
 }
 
@@ -465,7 +465,7 @@ IBtAdapter::BtDeviceVolumeMute BtMgrAdapterImpl::getDeviceVolumeMute(long long i
     BtDeviceVolumeMute result;
     BTRMgrDeviceHandle h = static_cast<BTRMgrDeviceHandle>(deviceID);
     BTRMGR_DeviceOperationType_t opType =
-        static_cast<BTRMGR_DeviceOperationType_t>(deviceOpTypeFromProfile(profile));
+        static_cast<BTRMGR_DeviceOperationType_t>(volumeOpTypeFromDeviceType(profile));
     unsigned char vol = 0, mute = 0;
     if (BTRMGR_GetDeviceVolumeMute(0, h, opType, &vol, &mute) == BTRMGR_RESULT_SUCCESS) {
         result.volume = vol;
@@ -488,6 +488,7 @@ IBtAdapter::BtMediaTrackInfo BtMgrAdapterImpl::getMediaTrackInfo(long long int d
     result.duration       = t.ui32Duration;
     result.trackNumber    = t.ui32TrackNumber;
     result.numberOfTracks = t.ui32NumberOfTracks;
+    result.valid          = true;
     return result;
 }
 
@@ -610,6 +611,7 @@ void BtMgrAdapterImpl::onEvent(void* data, size_t /*len*/) {
                                      dt ? dt : "UNKNOWN",
                                      d.m_ui32DevClassBtSpec,
                                      static_cast<uint16_t>(d.m_ui16DevAppearanceBleSpec),
+                                     d.m_isLastConnectedDevice != 0,
                                      d.m_isPairedDevice != 0, d.m_isConnected != 0);
         break;
     }
@@ -623,6 +625,7 @@ void BtMgrAdapterImpl::onEvent(void* data, size_t /*len*/) {
                                      dt ? dt : "UNKNOWN",
                                      d.m_ui32DevClassBtSpec,
                                      static_cast<uint16_t>(d.m_ui16DevAppearanceBleSpec),
+                                     d.m_isLastConnectedDevice != 0,
                                      true, d.m_isConnected != 0);
         break;
     }
@@ -636,6 +639,7 @@ void BtMgrAdapterImpl::onEvent(void* data, size_t /*len*/) {
                                      dt ? dt : "UNKNOWN",
                                      d.m_ui32DevClassBtSpec,
                                      static_cast<uint16_t>(d.m_ui16DevAppearanceBleSpec),
+                                     d.m_isLastConnectedDevice != 0,
                                      true, d.m_isConnected != 0);
         break;
     }
@@ -804,6 +808,23 @@ int BtMgrAdapterImpl::deviceOpTypeFromProfile(const std::string& p) {
     if (Utils::String::contains(p, "LE TILE") || Utils::String::contains(p, "LE"))
         return static_cast<int>(BTRMGR_DEVICE_OP_TYPE_LE);
     return static_cast<int>(BTRMGR_DEVICE_OP_TYPE_UNKNOWN);
+}
+
+// static
+int BtMgrAdapterImpl::volumeOpTypeFromDeviceType(const std::string& t) {
+    if (Utils::String::contains(t, "LOUDSPEAKER") || Utils::String::contains(t, "HEADPHONES") ||
+        Utils::String::contains(t, "WEARABLE HEADSET") || Utils::String::contains(t, "HIFI AUDIO DEVICE"))
+        return static_cast<int>(BTRMGR_DEVICE_OP_TYPE_AUDIO_OUTPUT);
+    if (Utils::String::contains(t, "SMARTPHONE") || Utils::String::contains(t, "TABLET"))
+        return static_cast<int>(BTRMGR_DEVICE_OP_TYPE_AUDIO_INPUT);
+    if (Utils::String::contains(t, "KEYBOARD") || Utils::String::contains(t, "MOUSE") ||
+        Utils::String::contains(t, "JOYSTICK"))
+        return static_cast<int>(BTRMGR_DEVICE_OP_TYPE_HID);
+    if (Utils::String::contains(t, "LE TILE") || Utils::String::contains(t, "LE"))
+        return static_cast<int>(BTRMGR_DEVICE_OP_TYPE_LE);
+    if (Utils::String::contains(t, "DEFAULT"))
+        return static_cast<int>(BTRMGR_DEVICE_OP_TYPE_UNKNOWN);
+    return static_cast<int>(BTRMGR_DEVICE_OP_TYPE_AUDIO_OUTPUT);
 }
 
 void BtMgrAdapterImpl::cacheHandleToMac(const std::string& handleStr,

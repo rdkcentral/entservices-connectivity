@@ -238,7 +238,8 @@ namespace WPEFramework
                     params["lastConnectedState"] = lastConnected;
                     params["paired"]             = paired;
                     params["connected"]          = connected;
-                    if (hasAC) params["autoconnect"] = autoConnect;
+                    // Legacy adds autoconnect to CONNECTION_CHANGE only, not to PAIRING_CHANGE or the failure events.
+                    if (hasAC && newStatus == STATUS_CONNECTION_CHANGE) params["autoconnect"] = autoConnect;
                 }
                 sendNotify(C_STR(EVT_STATUS_CHANGED), params);
             };
@@ -283,7 +284,8 @@ namespace WPEFramework
             };
             evtCbs.onRequestFailed = [this](const std::string& newStatus, const std::string& deviceId,
                                             const std::string& name, const std::string& deviceType,
-                                            uint32_t rawType, uint16_t bleType, bool paired, bool connected) {
+                                            uint32_t rawType, uint16_t bleType, bool lastConnected,
+                                            bool paired, bool connected) {
                 JsonObject params;
                 params["newStatus"]          = newStatus;
                 params["deviceID"]           = deviceId;
@@ -291,6 +293,7 @@ namespace WPEFramework
                 params["deviceType"]         = deviceType;
                 params["rawDeviceType"]      = std::to_string(rawType);
                 params["rawBleDeviceType"]   = std::to_string(bleType);
+                params["lastConnectedState"] = lastConnected;
                 params["paired"]             = paired;
                 params["connected"]          = connected;
                 sendNotify(C_STR(EVT_REQUEST_FAILED), params);
@@ -346,9 +349,9 @@ namespace WPEFramework
                 params["genre"]              = genre;
                 params["title"]              = title;
                 params["artist"]             = artist;
-                params["ui32Duration"]       = duration;
-                params["ui32TrackNumber"]    = trackNumber;
-                params["ui32NumberOfTracks"] = numberOfTracks;
+                params["ui32Duration"]       = std::to_string(duration);
+                params["ui32TrackNumber"]    = std::to_string(trackNumber);
+                params["ui32NumberOfTracks"] = std::to_string(numberOfTracks);
                 sendNotify(C_STR(EVT_PLAYBACK_NEW_TRACK), params);
             };
 
@@ -869,6 +872,9 @@ namespace WPEFramework
         {
             const auto info = m_btAdapter.getMediaTrackInfo(deviceID);
             JsonObject result;
+            if (!info.valid) {
+                return result;
+            }
             result["album"]              = info.album;
             result["genre"]              = info.genre;
             result["title"]              = info.title;
@@ -1197,10 +1203,7 @@ namespace WPEFramework
         uint32_t Bluetooth::unpairWrapper(const JsonObject& parameters, JsonObject& response)
         {
             LOGINFOMETHOD();
-            // Intentionally unchanged: successFlag is never updated from the setDevicePairing() result or a
-            // missing/invalid deviceID, so unpair always reports success; legacy alignment - the BTMgr-based
-            // plugin reported success regardless and this contract is kept for client compatibility.
-            bool successFlag = true;
+            bool successFlag;
             string deviceIDStr;
             long long int deviceID = 0;
             bool deviceIDDefined = false;
@@ -1210,6 +1213,7 @@ namespace WPEFramework
                 getStringParameter("deviceID", deviceIDStr);
 				if (!parseDeviceID(deviceIDStr, deviceID))
 				{
+					successFlag = false;
 					returnResponse(successFlag);
 				}
                 deviceIDDefined = true;
@@ -1218,9 +1222,10 @@ namespace WPEFramework
             if(deviceIDDefined)
             {
                 LOGINFO("Making a call with deviceID=%lld pair=%s", deviceID, pair?"true":"false");
-                setDevicePairing(deviceID, pair);
+                successFlag = setDevicePairing(deviceID, pair);
             } else {
                 LOGERR("Please specify parameters. Example: \"params\": {\"deviceID\": \"271731989589742\"}");
+                successFlag = false;
             }
             returnResponse(successFlag);
         }

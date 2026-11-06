@@ -27,6 +27,7 @@
 #include "Bluetooth.h"
 #include "DiscoveryNameGate.h"
 #include "ScanFilterPolicy.h"
+#include "SignalLevel.h"
 #include "StoreMock.h"
 #include "btmgrMock.h"
 #include "FactoriesImplementation.h"
@@ -383,6 +384,17 @@ TEST_F(BluetoothTest, getConnectedDevicesWrapper_Success)
     EXPECT_TRUE(response.find("\"connectedDevices\"") != string::npos);
 }
 
+TEST_F(BluetoothTest, getConnectedDevicesWrapper_ReportsActiveStateAsString)
+{
+    IBtAdapter::BtDeviceInfo info;
+    info.handleStr = "123"; info.name = "ConnectedDevice"; info.deviceType = "HEADPHONES"; info.connected = true;
+    info.powerStatus = 1;
+    EXPECT_CALL(*p_btSdkMock, getConnectedDevices())
+        .WillOnce(::testing::Return(std::vector<IBtAdapter::BtDeviceInfo>{info}));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getConnectedDevices"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"activeState\":\"1\"") != string::npos);
+}
+
 TEST_F(BluetoothTest, getConnectedDevicesWrapper_Failed)
 {
     EXPECT_CALL(*p_btSdkMock, getConnectedDevices())
@@ -511,6 +523,29 @@ TEST_F(BluetoothTest, unpairWrapper_Success)
 {
     EXPECT_CALL(*p_btSdkMock, unpairDevice("123")).WillOnce(::testing::Return(true));
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("unpair"), _T("{\"deviceID\":\"123\"}"), response));
+    EXPECT_TRUE(response.find("\"success\":true") != string::npos);
+}
+
+// Legacy reports the real outcome of the unpair, as pair does.
+TEST_F(BluetoothTest, unpairWrapper_Failed)
+{
+    EXPECT_CALL(*p_btSdkMock, unpairDevice("123")).WillOnce(::testing::Return(false));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("unpair"), _T("{\"deviceID\":\"123\"}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
+}
+
+TEST_F(BluetoothTest, unpairWrapper_MissingDeviceID_Failure)
+{
+    EXPECT_CALL(*p_btSdkMock, unpairDevice(::testing::_)).Times(0);
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("unpair"), _T("{}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
+}
+
+TEST_F(BluetoothTest, unpairWrapper_InvalidDeviceID_Failure)
+{
+    EXPECT_CALL(*p_btSdkMock, unpairDevice(::testing::_)).Times(0);
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("unpair"), _T("{\"deviceID\":\"not-a-number\"}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
 TEST_F(BluetoothTest, enableWrapper_Success)
@@ -680,17 +715,80 @@ TEST_F(BluetoothTest, getDeviceInfoWrapper_Failed)
     EXPECT_TRUE(response.find("\"deviceInfo\"") != string::npos);
 }
 
+TEST_F(BluetoothTest, getDeviceInfoWrapper_ReportsRssiAndSignalStrengthAsStrings)
+{
+    IBtAdapter::BtDeviceProperties props;
+    props.handleStr = "123"; props.mac = "00:11:22:33:44:55";
+    props.name = "TestDevice"; props.deviceType = "WEARABLE HEADSET";
+    props.rssi = -55; props.signalLevel = 4;
+
+    EXPECT_CALL(*p_btSdkMock, getDeviceProperties("123", ::testing::_))
+        .WillOnce(::testing::DoAll(::testing::SetArgReferee<1>(props),
+                                   ::testing::Return(true)));
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getDeviceInfo"), _T("{\"deviceID\":\"123\"}"), response));
+    EXPECT_TRUE(response.find("\"rssi\":\"-55\"") != string::npos);
+    EXPECT_TRUE(response.find("\"signalStrength\":\"4\"") != string::npos);
+}
+
+TEST_F(BluetoothTest, getDeviceInfoWrapper_UnknownRssiIsReportedAsInt32Min)
+{
+    IBtAdapter::BtDeviceProperties props;
+    props.handleStr = "123"; props.mac = "00:11:22:33:44:55";
+    props.name = "TestDevice"; props.deviceType = "WEARABLE HEADSET";
+    props.rssi = BT_RSSI_UNKNOWN; props.signalLevel = signalLevelFromRssi(BT_RSSI_UNKNOWN);
+
+    EXPECT_CALL(*p_btSdkMock, getDeviceProperties("123", ::testing::_))
+        .WillOnce(::testing::DoAll(::testing::SetArgReferee<1>(props),
+                                   ::testing::Return(true)));
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getDeviceInfo"), _T("{\"deviceID\":\"123\"}"), response));
+    EXPECT_TRUE(response.find("\"rssi\":\"-2147483648\"") != string::npos);
+    EXPECT_TRUE(response.find("\"signalStrength\":\"1\"") != string::npos);
+}
+
+// Legacy btrMgr_MapSignalStrengthToRSSI thresholds: -60, -70 and -90 each belong to the stronger level.
+TEST(SignalLevelTest, MapsRssiWithLegacyThresholds)
+{
+    EXPECT_EQ(4, signalLevelFromRssi(-30));
+    EXPECT_EQ(4, signalLevelFromRssi(-60));
+    EXPECT_EQ(3, signalLevelFromRssi(-61));
+    EXPECT_EQ(3, signalLevelFromRssi(-70));
+    EXPECT_EQ(2, signalLevelFromRssi(-71));
+    EXPECT_EQ(2, signalLevelFromRssi(-90));
+    EXPECT_EQ(1, signalLevelFromRssi(-91));
+    EXPECT_EQ(1, signalLevelFromRssi(-120));
+}
+
+TEST(SignalLevelTest, UnknownRssiIsPoorNeverZero)
+{
+    EXPECT_EQ(INT32_MIN, BT_RSSI_UNKNOWN);
+    EXPECT_EQ(1, signalLevelFromRssi(BT_RSSI_UNKNOWN));
+}
+
 // getAudioInfo and volume/mute methods are AUDIO_SUPPORT-gated stubs.
 TEST_F(BluetoothTest, getMediaTrackInfoWrapper_Success)
 {
+    IBtAdapter::BtMediaTrackInfo info;
+    info.album = "Album1"; info.genre = "Pop"; info.title = "Track1"; info.artist = "Artist1";
+    info.duration = 200; info.trackNumber = 3; info.numberOfTracks = 15; info.valid = true;
+    EXPECT_CALL(*p_btSdkMock, getMediaTrackInfo(123)).WillOnce(::testing::Return(info));
+
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getAudioInfo"), _T("{\"deviceID\":\"123\"}"), response));
-    EXPECT_TRUE(response.find("\"trackInfo\"") != string::npos);
+    EXPECT_TRUE(response.find("\"title\":\"Track1\"") != string::npos);
+    EXPECT_TRUE(response.find("\"ui32Duration\":\"200\"") != string::npos);
+    EXPECT_TRUE(response.find("\"ui32TrackNumber\":\"3\"") != string::npos);
+    EXPECT_TRUE(response.find("\"ui32NumberOfTracks\":\"15\"") != string::npos);
 }
 
+// Legacy reports success with an empty trackInfo object when the track info cannot be read.
 TEST_F(BluetoothTest, getMediaTrackInfoWrapper_Failed)
 {
+    EXPECT_CALL(*p_btSdkMock, getMediaTrackInfo(123)).WillOnce(::testing::Return(IBtAdapter::BtMediaTrackInfo{}));
+
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getAudioInfo"), _T("{\"deviceID\":\"123\"}"), response));
-    EXPECT_TRUE(response.find("\"trackInfo\"") != string::npos);
+    EXPECT_TRUE(response.find("\"trackInfo\":{}") != string::npos);
+    EXPECT_TRUE(response.find("\"success\":true") != string::npos);
 }
 
 // Volume/mute methods are AUDIO_SUPPORT-gated stubs.
@@ -775,6 +873,25 @@ TEST_F(BluetoothTest, getAutoConnectWrapper_MissingDeviceID_Failure)
 TEST_F(BluetoothTest, getAutoConnectWrapper_NotFound_Failure)
 {
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getAutoConnect"), _T("{\"deviceID\":\"999\"}"), response));
+    EXPECT_TRUE(response.find("\"success\":false") != string::npos);
+}
+
+// Numeric device IDs are converted to the stored key form, so "0123" finds the device stored as "123".
+TEST_F(BluetoothTest, autoConnectWrappers_NumericDeviceIDIsCanonicalised)
+{
+    setupDevice();
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAutoConnect"), _T("{\"deviceID\":\"123\",\"enable\":true}"), response));
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getAutoConnect"), _T("{\"deviceID\":\"0123\"}"), response));
+    EXPECT_TRUE(response.find("\"autoconnect\":true") != string::npos);
+}
+
+TEST_F(BluetoothTest, getAutoConnectWrapper_NonNumericDeviceIDIsPassedThrough)
+{
+    setupDevice();
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getAutoConnect"), _T("{\"deviceID\":\"AA:BB:CC:DD:EE:FF\"}"), response));
     EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 

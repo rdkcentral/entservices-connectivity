@@ -35,6 +35,7 @@
 #include <LogRedirect.h>
 
 #include "DeviceDisplayName.h"
+#include "SignalLevel.h"
 
 namespace WPEFramework {
 namespace Plugin {
@@ -42,6 +43,9 @@ namespace Plugin {
 // T2 markers matching the legacy BTMgr stack; the telemetry configuration on the server depends on these
 // names and on the "name,class,appearance,modalias" value format.
 namespace {
+
+// BTRMGR_NAME_LEN_MAX (64) less the terminator.
+constexpr size_t ADAPTER_NAME_MAX_BYTES = 63;
 
 void sendTelemetry(const char* marker) {
     Utils::Telemetry::SendEvent(const_cast<char*>(marker), 1);
@@ -252,19 +256,28 @@ bool BtSdkAdapterImpl::setAdapterPowered(bool powered) {
     LOGINFO("BtSdkAdapterImpl::setAdapterPowered: exit successfully");
     return true;
 }
-// Intentionally unchanged: the four adapter name/discoverable operations below are a known gap versus the BTMgr
-// backend; the SDK exposes no equivalent API (only setName), so they stay explicit 'unsupported' results.
+// getAdapterName and the two discoverable operations below are a known gap versus the BTMgr backend: the SDK exposes
+// no getter for the name and nothing for discoverable mode, so they stay explicit 'unsupported' results.
 bool BtSdkAdapterImpl::getAdapterName(std::string& name) const {
     LOGINFO("BtSdkAdapterImpl::getAdapterName: entry");
     (void)name;
     LOGERR("BtSdkAdapterImpl::getAdapterName: exit with error: operation is unsupported");
     return false;
 }
+// BTMgr writes the BlueZ Alias, as Adapter::setName does, and copies at most BTRMGR_NAME_LEN_MAX - 1 bytes of the name.
 bool BtSdkAdapterImpl::setAdapterName(const std::string& name) {
     LOGINFO("BtSdkAdapterImpl::setAdapterName: entry name=%s", name.c_str());
-    (void)name;
-    LOGERR("BtSdkAdapterImpl::setAdapterName: exit with error: operation is unsupported");
-    return false;
+    if (!m_adapter) {
+        LOGERR("BtSdkAdapterImpl::setAdapterName: exit with error: adapter is unavailable");
+        return false;
+    }
+    Status status = m_adapter->setName(name.substr(0, ADAPTER_NAME_MAX_BYTES));
+    if (!status) {
+        LOGERR("BtSdkAdapterImpl::setAdapterName: exit with error: %s", status.get_message().c_str());
+        return false;
+    }
+    LOGINFO("BtSdkAdapterImpl::setAdapterName: exit successfully");
+    return true;
 }
 bool BtSdkAdapterImpl::isAdapterDiscoverable(bool& discoverable) const {
     LOGINFO("BtSdkAdapterImpl::isAdapterDiscoverable: entry");
@@ -349,8 +362,8 @@ IBtAdapter::BtDeviceInfo BtSdkAdapterImpl::deviceToInfo(
                             | static_cast<uint16_t>(bluetooth::Appearance::SubCategory::Gamepad)));
         if (props.uuids.has_value()) info.uuids = props.uuids.value();
     }
-    // Intentionally unchanged: powerStatus is never set because the SDK has no power-status property, so activeState
-    // is reported as 0 for SDK-backed devices (known gap vs BTMgr).
+    // BTMgr only ever reports BTRMGR_DEVICE_POWER_ACTIVE (1) for a connected device, never LOW or STANDBY.
+    info.powerStatus = info.connected ? 1 : 0;
     LOGINFO("BtSdkAdapterImpl::deviceToInfo: exit handle=%s mac=%s", info.handleStr.c_str(), info.mac.c_str());
     return info;
 }
@@ -457,10 +470,9 @@ bool BtSdkAdapterImpl::unpairDevice(const std::string& handleStr) {
     LOGINFO("BtSdkAdapterImpl::unpairDevice: entry handle=%s", handleStr.c_str());
     const std::shared_ptr<bluetooth::Device> device = findDevice(handleStr);
     if (!device) {
-        // BlueZ has no object for this device, so there is nothing to unpair. Succeed so the caller
-        // still drops its own paired-device record instead of leaving it stuck.
-        LOGWARN("BtSdkAdapterImpl::unpairDevice: exit successfully: device handle was not found, treating as already unpaired");
-        return true;
+        // As BTMgr does for a device that is not in the paired list ("Not a Paired device").
+        LOGERR("BtSdkAdapterImpl::unpairDevice: exit with error: device handle was not found");
+        return false;
     }
     // Not under m_devicesMutex: the SDK emits DeviceDisappeared synchronously from unpair(), and
     // onAdapterEvent takes that mutex.
@@ -540,9 +552,19 @@ bool BtSdkAdapterImpl::getDeviceProperties(const std::string& handleStr,
     props.appearance    = sdkProps.appearance.value_or(0);
     props.isGamePad     = (props.appearance == (static_cast<uint16_t>(bluetooth::Appearance::Category::HumanInterfaceDevice)
                         | static_cast<uint16_t>(bluetooth::Appearance::SubCategory::Gamepad)));
-    // Intentionally unchanged: the SDK exposes only RSSI and no BTMgr-equivalent signal-level mapping is defined,
-    // so signalLevel stays 0 (known gap vs BTMgr).
-    props.rssi          = sdkProps.rssi.value_or(0);
+    // Mirrors BTRMGR_GetDeviceProperties: a paired device is answered from the paired list, which carries no RSSI,
+    // so its rssi and signalLevel stay 0. Only a device that is not paired has them, from the scan results.
+    // BlueZ's Paired flag decides, as a connected device is not necessarily paired.
+    const bluetooth::DeviceState sdkState = device->state();
+    const bool paired = sdkProps.paired.value_or(sdkState == bluetooth::DeviceState::Paired
+                                                 || sdkState == bluetooth::DeviceState::Connected);
+    if (paired) {
+        props.rssi        = 0;
+        props.signalLevel = 0;
+    } else {
+        props.rssi        = sdkProps.rssi.has_value() ? static_cast<int32_t>(sdkProps.rssi.value()) : BT_RSSI_UNKNOWN;
+        props.signalLevel = signalLevelFromRssi(props.rssi);
+    }
     props.batteryLevel  = sdkProps.batteryLevel.value_or(0);
     props.modalias      = sdkProps.modalias.value_or("");
     if (sdkProps.uuids.has_value())  props.uuids = sdkProps.uuids.value();

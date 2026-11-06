@@ -83,6 +83,9 @@ public:
 private:
     // Maps BTRMGR device operation type from a profile string.
     static int deviceOpTypeFromProfile(const std::string& profile);
+    // Maps the device type given to the volume and mute operations, as the legacy plugin did: unlike the
+    // discovery profile there is no audio plus HID combination, and an unrecognised type means audio output.
+    static int volumeOpTypeFromDeviceType(const std::string& deviceType);
 
     void onEvent(void* data, size_t len);
 

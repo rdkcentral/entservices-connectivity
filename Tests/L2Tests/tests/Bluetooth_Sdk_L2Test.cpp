@@ -24,11 +24,13 @@
 #include "BtSdkAdapterImpl.h"
 
 #include <chrono>
+#include <climits>
 #include <functional>
 #include <initializer_list>
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -165,15 +167,49 @@ TEST_F(Bluetooth_Sdk_L2Test, BluetoothEnableDisable)
     EXPECT_TRUE(result["success"].Boolean());
 }
 
-TEST_F(Bluetooth_Sdk_L2Test, BluetoothGetSetNameUnsupported)
+TEST_F(Bluetooth_Sdk_L2Test, BluetoothGetNameUnsupported)
 {
-    JsonObject params;
     JsonObject result;
 
     EXPECT_EQ(Core::ERROR_NONE,
               InvokeServiceMethod("org.rdk.Bluetooth.1", "getName", result));
     EXPECT_FALSE(result["success"].Boolean());
+}
 
+TEST_F(Bluetooth_Sdk_L2Test, BluetoothSetName_Success)
+{
+    JsonObject params;
+    JsonObject result;
+
+    EXPECT_CALL(*g_adapter, setName("NewSdkAdapter"))
+        .WillOnce(::testing::Return(Status{}));
+    params["name"] = "NewSdkAdapter";
+    EXPECT_EQ(Core::ERROR_NONE,
+              InvokeServiceMethod("org.rdk.Bluetooth.1", "setName", params, result));
+    EXPECT_TRUE(result["success"].Boolean());
+}
+
+// BTMgr copies at most BTRMGR_NAME_LEN_MAX - 1 (63) bytes of the name.
+TEST_F(Bluetooth_Sdk_L2Test, BluetoothSetName_LongNameIsTruncatedTo63Bytes)
+{
+    JsonObject params;
+    JsonObject result;
+
+    EXPECT_CALL(*g_adapter, setName(std::string(63, 'A')))
+        .WillOnce(::testing::Return(Status{}));
+    params["name"] = std::string(70, 'A');
+    EXPECT_EQ(Core::ERROR_NONE,
+              InvokeServiceMethod("org.rdk.Bluetooth.1", "setName", params, result));
+    EXPECT_TRUE(result["success"].Boolean());
+}
+
+TEST_F(Bluetooth_Sdk_L2Test, BluetoothSetName_SdkFailureIsReported)
+{
+    JsonObject params;
+    JsonObject result;
+
+    EXPECT_CALL(*g_adapter, setName("NewSdkAdapter"))
+        .WillOnce(::testing::Return(Status(StatusCodes::BLUETOOTH_ERROR, "setName failed")));
     params["name"] = "NewSdkAdapter";
     EXPECT_EQ(Core::ERROR_NONE,
               InvokeServiceMethod("org.rdk.Bluetooth.1", "setName", params, result));
@@ -568,4 +604,145 @@ TEST_F(Bluetooth_Sdk_L2Test, StartupReconnect_ClientNeverAnswers_OnlyTheLegacyMa
     EXPECT_EQ(handles({kSpeakerB, kSpeakerB, kSpeakerA}), harness.requests());
     EXPECT_EQ(handles({kSpeakerA}), harness.connects());
     EXPECT_EQ(handles({kSpeakerA}), harness.autoConnected());
+}
+namespace {
+
+// Runs a standalone BtSdkAdapterImpl over one mock device, so that getConnectedDevices and getDeviceProperties can be
+// checked with the device state and BlueZ properties each test chooses.
+class SdkDeviceHarness {
+public:
+    SdkDeviceHarness(bluetooth::DeviceState state, std::optional<bool> paired, std::optional<int16_t> rssi)
+        : m_mac("AA:00:00:00:00:10")
+        , m_handle(Plugin::DeviceRegistry::deriveHandle(m_mac))
+    {
+        auto device = std::make_shared<::testing::NiceMock<MockDevice>>();
+        bluetooth::DeviceProperties props;
+        props.uuids = std::vector<std::string>{"0000110b-0000-1000-8000-00805f9b34fb"};
+        props.paired = paired;
+        props.rssi = rssi;
+        props.connected = (state == bluetooth::DeviceState::Connected);
+
+        const std::string mac = m_mac;
+        ON_CALL(*device, address(::testing::_))
+            .WillByDefault(::testing::DoAll(::testing::SetArgReferee<0>(mac), ::testing::Return(Status{})));
+        ON_CALL(*device, name(::testing::_))
+            .WillByDefault(::testing::DoAll(::testing::SetArgReferee<0>(std::string("Speaker ") + mac),
+                                            ::testing::Return(Status{})));
+        ON_CALL(*device, state()).WillByDefault(::testing::Return(state));
+        ON_CALL(*device, getAllProperties(::testing::_))
+            .WillByDefault(::testing::DoAll(::testing::SetArgReferee<0>(props), ::testing::Return(Status{})));
+
+        const std::vector<std::shared_ptr<bluetooth::Device>> all{device};
+        const std::vector<std::shared_ptr<bluetooth::Device>> connected =
+            (state == bluetooth::DeviceState::Connected) ? all : std::vector<std::shared_ptr<bluetooth::Device>>{};
+        ON_CALL(*g_adapter, getPowered(::testing::_))
+            .WillByDefault(::testing::DoAll(::testing::SetArgReferee<0>(true), ::testing::Return(Status{})));
+        ON_CALL(*g_adapter, getDevices()).WillByDefault(::testing::Return(all));
+        ON_CALL(*g_adapter, getDevices(::testing::_)).WillByDefault(::testing::Return(all));
+        ON_CALL(*g_adapter, getDevices(bluetooth::DeviceState::Connected)).WillByDefault(::testing::Return(connected));
+    }
+
+    ~SdkDeviceHarness()
+    {
+        m_adapter.deinit();
+        const std::vector<std::shared_ptr<bluetooth::Device>> none;
+        ON_CALL(*g_adapter, getDevices()).WillByDefault(::testing::Return(none));
+        ON_CALL(*g_adapter, getDevices(::testing::_)).WillByDefault(::testing::Return(none));
+        ON_CALL(*g_adapter, getPowered(::testing::_)).WillByDefault(::testing::Return(Status{}));
+    }
+
+    bool start()
+    {
+        return m_adapter.init(nullptr, Plugin::BtEventCallbacks{}, Plugin::BtAuthCallbacks{}).empty();
+    }
+
+    std::vector<Plugin::IBtAdapter::BtDeviceInfo> connectedDevices() const { return m_adapter.getConnectedDevices(); }
+
+    bool properties(Plugin::IBtAdapter::BtDeviceProperties& props) const
+    {
+        return m_adapter.getDeviceProperties(m_handle, props);
+    }
+
+    bool unpair(const std::string& handle) { return m_adapter.unpairDevice(handle); }
+
+private:
+    std::string m_mac;
+    std::string m_handle;
+    Plugin::BtSdkAdapterImpl m_adapter;
+};
+
+} // namespace
+
+TEST_F(Bluetooth_Sdk_L2Test, GetConnectedDevices_ReportsActiveStateOne)
+{
+    SdkDeviceHarness harness(bluetooth::DeviceState::Connected, true, std::nullopt);
+    ASSERT_TRUE(harness.start());
+
+    const auto devices = harness.connectedDevices();
+    ASSERT_EQ(1u, devices.size());
+    EXPECT_EQ(1u, devices[0].powerStatus);
+}
+
+TEST_F(Bluetooth_Sdk_L2Test, GetDeviceInfo_PairedDevice_ReportsZeroRssiAndSignalStrength)
+{
+    SdkDeviceHarness harness(bluetooth::DeviceState::Paired, true, static_cast<int16_t>(-50));
+    ASSERT_TRUE(harness.start());
+
+    Plugin::IBtAdapter::BtDeviceProperties props;
+    ASSERT_TRUE(harness.properties(props));
+    EXPECT_EQ(0, props.rssi);
+    EXPECT_EQ(0, props.signalLevel);
+}
+
+TEST_F(Bluetooth_Sdk_L2Test, GetDeviceInfo_PairedFlagAbsent_PairedStateReportsZeroRssiAndSignalStrength)
+{
+    SdkDeviceHarness harness(bluetooth::DeviceState::Paired, std::nullopt, static_cast<int16_t>(-50));
+    ASSERT_TRUE(harness.start());
+
+    Plugin::IBtAdapter::BtDeviceProperties props;
+    ASSERT_TRUE(harness.properties(props));
+    EXPECT_EQ(0, props.rssi);
+    EXPECT_EQ(0, props.signalLevel);
+}
+
+TEST_F(Bluetooth_Sdk_L2Test, GetDeviceInfo_UnpairedDevice_ReportsRawRssiAndMappedSignalStrength)
+{
+    SdkDeviceHarness harness(bluetooth::DeviceState::Discovered, false, static_cast<int16_t>(-55));
+    ASSERT_TRUE(harness.start());
+
+    Plugin::IBtAdapter::BtDeviceProperties props;
+    ASSERT_TRUE(harness.properties(props));
+    EXPECT_EQ(-55, props.rssi);
+    EXPECT_EQ(4, props.signalLevel);
+}
+
+TEST_F(Bluetooth_Sdk_L2Test, GetDeviceInfo_UnpairedDeviceWithoutRssi_ReportsLegacyUnknownRssiAndPoorSignal)
+{
+    SdkDeviceHarness harness(bluetooth::DeviceState::Discovered, false, std::nullopt);
+    ASSERT_TRUE(harness.start());
+
+    Plugin::IBtAdapter::BtDeviceProperties props;
+    ASSERT_TRUE(harness.properties(props));
+    EXPECT_EQ(INT_MIN, props.rssi);
+    EXPECT_EQ(1, props.signalLevel);
+}
+
+TEST_F(Bluetooth_Sdk_L2Test, GetDeviceInfo_ConnectedButUnpairedDevice_IsHandledAsUnpaired)
+{
+    SdkDeviceHarness harness(bluetooth::DeviceState::Connected, false, static_cast<int16_t>(-75));
+    ASSERT_TRUE(harness.start());
+
+    Plugin::IBtAdapter::BtDeviceProperties props;
+    ASSERT_TRUE(harness.properties(props));
+    EXPECT_EQ(-75, props.rssi);
+    EXPECT_EQ(2, props.signalLevel);
+}
+
+// BTMgr fails to unpair a device that is not in its paired list.
+TEST_F(Bluetooth_Sdk_L2Test, UnpairDevice_UnknownHandle_Fails)
+{
+    SdkDeviceHarness harness(bluetooth::DeviceState::Paired, true, std::nullopt);
+    ASSERT_TRUE(harness.start());
+
+    EXPECT_FALSE(harness.unpair("999"));
 }

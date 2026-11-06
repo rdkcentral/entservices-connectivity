@@ -144,7 +144,7 @@ public:
     void fireRequestFailed(const std::string& status, const std::string& deviceId,
                            const std::string& name, const std::string& deviceType) {
         if (m_evtCbs.onRequestFailed)
-            m_evtCbs.onRequestFailed(status, deviceId, name, deviceType, 0, 0, true, false);
+            m_evtCbs.onRequestFailed(status, deviceId, name, deviceType, 0, 0, false, true, false);
     }
 };
 

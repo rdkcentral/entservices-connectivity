@@ -123,12 +123,13 @@ These are **documented gaps in the SDK backend** as of this build. They are *not
 
 | Area | BTMgr backend | SDK backend (current) | Notes |
 |---|---|---|---|
-| `getName`, `setName` | Works | Returns failure (`unsupported`) | SDK exposes no equivalent for these. Covered by `Bluetooth_Sdk_L2Test.BluetoothGetSetNameUnsupported` |
+| `getName` | Works | Returns failure (`unsupported`) | SDK has `Adapter::setName` but no getter. Covered by `Bluetooth_Sdk_L2Test.BluetoothGetNameUnsupported` |
+| `setName` | Works (name cut to 63 bytes) | Works (BlueZ `Alias`, name cut to 63 bytes) | Not a gap. Covered by `Bluetooth_Sdk_L2Test.BluetoothSetName_*` |
 | `isDiscoverable`, `setDiscoverable` | Works | Returns failure (`unsupported`) | Covered by `Bluetooth_Sdk_L2Test.BluetoothDiscoverableUnsupportedAndScan` |
 | Audio: `setAudioStream`, `sendAudioPlaybackCommand`, `getDeviceVolumeMuteInfo`, `setDeviceVolumeMuteInfo`, `getAudioInfo` (track info) | Works | Returns failure / empty (audio support unavailable) | Waiting on SDK `AUDIO_SUPPORT` module |
-| Playback / media events (`onPlaybackChange`, `onPlaybackPosition`, `onPlaybackNewTrack`, `onDeviceMediaStatus`, `onPlaybackRequest`) | Emitted | Not emitted | Same dependency as above |
-| `activeState` (in device lists) | Real power status | Always `0` | SDK has no power-status property |
-| `signalStrength` (in `getDeviceInfo`) | BTMgr signal level | Always `0` (SDK only provides RSSI) | Known gap |
+| Playback / media events (`onPlaybackChange`, `onPlaybackProgress`, `onPlaybackNewTrack`, `onDeviceMediaStatus`, `onPlaybackRequest`) | Emitted | Not emitted | Same dependency as above |
+| `activeState` (in `getConnectedDevices`) | `"1"` for every connected device | `"1"` for every connected device | Not a gap. Covered by `Bluetooth_Sdk_L2Test.GetConnectedDevices_ReportsActiveStateOne` |
+| `rssi` / `signalStrength` (in `getDeviceInfo`) | Paired device: `0` / `0`. Not paired: raw RSSI (`INT_MIN` if unknown) and level 4/3/2/1 at -60/-70/-90 | Same | Not a gap. See `SignalLevel.h` and `Bluetooth_Sdk_L2Test.GetDeviceInfo_*` |
 | Gamepad connection handling | BTMgr special cases (gamepad RFC, last-disconnected logic; unpaired gamepad rejected) | Those special cases are **not** mirrored; an unpaired gamepad follows the normal client-escalation flow | Documented in [AuthBridge.h](../Bluetooth/AuthBridge.h) |
 | Startup reconnect | Internal to BTMgr (no plugin involvement) | Plugin-driven; if the client accepts the `onConnectionRequest`, the plugin leaves the connect to the client | By design; same end user result expected |
 
@@ -196,9 +197,9 @@ The primary test cases already exist in [bluetooth_pre_migration_regression_test
 | §3 Pairing & unpairing | `pair`/`unpair` | Yes | Yes | Check event order (row 6) |
 | §4 Connection management | `connect`/`disconnect` | Yes | Yes | |
 | §5 AutoConnect guard | Guard-driven divergence | Yes | Yes | Identical on both backends; **not** a defect |
-| §6 Device info, audio & playback | `getDeviceInfo`, `getAudioInfo`, `setAudioStream`, playback commands, `respondToEvent` | Yes | **Partly** | Audio items and `getAudioInfo` are known gaps on SDK; `getDeviceInfo` has the `signalStrength` gap; `respondToEvent` must pass |
+| §6 Device info, audio & playback | `getDeviceInfo`, `getAudioInfo`, `setAudioStream`, playback commands, `respondToEvent` | Yes | **Partly** | Audio items and `getAudioInfo` are known gaps on SDK; `getDeviceInfo` and `respondToEvent` must pass |
 | §7 Volume & mute | `get/setDeviceVolumeMuteInfo` | Yes | **Known gap** | Record as known gap on SDK |
-| §8 Adapter control | `enable`/`disable`/discoverable/name | Yes | **Partly** | `enable`/`disable` must pass; name/discoverable are known gaps on SDK |
+| §8 Adapter control | `enable`/`disable`/discoverable/name | Yes | **Partly** | `enable`/`disable` and `setName` must pass; `getName`/discoverable are known gaps on SDK |
 | §9 Gamepad / HID classification | Pair/connect HID and gamepad | Yes | Yes | Type string must be `HUMAN INTERFACE DEVICE` on both |
 | §10 Power management guard | `onPowerModeChanged` pre-migration | Yes | Yes | Gamepad standby and reconnect still run (see §6.6) |
 | §11 Persistence non-interference | No store/AS-file writes | Yes | Yes | |
@@ -280,5 +281,5 @@ Include in each report: backend (and how you verified it), build/flags, device m
 ### Open items for the dev team to confirm before QA starts
 
 1. The supported procedure for switching a unit between BTMgr and SDK (which services to stop/start besides toggling `BLUETOOTH_SDK_ENABLED` and restarting the plugin).
-2. Whether the §5 gaps (name/discoverable, audio, `activeState`, `signalStrength`) are accepted for this release or are blockers.
+2. Whether the §5 gaps (`getName`, discoverable, audio and playback events) are accepted for this release or are blockers.
 3. Which flag configuration (`BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION`, `BLUETOOTH_AUDIO_SUPPORT`) the build under test uses.

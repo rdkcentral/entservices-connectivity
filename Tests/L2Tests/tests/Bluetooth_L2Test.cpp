@@ -932,6 +932,46 @@ TEST_F(Bluetooth_L2Test, BluetoothGetSetDeviceVolumeMute)
 }
 
 /* =========================================================================
+ * Volume and mute: the device type maps to the operation type as in the legacy plugin
+ * (audio output unless it names another kind of device), not as the scan profile does.
+ * ====================================================================== */
+TEST_F(Bluetooth_L2Test, BluetoothGetDeviceVolumeMute_OperationTypeFollowsLegacyMapping)
+{
+    struct Case { const char* deviceType; BTRMGR_DeviceOperationType_t expected; };
+    const Case cases[] = {
+        { "HEADPHONES",              BTRMGR_DEVICE_OP_TYPE_AUDIO_OUTPUT },
+        { "SOMETHING UNRECOGNISED",  BTRMGR_DEVICE_OP_TYPE_AUDIO_OUTPUT },
+        { "SMARTPHONE",              BTRMGR_DEVICE_OP_TYPE_AUDIO_INPUT },
+        { "KEYBOARD",                BTRMGR_DEVICE_OP_TYPE_HID },
+        { "HEADPHONES KEYBOARD",     BTRMGR_DEVICE_OP_TYPE_AUDIO_OUTPUT },
+        { "DEFAULT",                 BTRMGR_DEVICE_OP_TYPE_UNKNOWN },
+    };
+
+    for (const auto& c : cases) {
+        JsonObject params;
+        JsonObject result;
+
+        EXPECT_CALL(*p_btmgrImplMock,
+                    BTRMGR_GetDeviceVolumeMute(0, TEST_DEVICE_HANDLE, c.expected,
+                                               ::testing::_, ::testing::_))
+            .WillOnce(::testing::Invoke(
+                [](unsigned char, BTRMgrDeviceHandle, BTRMGR_DeviceOperationType_t,
+                   unsigned char* pVol, unsigned char* pMute) -> BTRMGR_Result_t {
+                    *pVol  = 10;
+                    *pMute = 0;
+                    return BTRMGR_RESULT_SUCCESS;
+                }));
+
+        params["deviceID"]   = std::to_string(TEST_DEVICE_HANDLE);
+        params["deviceType"] = c.deviceType;
+        EXPECT_EQ(Core::ERROR_NONE,
+                  InvokeServiceMethod("org.rdk.Bluetooth.1", "getDeviceVolumeMuteInfo", params, result))
+            << c.deviceType;
+        EXPECT_STREQ("10", result["volumeinfo"].Object()["volume"].String().c_str()) << c.deviceType;
+    }
+}
+
+/* =========================================================================
  * TC-16: setAutoConnect / getAutoConnect round-trip
  * BluetoothDeviceManager persists the flag; no BTR HAL call needed.
  * ====================================================================== */
@@ -1113,6 +1153,74 @@ TEST_F(Bluetooth_L2Test, BluetoothOnStatusChangedPairingComplete)
 
     jsonrpc.Unsubscribe(JSON_TIMEOUT, _T("onStatusChanged"));
 }
+
+#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+/* =========================================================================
+ * onStatusChanged PAIRING_CHANGE carries no autoconnect key, even when the device has an autoconnect
+ * status; legacy adds it to CONNECTION_CHANGE only.
+ * ====================================================================== */
+TEST_F(Bluetooth_L2Test, BluetoothOnStatusChangedPairingComplete_OmitsAutoconnect)
+{
+    JsonObject params;
+    JsonObject result;
+
+    EXPECT_EQ(Core::ERROR_NONE, InvokeServiceMethod("org.rdk.Bluetooth.1", "performMigration", params, result));
+    EXPECT_TRUE(result["success"].Boolean());
+
+    EXPECT_CALL(*p_btmgrImplMock, BTRMGR_PairDevice(0, TEST_DEVICE_HANDLE))
+        .WillOnce(::testing::Return(BTRMGR_RESULT_SUCCESS));
+    EXPECT_CALL(*p_btmgrImplMock,
+                BTRMGR_GetDeviceProperties(0, TEST_DEVICE_HANDLE, ::testing::_))
+        .WillOnce(::testing::Invoke(
+            [](unsigned char, BTRMgrDeviceHandle, BTRMGR_DevicesProperty_t* pProp) -> BTRMGR_Result_t {
+                pProp->m_deviceHandle = TEST_DEVICE_HANDLE;
+                pProp->m_deviceType   = BTRMGR_DEVICE_TYPE_LOUDSPEAKER;
+                strncpy(pProp->m_name,          TEST_DEVICE_NAME, BTRMGR_NAME_LEN_MAX - 1);
+                strncpy(pProp->m_deviceAddress, TEST_DEVICE_ADDR, BTRMGR_NAME_LEN_MAX - 1);
+                return BTRMGR_RESULT_SUCCESS;
+            }));
+    params["deviceID"] = std::to_string(TEST_DEVICE_HANDLE);
+    EXPECT_EQ(Core::ERROR_NONE, InvokeServiceMethod("org.rdk.Bluetooth.1", "pair", params, result));
+    EXPECT_TRUE(result["success"].Boolean());
+
+    params["enable"] = true;
+    EXPECT_EQ(Core::ERROR_NONE, InvokeServiceMethod("org.rdk.Bluetooth.1", "setAutoConnect", params, result));
+    EXPECT_TRUE(result["success"].Boolean());
+
+    JSONRPC::LinkType<Core::JSON::IElement> jsonrpc(BT_CALLSIGN, BTL2TEST_CALLSIGN);
+    StrictMock<AsyncHandlerMock_Bluetooth> async_handler;
+
+    EXPECT_EQ(Core::ERROR_NONE, jsonrpc.Subscribe<JsonObject>(JSON_TIMEOUT,
+        _T("onStatusChanged"),
+        &AsyncHandlerMock_Bluetooth::onStatusChanged,
+        &async_handler));
+
+    EXPECT_CALL(async_handler, onStatusChanged(::testing::_))
+        .WillOnce(Invoke([this](const JsonObject& message) {
+            JsonObject payload(message);
+            EXPECT_STREQ("PAIRING_CHANGE", payload["newStatus"].String().c_str());
+            EXPECT_FALSE(payload.HasLabel("autoconnect"));
+            this->onStatusChanged(message);
+        }));
+
+    ON_CALL(*p_btmgrImplMock, BTRMGR_GetDeviceTypeAsString(BTRMGR_DEVICE_TYPE_LOUDSPEAKER))
+        .WillByDefault(::testing::Return(TEST_DEVICE_TYPE_STR));
+
+    BTRMGR_EventMessage_t msg{};
+    msg.m_adapterIndex = 0;
+    msg.m_eventType    = BTRMGR_EVENT_DEVICE_PAIRING_COMPLETE;
+    msg.m_discoveredDevice.m_deviceHandle  = TEST_DEVICE_HANDLE;
+    msg.m_discoveredDevice.m_deviceType    = BTRMGR_DEVICE_TYPE_LOUDSPEAKER;
+    msg.m_discoveredDevice.m_isPairedDevice = 1;
+    strncpy(msg.m_discoveredDevice.m_name, TEST_DEVICE_NAME, BTRMGR_NAME_LEN_MAX - 1);
+    injectBtEvent(msg);
+
+    const uint32_t signalled = WaitForRequestStatus(EVNT_TIMEOUT, BT_EVT_STATUS_CHANGED);
+    EXPECT_TRUE(signalled & BT_EVT_STATUS_CHANGED);
+
+    jsonrpc.Unsubscribe(JSON_TIMEOUT, _T("onStatusChanged"));
+}
+#endif /* BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION */
 
 /* =========================================================================
  * TC-21: onStatusChanged event — CONNECTION_CHANGE (connect complete)
@@ -1316,7 +1424,13 @@ TEST_F(Bluetooth_L2Test, BluetoothOnRequestFailedPairing)
     EXPECT_EQ(Core::ERROR_NONE, status);
 
     EXPECT_CALL(async_handler, onRequestFailed(::testing::_))
-        .WillOnce(Invoke(this, &Bluetooth_L2Test::onRequestFailed));
+        .WillOnce(Invoke([this](const JsonObject& message) {
+            // Legacy always includes lastConnectedState, as a bool, alongside paired and connected.
+            JsonObject payload(message);
+            EXPECT_EQ(Core::JSON::Variant::type::BOOLEAN, payload["lastConnectedState"].Content());
+            EXPECT_TRUE(payload["lastConnectedState"].Boolean());
+            this->onRequestFailed(message);
+        }));
 
     ON_CALL(*p_btmgrImplMock, BTRMGR_GetDeviceTypeAsString(BTRMGR_DEVICE_TYPE_LOUDSPEAKER))
         .WillByDefault(::testing::Return(TEST_DEVICE_TYPE_STR));
@@ -1328,7 +1442,7 @@ TEST_F(Bluetooth_L2Test, BluetoothOnRequestFailedPairing)
     msg.m_discoveredDevice.m_deviceType    = BTRMGR_DEVICE_TYPE_LOUDSPEAKER;
     msg.m_discoveredDevice.m_isPairedDevice = 0;
     msg.m_discoveredDevice.m_isConnected   = 0;
-    msg.m_discoveredDevice.m_isLastConnectedDevice = 0;
+    msg.m_discoveredDevice.m_isLastConnectedDevice = 1;
     strncpy(msg.m_discoveredDevice.m_name, TEST_DEVICE_NAME, BTRMGR_NAME_LEN_MAX - 1);
     injectBtEvent(msg);
 
@@ -1387,7 +1501,17 @@ TEST_F(Bluetooth_L2Test, BluetoothOnPlaybackNewTrack)
     EXPECT_EQ(Core::ERROR_NONE, status);
 
     EXPECT_CALL(async_handler, onPlaybackNewTrack(::testing::_))
-        .WillOnce(Invoke(this, &Bluetooth_L2Test::onPlaybackNewTrack));
+        .WillOnce(Invoke([this](const JsonObject& message) {
+            // Legacy sends the numeric track fields as strings, as getAudioInfo does.
+            JsonObject payload(message);
+            EXPECT_EQ(Core::JSON::Variant::type::STRING, payload["ui32Duration"].Content());
+            EXPECT_EQ(Core::JSON::Variant::type::STRING, payload["ui32TrackNumber"].Content());
+            EXPECT_EQ(Core::JSON::Variant::type::STRING, payload["ui32NumberOfTracks"].Content());
+            EXPECT_STREQ("200", payload["ui32Duration"].String().c_str());
+            EXPECT_STREQ("3", payload["ui32TrackNumber"].String().c_str());
+            EXPECT_STREQ("15", payload["ui32NumberOfTracks"].String().c_str());
+            this->onPlaybackNewTrack(message);
+        }));
 
     BTRMGR_EventMessage_t msg{};
     msg.m_adapterIndex = 0;
