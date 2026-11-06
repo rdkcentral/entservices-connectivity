@@ -557,7 +557,7 @@ bool BtSdkAdapterImpl::getDeviceProperties(const std::string& handleStr,
     }
     props.classOfDevice = sdkProps.classOfDevice.value_or(0);
     props.appearance    = sdkProps.appearance.value_or(0);
-    props.isGamePad     = AuthBridge::isGamepad(mac, props);
+    props.isGamePad     = AuthBridge::isGamepad(mac, sdkProps);
     // Mirrors BTRMGR_GetDeviceProperties: a paired device is answered from the paired list, which carries no RSSI,
     // so its rssi and signalLevel stay 0. Only a device that is not paired has them, from the scan results.
     // BlueZ's Paired flag decides, as a connected device is not necessarily paired.
