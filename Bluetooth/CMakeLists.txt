@@ -52,15 +52,15 @@ find_package(BLUETOOTH_SDK REQUIRED)
 
 add_subdirectory("${BLUETOOTH_SDK_STUB_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/bluetooth-sdk-stub")
 
-set(BLUETOOTH_TEST_BACKEND "BTMGR" CACHE STRING "Bluetooth adapter backend for L1/L2 test builds (BTMGR or SDK)")
-set_property(CACHE BLUETOOTH_TEST_BACKEND PROPERTY STRINGS BTMGR SDK)
+set(BLUETOOTH_TEST_BACKEND "ALL" CACHE STRING "Bluetooth backend test harnesses to build for L2 test builds (ALL, BTMGR or SDK)")
+set_property(CACHE BLUETOOTH_TEST_BACKEND PROPERTY STRINGS ALL BTMGR SDK)
 
 if (RDK_SERVICES_L1_TEST OR RDK_SERVICE_L2_TEST)
     string(TOUPPER "${BLUETOOTH_TEST_BACKEND}" BLUETOOTH_TEST_BACKEND)
-    if (NOT BLUETOOTH_TEST_BACKEND STREQUAL "BTMGR" AND NOT BLUETOOTH_TEST_BACKEND STREQUAL "SDK")
-        message(FATAL_ERROR "Bluetooth plugin: BLUETOOTH_TEST_BACKEND must be BTMGR or SDK")
+    if (NOT BLUETOOTH_TEST_BACKEND STREQUAL "ALL" AND NOT BLUETOOTH_TEST_BACKEND STREQUAL "BTMGR" AND NOT BLUETOOTH_TEST_BACKEND STREQUAL "SDK")
+        message(FATAL_ERROR "Bluetooth plugin: BLUETOOTH_TEST_BACKEND must be ALL, BTMGR or SDK")
     endif()
-    message(STATUS "Bluetooth plugin: test build - exercising ${BLUETOOTH_TEST_BACKEND} backend (both are compiled; BLUETOOTH_TEST_BACKEND only selects the L2 test harness)")
+    message(STATUS "Bluetooth plugin: test build - L2 harness backend(s): ${BLUETOOTH_TEST_BACKEND} (both backends are always compiled; the L1 tests cover both regardless)")
 
     # BtSdkAdapterImpl.cpp is always compiled now (see above), so its Manager
     # symbols always need a definition in test builds too, regardless of which
@@ -123,8 +123,8 @@ if (RDK_SERVICES_L1_TEST OR RDK_SERVICE_L2_TEST)
     # symbols always need Tests/mocks/bluetoothSDK.cpp's definitions, and
     # bluetooth::Adapter/Device/Manager always need shadowing with
     # GMock-friendly stubs (Tests/mocks/bluetooth/{Adapter,Device,Manager}.h),
-    # regardless of which backend BLUETOOTH_TEST_BACKEND selects for the L2
-    # test harness. Every other bluetooth-sdk header (Events.h, Status.h,
+    # regardless of which backend harnesses BLUETOOTH_TEST_BACKEND selects for
+    # the L2 tests. Every other bluetooth-sdk header (Events.h, Status.h,
     # Uuid.h, Appearance.h, ...) is resolved from the bundled
     # bluetooth-sdk-stub, since only Adapter/Device/Manager's shape needs to
     # diverge for GMock.

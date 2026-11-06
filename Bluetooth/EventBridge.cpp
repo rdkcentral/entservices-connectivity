@@ -19,6 +19,8 @@
 
 #include "EventBridge.h"
 
+#include <algorithm>
+
 #include <core/core.h>
 #include <UtilsLogging.h>
 
@@ -29,7 +31,8 @@ namespace Plugin {
 
 namespace {
 
-void populateDeviceFields(std::shared_ptr<bluetooth::Device> device,
+// Returns false, leaving the outputs unset, when the device has no valid handle and must not be reported.
+bool populateDeviceFields(std::shared_ptr<bluetooth::Device> device,
                           DeviceRegistry& registry,
                           std::string& outId, std::string& outName,
                           std::string& outType, uint32_t& outRaw, uint16_t& outBle) {
@@ -37,6 +40,10 @@ void populateDeviceFields(std::shared_ptr<bluetooth::Device> device,
     device->address(mac);
     outId = registry.getHandleForMac(mac);
     if (outId.empty()) outId = DeviceRegistry::deriveHandle(mac);
+    if (!DeviceRegistry::isValidHandle(outId)) {
+        LOGWARN("EventBridge: dropping event for device with invalid handle, mac=%s", mac.c_str());
+        return false;
+    }
 
     outName = deviceDisplayName(device);
 
@@ -59,6 +66,7 @@ void populateDeviceFields(std::shared_ptr<bluetooth::Device> device,
         }
     }
     if (outType.empty()) outType = "UNKNOWN DEVICE";
+    return true;
 }
 
 } // namespace
@@ -98,7 +106,7 @@ void EventBridge::onAdapterEvent(bluetooth::AdapterEvent event, bluetooth::Adapt
             std::string deviceId, name, deviceType;
             uint32_t rawType = 0;
             uint16_t bleType = 0;
-            populateDeviceFields(data.device, m_registry, deviceId, name, deviceType, rawType, bleType);
+            if (!populateDeviceFields(data.device, m_registry, deviceId, name, deviceType, rawType, bleType)) break;
 
             const bluetooth::DeviceState state = data.device->state();
             const bool paired = (state == bluetooth::DeviceState::Paired ||
@@ -120,7 +128,7 @@ void EventBridge::onAdapterEvent(bluetooth::AdapterEvent event, bluetooth::Adapt
             std::string deviceId, name, deviceType;
             uint32_t rawType = 0;
             uint16_t bleType = 0;
-            populateDeviceFields(data.device, m_registry, deviceId, name, deviceType, rawType, bleType);
+            if (!populateDeviceFields(data.device, m_registry, deviceId, name, deviceType, rawType, bleType)) break;
 
             const bluetooth::DeviceState state = data.device->state();
             const bool paired = (state == bluetooth::DeviceState::Paired ||
@@ -189,34 +197,32 @@ void EventBridge::worker() {
     }
 }
 
-void EventBridge::beginDeviceOperation(const std::shared_ptr<bluetooth::Device>& device) {
-    if (!device) return;
+EventBridge::OperationId EventBridge::beginDeviceOperation(const std::shared_ptr<bluetooth::Device>& device) {
+    if (!device) return 0;
     std::string mac;
     device->address(mac);
     std::lock_guard<std::mutex> lock(m_opsMutex);
-    DeviceOperation& op = m_ops[mac];
-    // active is a count because a new request may begin while the previous one is still awaiting its delayed
-    // release; the entry, and with it the holding of status changes, lasts until both have been released.
-    // Only status changes raised by this request decide whether its completion event must be synthesized.
-    // An overlapping request keeps the changes already seen for the entry.
-    if (op.active == 0) op.seen = 0;
-    ++op.active;
+    DeviceOperation op;
+    op.id = m_nextOpId++;
+    const OperationId id = op.id;
+    m_ops[mac].push_back(std::move(op));
+    return id;
 }
 
-void EventBridge::completeDeviceOperation(bluetooth::DeviceEvent event, std::shared_ptr<bluetooth::Device> device,
-                                          bool succeeded) {
-    if (!device) return;
+void EventBridge::completeDeviceOperation(OperationId id, bluetooth::DeviceEvent event,
+                                          std::shared_ptr<bluetooth::Device> device, bool succeeded) {
+    if (!device || id == 0) return;
     std::string mac;
     device->address(mac);
     // Status changes keep being held until the release runs, so ones the SDK raises just after the request
     // returned (it can return before raising them) are still delivered after the response, not ahead of it.
     enqueue(std::chrono::steady_clock::now() + kCompletionDelay,
-            [this, mac = std::move(mac), event, device = std::move(device), succeeded]() mutable {
-                releaseDeviceOperation(mac, event, std::move(device), succeeded);
+            [this, mac = std::move(mac), id, event, device = std::move(device), succeeded]() mutable {
+                releaseDeviceOperation(mac, id, event, std::move(device), succeeded);
             });
 }
 
-void EventBridge::releaseDeviceOperation(const std::string& mac, bluetooth::DeviceEvent event,
+void EventBridge::releaseDeviceOperation(const std::string& mac, OperationId id, bluetooth::DeviceEvent event,
                                          std::shared_ptr<bluetooth::Device> device, bool succeeded) {
     std::vector<HeldEvent> held;
     bool seen = false;
@@ -224,10 +230,13 @@ void EventBridge::releaseDeviceOperation(const std::string& mac, bluetooth::Devi
         std::lock_guard<std::mutex> lock(m_opsMutex);
         auto it = m_ops.find(mac);
         if (it == m_ops.end()) return;
-        held = std::move(it->second.held);
-        it->second.held.clear();
-        seen = (it->second.seen & (1u << static_cast<unsigned>(event))) != 0;
-        if (--it->second.active == 0) m_ops.erase(it);
+        auto& ops = it->second;
+        auto op = std::find_if(ops.begin(), ops.end(), [id](const DeviceOperation& o) { return o.id == id; });
+        if (op == ops.end()) return;
+        held = std::move(op->held);
+        seen = (op->seen & (1u << static_cast<unsigned>(event))) != 0;
+        ops.erase(op);
+        if (ops.empty()) m_ops.erase(it);
     }
     // Held changes are emitted in the order the SDK raised them, e.g. Connected then Paired while pairing.
     for (auto& h : held) emitDeviceEvent(h.event, std::move(h.device));
@@ -247,10 +256,11 @@ void EventBridge::onDeviceEvent(bluetooth::DeviceEvent event, std::shared_ptr<bl
     {
         std::lock_guard<std::mutex> lock(m_opsMutex);
         auto it = m_ops.find(mac);
-        if (it != m_ops.end()) {
-            // A pair/connect request for this device is in progress; hold the change until its response is out.
-            it->second.seen |= 1u << static_cast<unsigned>(event);
-            it->second.held.push_back({event, std::move(device)});
+        if (it != m_ops.end() && !it->second.empty()) {
+            // A pair/connect request for this device is in progress. Every running request saw the change, but
+            // only the newest holds it, so it is emitted once, after that request's response is out.
+            for (auto& op : it->second) op.seen |= 1u << static_cast<unsigned>(event);
+            it->second.back().held.push_back({event, std::move(device)});
             return;
         }
     }
@@ -294,7 +304,7 @@ void EventBridge::emitDeviceStatusChanged(const std::string& newStatus,
     std::string deviceId, name, deviceType;
     uint32_t rawType = 0;
     uint16_t bleType = 0;
-    populateDeviceFields(std::move(device), m_registry, deviceId, name, deviceType, rawType, bleType);
+    if (!populateDeviceFields(std::move(device), m_registry, deviceId, name, deviceType, rawType, bleType)) return;
 
     bool hasAutoConnect = false;
     bool autoConnect    = false;

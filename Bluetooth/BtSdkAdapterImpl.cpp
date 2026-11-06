@@ -358,8 +358,7 @@ IBtAdapter::BtDeviceInfo BtSdkAdapterImpl::deviceToInfo(
     if (device->getAllProperties(props)) {
         info.classOfDevice = props.classOfDevice.value_or(0);
         info.appearance    = props.appearance.value_or(0);
-        info.isGamePad     = (info.appearance == (static_cast<uint16_t>(bluetooth::Appearance::Category::HumanInterfaceDevice)
-                            | static_cast<uint16_t>(bluetooth::Appearance::SubCategory::Gamepad)));
+        info.isGamePad     = AuthBridge::isGamepad(mac, props);
         if (props.uuids.has_value()) info.uuids = props.uuids.value();
     }
     // BTMgr only ever reports BTRMGR_DEVICE_POWER_ACTIVE (1) for a connected device, never LOW or STANDBY.
@@ -381,7 +380,9 @@ std::vector<IBtAdapter::BtDeviceInfo> BtSdkAdapterImpl::getDiscoveredDevices() c
         std::string mac;
         d->address(mac);
         if (isHeld(mac)) continue;
-        result.push_back(deviceToInfo(d));
+        BtDeviceInfo info = deviceToInfo(d);
+        if (!DeviceRegistry::isValidHandle(info.handleStr)) continue;
+        result.push_back(std::move(info));
     }
     LOGINFO("BtSdkAdapterImpl::getDiscoveredDevices: exit count=%zu", result.size());
     return result;
@@ -398,8 +399,11 @@ bool BtSdkAdapterImpl::queryPairedDevices(std::vector<BtDeviceInfo>& out) const 
         LOGERR("BtSdkAdapterImpl::getPairedDevices: exit with error: adapter is unavailable");
         return false;
     }
-    for (auto& d : m_adapter->getDevices(bluetooth::DeviceState::Paired))
-        out.push_back(deviceToInfo(d));
+    for (auto& d : m_adapter->getDevices(bluetooth::DeviceState::Paired)) {
+        BtDeviceInfo info = deviceToInfo(d);
+        if (!DeviceRegistry::isValidHandle(info.handleStr)) continue;
+        out.push_back(std::move(info));
+    }
     LOGINFO("BtSdkAdapterImpl::getPairedDevices: exit count=%zu", out.size());
     return true;
 }
@@ -410,8 +414,11 @@ std::vector<IBtAdapter::BtDeviceInfo> BtSdkAdapterImpl::getConnectedDevices() co
         LOGERR("BtSdkAdapterImpl::getConnectedDevices: exit with error: adapter is unavailable");
         return result;
     }
-    for (auto& d : m_adapter->getDevices(bluetooth::DeviceState::Connected))
-        result.push_back(deviceToInfo(d));
+    for (auto& d : m_adapter->getDevices(bluetooth::DeviceState::Connected)) {
+        BtDeviceInfo info = deviceToInfo(d);
+        if (!DeviceRegistry::isValidHandle(info.handleStr)) continue;
+        result.push_back(std::move(info));
+    }
     LOGINFO("BtSdkAdapterImpl::getConnectedDevices: exit count=%zu", result.size());
     return result;
 }
@@ -452,11 +459,11 @@ bool BtSdkAdapterImpl::pairDevice(const std::string& handleStr) {
         return false;
     }
     // Hold this device's status changes so the PAIRING_CHANGE reaches the client after the pair response.
-    if (m_eventBridge) m_eventBridge->beginDeviceOperation(device);
+    const EventBridge::OperationId operationId = m_eventBridge ? m_eventBridge->beginDeviceOperation(device) : 0;
     OperationScope operation(*this, device);
     Status status = device->pair(true);
     // Called before the error check: a failed request must release its held changes too.
-    if (m_eventBridge) m_eventBridge->completeDeviceOperation(bluetooth::DeviceEvent::Paired, device, bool(status));
+    if (m_eventBridge) m_eventBridge->completeDeviceOperation(operationId, bluetooth::DeviceEvent::Paired, device, bool(status));
     if (!status) {
         sendTelemetry("BTPairFail_split", telemetryDeviceInfo(device));
         LOGERR("BtSdkAdapterImpl::pairDevice: exit with error: %s", status.get_message().c_str());
@@ -496,12 +503,12 @@ bool BtSdkAdapterImpl::connectDevice(const std::string& handleStr, const std::st
         return false;
     }
     // Hold this device's status changes so the CONNECTION_CHANGE reaches the client after the connect response.
-    if (m_eventBridge) m_eventBridge->beginDeviceOperation(device);
+    const EventBridge::OperationId operationId = m_eventBridge ? m_eventBridge->beginDeviceOperation(device) : 0;
     OperationScope operation(*this, device);
     Status status = device->connect(true);
     // A device BlueZ connected while pairing is already connected, so no new SDK event arrives.
     // Called before the error check: a failed request must release its held changes too.
-    if (m_eventBridge) m_eventBridge->completeDeviceOperation(bluetooth::DeviceEvent::Connected, device, bool(status));
+    if (m_eventBridge) m_eventBridge->completeDeviceOperation(operationId, bluetooth::DeviceEvent::Connected, device, bool(status));
     if (!status) {
         sendTelemetry("BTConnFail_split", telemetryDeviceInfo(device));
         LOGERR("BtSdkAdapterImpl::connectDevice: exit with error: %s", status.get_message().c_str());
@@ -550,8 +557,7 @@ bool BtSdkAdapterImpl::getDeviceProperties(const std::string& handleStr,
     }
     props.classOfDevice = sdkProps.classOfDevice.value_or(0);
     props.appearance    = sdkProps.appearance.value_or(0);
-    props.isGamePad     = (props.appearance == (static_cast<uint16_t>(bluetooth::Appearance::Category::HumanInterfaceDevice)
-                        | static_cast<uint16_t>(bluetooth::Appearance::SubCategory::Gamepad)));
+    props.isGamePad     = AuthBridge::isGamepad(mac, props);
     // Mirrors BTRMGR_GetDeviceProperties: a paired device is answered from the paired list, which carries no RSSI,
     // so its rssi and signalLevel stay 0. Only a device that is not paired has them, from the scan results.
     // BlueZ's Paired flag decides, as a connected device is not necessarily paired.
@@ -728,6 +734,7 @@ bool BtSdkAdapterImpl::runAutoConnectPass(bool secondAttempt) {
         std::string mac;
         device->address(mac);
         const std::string handle = DeviceRegistry::deriveHandle(mac);
+        if (!DeviceRegistry::isValidHandle(handle)) continue;
         if (AuthBridge::isAudioOutputType(m_authBridge->resolveDeviceType(device, handle))) {
             LOGINFO("exit: an audio output device is already connected");
             return false;
@@ -747,6 +754,7 @@ bool BtSdkAdapterImpl::runAutoConnectPass(bool secondAttempt) {
         std::string mac;
         device->address(mac);
         std::string handle = DeviceRegistry::deriveHandle(mac);
+        if (!DeviceRegistry::isValidHandle(handle)) continue;
         std::string type = m_authBridge->resolveDeviceType(device, handle);
         LOGINFO("paired device: mac=%s handle=%s type=%s audioOutput=%d",
                 mac.c_str(), handle.c_str(), type.c_str(), AuthBridge::isAudioOutputType(type));
@@ -845,6 +853,7 @@ void BtSdkAdapterImpl::setGamepadStandbyMode(bool standby) {
         bluetooth::DeviceProperties props;
         const bool le = device->getAllProperties(props) && props.classOfDevice.value_or(0) == 0;
         std::string handle = DeviceRegistry::deriveHandle(mac);
+        if (!DeviceRegistry::isValidHandle(handle)) continue;
         std::string type = m_authBridge->resolveDeviceType(device, handle);
         managed.push_back({device, std::move(handle), std::move(type), le});
     }
@@ -895,7 +904,9 @@ std::vector<std::shared_ptr<bluetooth::Device>> BtSdkAdapterImpl::managedHidDevi
         device->address(mac);
         bluetooth::DeviceProperties props;
         if (!device->getAllProperties(props)) continue;
-        const std::string type = m_authBridge->resolveDeviceType(device, DeviceRegistry::deriveHandle(mac));
+        const std::string handle = DeviceRegistry::deriveHandle(mac);
+        if (!DeviceRegistry::isValidHandle(handle)) continue;
+        const std::string type = m_authBridge->resolveDeviceType(device, handle);
         if (AuthBridge::isManagedHidDevice(type, mac, props)) result.push_back(device);
     }
     return result;
@@ -965,9 +976,11 @@ void BtSdkAdapterImpl::onAdapterEvent(bluetooth::AdapterEvent event,
             if (m_standbyHeld.erase(mac) > 0) filtered = true;
         }
         m_registry.unregisterDevice(mac);
-        std::string handle = DeviceRegistry::deriveHandle(mac);
-        std::lock_guard<std::mutex> lock(m_devicesMutex);
-        m_devicesByHandle.erase(handle);
+        const std::string handle = DeviceRegistry::deriveHandle(mac);
+        if (DeviceRegistry::isValidHandle(handle)) {
+            std::lock_guard<std::mutex> lock(m_devicesMutex);
+            m_devicesByHandle.erase(handle);
+        }
     }
     if (filtered) {
         LOGINFO("BtSdkAdapterImpl::onAdapterEvent: exit device suppressed by legacy scan filter");
@@ -986,6 +999,10 @@ void BtSdkAdapterImpl::registerDeviceEvents(std::shared_ptr<bluetooth::Device> d
     std::string mac;
     device->address(mac);
     std::string handle = DeviceRegistry::deriveHandle(mac);
+    if (!DeviceRegistry::isValidHandle(handle)) {
+        LOGERR("BtSdkAdapterImpl::registerDeviceEvents: exit with error: invalid handle for mac=%s", mac.c_str());
+        return;
+    }
 
     if (m_registry.getDeviceType(handle).empty()) {
         bluetooth::DeviceProperties props;
@@ -1229,7 +1246,8 @@ void BtSdkAdapterImpl::releaseDevice(bluetooth::AdapterEventData&& event) {
         const std::string type = DeviceTypeClassifier::classify(props.appearance.value_or(0),
                                                                 props.classOfDevice.value_or(0),
                                                                 props.uuids.value_or(std::vector<std::string>{}));
-        if (type != "UNKNOWN DEVICE") m_registry.setDeviceType(DeviceRegistry::deriveHandle(mac), type);
+        const std::string handle = DeviceRegistry::deriveHandle(mac);
+        if (type != "UNKNOWN DEVICE" && DeviceRegistry::isValidHandle(handle)) m_registry.setDeviceType(handle, type);
     }
 
     // The scan filter could not judge the type yet when the device was first seen.

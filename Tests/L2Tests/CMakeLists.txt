@@ -23,11 +23,17 @@ set(THUNDER_PORT 9998)
 find_package(${NAMESPACE}Plugins REQUIRED)
 
 if(PLUGIN_BLUETOOTH)
+    # ALL (the default) builds both harnesses so one L2 run covers the BTMgr and SDK backends.
+    # Each suite activates and deactivates the plugin itself, so they run back to back.
     string(TOUPPER "${BLUETOOTH_TEST_BACKEND}" BLUETOOTH_L2_TEST_BACKEND)
-    if(BLUETOOTH_L2_TEST_BACKEND STREQUAL "SDK")
-        set(BLUETOOTH_L2_TEST_SOURCE tests/Bluetooth_Sdk_L2Test.cpp)
-    else()
-        set(BLUETOOTH_L2_TEST_SOURCE tests/Bluetooth_L2Test.cpp)
+    set(BLUETOOTH_L2_TEST_SOURCE)
+    set(BLUETOOTH_L2_HAS_SDK_HARNESS FALSE)
+    if(NOT BLUETOOTH_L2_TEST_BACKEND STREQUAL "SDK")
+        list(APPEND BLUETOOTH_L2_TEST_SOURCE tests/Bluetooth_L2Test.cpp)
+    endif()
+    if(NOT BLUETOOTH_L2_TEST_BACKEND STREQUAL "BTMGR")
+        list(APPEND BLUETOOTH_L2_TEST_SOURCE tests/Bluetooth_Sdk_L2Test.cpp)
+        set(BLUETOOTH_L2_HAS_SDK_HARNESS TRUE)
     endif()
 
     set(SRC_FILES ${SRC_FILES} ${BLUETOOTH_L2_TEST_SOURCE})
@@ -52,7 +58,7 @@ if(SRC_FILES)
     target_compile_options(${MODULE_NAME} PRIVATE -Wno-error)
     target_link_libraries(${MODULE_NAME} PRIVATE ${NAMESPACE}Plugins::${NAMESPACE}Plugins)
 
-    if(BLUETOOTH_L2_TEST_BACKEND STREQUAL "SDK" AND TARGET ${NAMESPACE}Bluetooth)
+    if(BLUETOOTH_L2_HAS_SDK_HARNESS AND TARGET ${NAMESPACE}Bluetooth)
         target_link_libraries(${MODULE_NAME} PRIVATE ${NAMESPACE}Bluetooth)
     endif()
 
@@ -86,13 +92,15 @@ if(SRC_FILES)
         ${CMAKE_INSTALL_PREFIX}/include
         )
 
-    if(BLUETOOTH_L2_TEST_BACKEND STREQUAL "SDK")
+    if(BLUETOOTH_L2_HAS_SDK_HARNESS)
         # So the test can #include "BtAdapter.h" / "BtSdkAdapterImpl.h" to
         # inject the real bluetooth-sdk-backed adapter via BtAdapter::setImpl().
         # bluetoothSDKMock.h pulls in bluetooth/{Adapter,Device,Manager}.h from
         # Tests/mocks (GMock-friendly stubs); every other bluetooth-sdk header
         # falls back to the bundled bluetooth-sdk-stub.
-        target_include_directories(${MODULE_NAME} PRIVATE
+        # Scoped to the SDK harness: the plugin's Module.h and the stub's generic header
+        # names (Status.h, Events.h, ...) must not leak into the BTMgr harness.
+        set_property(SOURCE tests/Bluetooth_Sdk_L2Test.cpp APPEND PROPERTY INCLUDE_DIRECTORIES
             ${CMAKE_SOURCE_DIR}/Bluetooth
             ${CMAKE_SOURCE_DIR}/Bluetooth/bluetooth-sdk-stub/include)
     endif()

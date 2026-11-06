@@ -48,6 +48,7 @@ flowchart LR
 ### Repository structure walkthrough
 
 - `Tests/L1Tests/tests/test_Bluetooth.cpp`: test fixture + test cases.
+- `Tests/L1Tests/tests/test_BluetoothBtmgrAdapter.cpp` and `Tests/L1Tests/tests/test_BluetoothSdkAdapter.cpp`: the real `BtMgrAdapterImpl` and `BtSdkAdapterImpl` against the BTMgr and bluetooth-sdk mocks, so both backends run in every L1 run.
 - `Tests/L1Tests/tests/CMakeLists.txt`: present but empty.
 
 ### File-by-file breakdown

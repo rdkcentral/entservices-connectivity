@@ -102,8 +102,12 @@ bool AuthBridge::onAuthRequest(bluetooth::AuthorisationType type, std::shared_pt
     std::string mac;
     device->address(mac);
     const std::string handleStr = m_registry.getHandleForMac(mac);
-    const std::string deviceType = resolveDeviceType(device,
-        handleStr.empty() ? DeviceRegistry::deriveHandle(mac) : handleStr);
+    const std::string devId = handleStr.empty() ? DeviceRegistry::deriveHandle(mac) : handleStr;
+    if (!DeviceRegistry::isValidHandle(devId)) {
+        LOGWARN("AuthBridge: rejecting authorisation request from device with invalid handle, mac=%s", mac.c_str());
+        return false;
+    }
+    const std::string deviceType = resolveDeviceType(device, devId);
 
     // ── PairingRequest: always escalate to client ────────────────────────────
     if (type == bluetooth::AuthorisationType::PairingRequest) {
@@ -122,7 +126,6 @@ bool AuthBridge::onAuthRequest(bluetooth::AuthorisationType type, std::shared_pt
         }
         std::string deviceAddress;
         device->address(deviceAddress);
-        const std::string devId = handleStr.empty() ? DeviceRegistry::deriveHandle(mac) : handleStr;
 
         auto pending = std::make_shared<PendingAuth>();
         {
@@ -195,6 +198,10 @@ AuthBridge::ConnectDecision AuthBridge::decideConnection(std::shared_ptr<bluetoo
     device->address(mac);
     std::string devId = m_registry.getHandleForMac(mac);
     if (devId.empty()) devId = DeviceRegistry::deriveHandle(mac);
+    if (!DeviceRegistry::isValidHandle(devId)) {
+        LOGWARN("AuthBridge: rejecting connection from device with invalid handle, mac=%s", mac.c_str());
+        return ConnectDecision::Rejected;
+    }
     const std::string deviceType = resolveDeviceType(device, devId);
 
     bool accept = false;

@@ -234,8 +234,8 @@ The existing plan checks *what the API does*; the following checks target the *b
 
 These are developer-level suites; QA should confirm they pass in CI for the build under test and use them as evidence.
 
-- **L1** ([test_Bluetooth.cpp](../Tests/L1Tests/tests/test_Bluetooth.cpp)) — plugin logic with a mocked `IBtAdapter`; backend-agnostic.
-- **L2, BTMgr harness** ([Bluetooth_L2Test.cpp](../Tests/L2Tests/tests/Bluetooth_L2Test.cpp)) and **L2, SDK harness** ([Bluetooth_Sdk_L2Test.cpp](../Tests/L2Tests/tests/Bluetooth_Sdk_L2Test.cpp), including `StartupReconnect_*`, one of which takes ~41 s). Both backends are compiled in test builds; `BLUETOOTH_TEST_BACKEND` (BTMGR or SDK) selects the L2 harness.
+- **L1** ([test_Bluetooth.cpp](../Tests/L1Tests/tests/test_Bluetooth.cpp)) — plugin logic with a mocked `IBtAdapter`; backend-agnostic. Every L1 run also covers both backends: [test_BluetoothBtmgrAdapter.cpp](../Tests/L1Tests/tests/test_BluetoothBtmgrAdapter.cpp) runs the real `BtMgrAdapterImpl` against `BtmgrImplMock`, and [test_BluetoothSdkAdapter.cpp](../Tests/L1Tests/tests/test_BluetoothSdkAdapter.cpp) runs the real `BtSdkAdapterImpl` against the GMock `bluetooth::Manager`/`Adapter` stubs.
+- **L2, BTMgr harness** ([Bluetooth_L2Test.cpp](../Tests/L2Tests/tests/Bluetooth_L2Test.cpp)) and **L2, SDK harness** ([Bluetooth_Sdk_L2Test.cpp](../Tests/L2Tests/tests/Bluetooth_Sdk_L2Test.cpp), including `StartupReconnect_*`, one of which takes ~41 s). Both are built and run in every L2 run. `BLUETOOTH_TEST_BACKEND` defaults to `ALL`; set it to `BTMGR` or `SDK` to build only one L2 harness locally.
 - Details: [bluetooth-l1-tests.md](./bluetooth-l1-tests.md), [Tests/README.md](../Tests/README.md).
 
 ### 6.8 Pass / fail criteria and defect triage

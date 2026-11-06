@@ -29,7 +29,7 @@ namespace Plugin {
 
 // static
 std::string DeviceRegistry::deriveHandle(const std::string& mac) {
-    // Expect "XX:XX:XX:XX:XX:XX"; "0" is the established failure value (callers require non-empty).
+    // Expect "XX:XX:XX:XX:XX:XX"; kInvalidHandle is the established failure value. Callers must check isValidHandle().
     bool valid = (mac.size() == 17);
     for (size_t i = 0; valid && i < 17; ++i) {
         if ((i % 3) == 2) {
@@ -40,7 +40,7 @@ std::string DeviceRegistry::deriveHandle(const std::string& mac) {
     }
     if (!valid) {
         LOGWARN("Invalid MAC address for handle derivation: '%s'", mac.c_str());
-        return "0";
+        return kInvalidHandle;
     }
     char hexStr[13] = {};
     hexStr[0]  = mac[0];  hexStr[1]  = mac[1];
@@ -54,8 +54,14 @@ std::string DeviceRegistry::deriveHandle(const std::string& mac) {
     return std::to_string(handle);
 }
 
+// static
+bool DeviceRegistry::isValidHandle(const std::string& handle) {
+    return !handle.empty() && handle != kInvalidHandle;
+}
+
 void DeviceRegistry::registerDevice(const std::string& mac) {
     std::string handle = deriveHandle(mac);
+    if (!isValidHandle(handle)) return;
     std::lock_guard<std::mutex> lock(m_mutex);
     m_macToHandle[mac] = handle;
 }

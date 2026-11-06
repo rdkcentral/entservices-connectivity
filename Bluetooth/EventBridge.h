@@ -21,6 +21,7 @@
 
 #include <chrono>
 #include <condition_variable>
+#include <cstdint>
 #include <deque>
 #include <functional>
 #include <memory>
@@ -77,10 +78,14 @@ public:
     // beginDeviceOperation() holds back the device's status changes while the request runs.
     // completeDeviceOperation() releases them kCompletionDelay later and, if the request succeeded but the SDK
     // reported no `event` (e.g. a connect to a device BlueZ already connected while pairing), emits it.
-    // Every beginDeviceOperation() must be matched by a completeDeviceOperation().
-    void beginDeviceOperation(const std::shared_ptr<bluetooth::Device>& device);
-    void completeDeviceOperation(bluetooth::DeviceEvent event, std::shared_ptr<bluetooth::Device> device,
-                                 bool succeeded);
+    // Every beginDeviceOperation() must be matched by a completeDeviceOperation() with the id it returned.
+    // Held changes and the seen mask are kept per operation, so overlapping requests for one device do not
+    // release or judge each other's events. A change is held by the newest operation running when it arrives
+    // and counts as seen for every operation running at that time.
+    using OperationId = uint64_t;
+    OperationId beginDeviceOperation(const std::shared_ptr<bluetooth::Device>& device);
+    void completeDeviceOperation(OperationId id, bluetooth::DeviceEvent event,
+                                 std::shared_ptr<bluetooth::Device> device, bool succeeded);
 
     // Stops the worker and drops undelivered status changes. Called before the SDK objects are released.
     void stop();
@@ -91,9 +96,9 @@ private:
         std::shared_ptr<bluetooth::Device> device;
     };
     struct DeviceOperation {
-        unsigned active = 0;                 // requests in progress (or awaiting their delayed release)
-        unsigned seen = 0;                   // bit mask of DeviceEvent since the latest beginDeviceOperation()
-        std::vector<HeldEvent> held;         // status changes withheld until the request's response has gone out
+        OperationId id = 0;
+        unsigned seen = 0;                   // bit mask of DeviceEvent raised since this request began
+        std::vector<HeldEvent> held;         // status changes withheld until this request's response has gone out
     };
     struct Task {
         std::chrono::steady_clock::time_point due;
@@ -104,7 +109,7 @@ private:
     void emitDeviceStatusChanged(const std::string& newStatus,
                                  std::shared_ptr<bluetooth::Device> device,
                                  bool paired, bool connected);
-    void releaseDeviceOperation(const std::string& mac, bluetooth::DeviceEvent event,
+    void releaseDeviceOperation(const std::string& mac, OperationId id, bluetooth::DeviceEvent event,
                                 std::shared_ptr<bluetooth::Device> device, bool succeeded);
 
     // Device status changes are delivered in order on one worker thread; a task does not run before its due time.
@@ -119,7 +124,8 @@ private:
     BtEventCallbacks m_callbacks;
 
     std::mutex m_opsMutex;
-    std::unordered_map<std::string, DeviceOperation> m_ops;   // MAC -> request in progress
+    std::unordered_map<std::string, std::vector<DeviceOperation>> m_ops;   // MAC -> requests not yet released, oldest first
+    OperationId m_nextOpId = 1;
 
     std::mutex m_taskMutex;
     std::condition_variable m_taskCv;

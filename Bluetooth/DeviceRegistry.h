@@ -41,8 +41,14 @@ public:
     DeviceRegistry(const DeviceRegistry&) = delete;
     DeviceRegistry& operator=(const DeviceRegistry&) = delete;
 
-    // Derives the stable numeric handle string from a MAC address.
+    // Value deriveHandle() returns for a malformed MAC, matching BTCore's device ID 0.
+    static constexpr const char* kInvalidHandle = "0";
+
+    // Derives the stable numeric handle string from a MAC address. Returns kInvalidHandle for a malformed MAC.
     static std::string deriveHandle(const std::string& mac);
+
+    // True for a handle that identifies a device: neither empty nor kInvalidHandle.
+    static bool isValidHandle(const std::string& handle);
 
     // Register a device MAC address (derives and caches its handle).
     void registerDevice(const std::string& mac);
