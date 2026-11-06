@@ -1,0 +1,291 @@
+/**
+* If not stated otherwise in this file or this component's LICENSE
+* file the following copyright and licenses apply:
+*
+* Copyright 2026 RDK Management
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+* http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+**/
+
+#include "AuthBridge.h"
+
+#include <bluetooth/Appearance.h>
+#include <core/core.h>
+#include <UtilsLogging.h>
+
+#include "DiscoveryNameGate.h"
+#include "ScanFilterPolicy.h"
+
+namespace WPEFramework {
+namespace Plugin {
+
+namespace {
+
+bool isHidType(const std::string& deviceType) {
+    return deviceType == "HUMAN INTERFACE DEVICE";
+}
+
+} // namespace
+
+// Device types the BTMgr connection policy treats as audio output (mirrors btrMgr_ConnectionInAuthenticationCb).
+bool AuthBridge::isAudioOutputType(const std::string& deviceType) {
+    return deviceType == "HEADPHONES"
+        || deviceType == "LOUDSPEAKER"
+        || deviceType == "WEARABLE HEADSET"
+        || deviceType == "HANDSFREE"
+        || deviceType == "HIFI AUDIO DEVICE";
+}
+
+bool AuthBridge::isRemoteControl(const std::string& mac, const bluetooth::DeviceProperties& props) {
+    return ScanFilterPolicy::isRemoteControl(mac, props.appearance.value_or(0));
+}
+
+bool AuthBridge::isLeGamepad(const bluetooth::DeviceProperties& props) {
+    return props.appearance.value_or(0)
+        == (static_cast<uint16_t>(bluetooth::Appearance::Category::HumanInterfaceDevice)
+          | static_cast<uint16_t>(bluetooth::Appearance::SubCategory::Gamepad));
+}
+
+bool AuthBridge::isGamepad(const std::string& mac, const bluetooth::DeviceProperties& props) {
+    if (isRemoteControl(mac, props)) return false;
+    return isLeGamepad(props) || DiscoveryNameGate::isController(props.classOfDevice.value_or(0));
+}
+
+bool AuthBridge::isManagedHidDevice(const std::string& deviceType, const std::string& mac,
+                                    const bluetooth::DeviceProperties& props) {
+    return isHidType(deviceType) && !isRemoteControl(mac, props);
+}
+
+std::string AuthBridge::resolveDeviceType(const std::shared_ptr<bluetooth::Device>& device, const std::string& handleStr) {
+    std::string type = m_registry.getDeviceType(handleStr);
+    if (!device || (!type.empty() && type != "UNKNOWN DEVICE")) return type;
+
+    // The type cached when the device was first seen can predate its properties (e.g. a paired device at boot).
+    bluetooth::DeviceProperties props;
+    if (device->getAllProperties(props)) {
+        std::string classified = DeviceTypeClassifier::classify(props.appearance.value_or(0),
+                                                                      props.classOfDevice.value_or(0),
+                                                                      props.uuids.value_or(std::vector<std::string>{}));
+        if (classified != "UNKNOWN DEVICE") {
+            m_registry.setDeviceType(handleStr, classified);
+            type = std::move(classified);
+        }
+    }
+    return type;
+}
+
+bool AuthBridge::getLastConnectTime(const std::string& handleStr, long long& lastConnectTimeUtc) const {
+    return m_callbacks.getLastConnectTime && m_callbacks.getLastConnectTime(handleStr, lastConnectTimeUtc);
+}
+
+bool AuthBridge::isLegacyAutoConnect(const std::string& handleStr) const {
+    return m_callbacks.isLegacyAutoConnect && m_callbacks.isLegacyAutoConnect(handleStr);
+}
+
+void AuthBridge::onAutoConnected(const std::string& handleStr) const {
+    if (m_callbacks.onAutoConnected) m_callbacks.onAutoConnected(handleStr);
+}
+
+bool AuthBridge::onAuthRequest(bluetooth::AuthorisationType type, std::shared_ptr<bluetooth::Device> device) {
+    if (!device) return false;
+
+    std::string mac;
+    device->address(mac);
+    const std::string handleStr = m_registry.getHandleForMac(mac);
+    const std::string devId = handleStr.empty() ? DeviceRegistry::deriveHandle(mac) : handleStr;
+    if (!DeviceRegistry::isValidHandle(devId)) {
+        LOGWARN("AuthBridge: rejecting authorisation request from device with invalid handle, mac=%s", mac.c_str());
+        return false;
+    }
+    const std::string deviceType = resolveDeviceType(device, devId);
+
+    // ── PairingRequest: always escalate to client ────────────────────────────
+    if (type == bluetooth::AuthorisationType::PairingRequest) {
+        // Intentionally unchanged: Bluetooth::Initialize() always registers onPairingRequest before the adapter is
+        // initialised, so this no-callback branch is unreachable in production (consider failing closed if that changes).
+        if (!m_callbacks.onPairingRequest) return true;
+
+        std::string name;
+        device->name(name);
+        bluetooth::DeviceProperties props;
+        uint32_t vendorId = 0;
+        if (device->getAllProperties(props) && props.manufacturerData.has_value()) {
+            if (!props.manufacturerData.value().empty()) {
+                vendorId = props.manufacturerData.value().begin()->first;
+            }
+        }
+        std::string deviceAddress;
+        device->address(deviceAddress);
+
+        auto pending = std::make_shared<PendingAuth>();
+        {
+            std::lock_guard<std::mutex> lock(m_pendingMutex);
+            if (m_shutdown) return false;
+            m_pendingAuths[mac] = pending;
+        }
+
+        m_callbacks.onPairingRequest(devId, name, deviceType, vendorId, deviceAddress, "", false, 0);
+
+        bool answered = false;
+        bool accepted = false;
+        {
+            std::unique_lock<std::mutex> lk(m_pendingMutex);
+            answered = pending->cv.wait_for(lk,
+                std::chrono::seconds(AUTH_TIMEOUT_SECONDS),
+                [this, &pending]{ return pending->resolved || m_shutdown; });
+            accepted = pending->resolved && pending->accepted;
+        }
+        erasePending(mac, pending);
+
+        if (!answered) {
+            LOGERR("Auth timeout for pairing request from %s, auto-rejecting", mac.c_str());
+        }
+        return accepted;
+    }
+
+    // ── ConnectionRequest ────────────────────────────────────────────────────
+
+    // A connection the plugin itself is making (e.g. while pairing) is not for the autoconnect status or the client to decide.
+    if (m_isOperationInProgress && m_isOperationInProgress(mac)) {
+        LOGINFO("AuthBridge: accepting connection from %s (%s), the plugin is pairing or connecting it",
+                mac.c_str(), deviceType.c_str());
+        return true;
+    }
+
+    bluetooth::DeviceProperties props;
+    const bool gamepad = device->getAllProperties(props) && isGamepad(mac, props);
+
+    // BTMgr does not let a gamepad connect while the box is in standby.
+    if (gamepad && m_isGamepadStandby && m_isGamepadStandby()) {
+        LOGINFO("AuthBridge: rejecting connection from gamepad %s (%s), gamepad standby mode is on",
+                mac.c_str(), deviceType.c_str());
+        return false;
+    }
+
+    // Auto-accept policy for paired HID devices that are not gamepads and not in cooldown.
+    if (!gamepad && isAutoAcceptDevice(deviceType, device)) {
+        LOGINFO("AuthBridge: auto-accepting connection from %s (%s)", mac.c_str(), deviceType.c_str());
+        return true;
+    }
+
+    // Everything else follows the BTMgr policy: autoconnect status when migrated, otherwise the client decides.
+    // Audio output devices and gamepads only get a short window, as in BTMgr; the startup reconnect retries later.
+    std::chrono::milliseconds timeout{std::chrono::seconds(AUTH_TIMEOUT_SECONDS)};
+    if (isAudioOutputType(deviceType)) {
+        timeout = std::chrono::milliseconds(AUDIO_AUTH_TIMEOUT_MS);
+    } else if (gamepad) {
+        timeout = std::chrono::milliseconds(isLeGamepad(props) ? LE_GAMEPAD_AUTH_TIMEOUT_MS : GAMEPAD_AUTH_TIMEOUT_MS);
+    }
+    const ConnectDecision decision = decideConnection(std::move(device), timeout);
+    return decision == ConnectDecision::AcceptedAuto || decision == ConnectDecision::AcceptedByClient;
+}
+
+AuthBridge::ConnectDecision AuthBridge::decideConnection(std::shared_ptr<bluetooth::Device> device,
+                                                         std::chrono::milliseconds clientTimeout) {
+    if (!device) return ConnectDecision::Rejected;
+
+    std::string mac;
+    device->address(mac);
+    std::string devId = m_registry.getHandleForMac(mac);
+    if (devId.empty()) devId = DeviceRegistry::deriveHandle(mac);
+    if (!DeviceRegistry::isValidHandle(devId)) {
+        LOGWARN("AuthBridge: rejecting connection from device with invalid handle, mac=%s", mac.c_str());
+        return ConnectDecision::Rejected;
+    }
+    const std::string deviceType = resolveDeviceType(device, devId);
+
+    bool accept = false;
+    if (m_callbacks.getConnectAutoResponse && m_callbacks.getConnectAutoResponse(devId, accept)) {
+        LOGINFO("AuthBridge: connection from %s (%s) %s by autoconnect status",
+                mac.c_str(), deviceType.c_str(), accept ? "accepted" : "rejected");
+        return accept ? ConnectDecision::AcceptedAuto : ConnectDecision::Rejected;
+    }
+
+    if (!m_callbacks.onConnectionRequest) return ConnectDecision::Rejected;
+
+    std::string name;
+    device->name(name);
+    std::string deviceAddress;
+    device->address(deviceAddress);
+
+    auto pending = std::make_shared<PendingAuth>();
+    {
+        std::lock_guard<std::mutex> lock(m_pendingMutex);
+        if (m_shutdown) return ConnectDecision::Rejected;
+        m_pendingAuths[mac] = pending;
+    }
+
+    m_callbacks.onConnectionRequest(devId, name, deviceType, 0, deviceAddress, "");
+
+    bool answered = false;
+    bool accepted = false;
+    {
+        std::unique_lock<std::mutex> lk(m_pendingMutex);
+        answered = pending->cv.wait_for(lk, clientTimeout,
+                                        [this, &pending]{ return pending->resolved || m_shutdown; });
+        accepted = pending->resolved && pending->accepted;
+    }
+    erasePending(mac, pending);
+
+    if (!answered) {
+        LOGERR("Auth timeout for connection request from %s, auto-rejecting", mac.c_str());
+        return ConnectDecision::TimedOut;
+    }
+    return accepted ? ConnectDecision::AcceptedByClient : ConnectDecision::Rejected;
+}
+
+void AuthBridge::shutdown() {
+    std::lock_guard<std::mutex> lock(m_pendingMutex);
+    m_shutdown = true;
+    for (auto& entry : m_pendingAuths) {
+        entry.second->cv.notify_all();
+    }
+}
+
+// Erases only this request's entry: a newer request for the same MAC may have replaced it.
+void AuthBridge::erasePending(const std::string& mac, const std::shared_ptr<PendingAuth>& pending) {
+    std::lock_guard<std::mutex> lock(m_pendingMutex);
+    auto it = m_pendingAuths.find(mac);
+    if (it != m_pendingAuths.end() && it->second == pending) m_pendingAuths.erase(it);
+}
+
+bool AuthBridge::onRespondToEvent(const std::string& mac, bool accepted) {
+    std::lock_guard<std::mutex> lock(m_pendingMutex);
+    auto it = m_pendingAuths.find(mac);
+    if (it == m_pendingAuths.end() || m_shutdown) return false;
+
+    it->second->accepted  = accepted;
+    it->second->resolved  = true;
+    it->second->cv.notify_all();
+    return true;
+}
+
+bool AuthBridge::isAutoAcceptDevice(const std::string& deviceType,
+                                    std::shared_ptr<bluetooth::Device> device) const {
+    if (!isHidType(deviceType)) {
+        return false;
+    }
+
+    // Must be in Paired state.
+    const bluetooth::DeviceState state = device->state();
+    if (state != bluetooth::DeviceState::Paired && state != bluetooth::DeviceState::Connected) {
+        return false;
+    }
+
+    // Cooldown check is handled by the SDK's Agent before calling our callback.
+    // If we reach here the SDK already passed the cooldown check.
+    return true;
+}
+
+} // namespace Plugin
+} // namespace WPEFramework

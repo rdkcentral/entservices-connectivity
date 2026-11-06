@@ -28,24 +28,27 @@
 #include <core/core.h>
 #include "UtilsJsonRpc.h"
 
-#define PERSISTENT_STORE_CALLSIGN "org.rdk.PersistentStore"
-#define PERSISTENT_STORE_NAMESPACE "Bluetooth"
-#define PERSISTENT_STORE_KEY_DEVICE_INFO "deviceInfo"
-#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
-#define PERSISTENT_STORE_KEY_MIGRATION_VERSION "migrationVersion"
-#define BLUETOOTH_MIGRATION_VERSION "1"
-#endif
-
 namespace WPEFramework {
     namespace Plugin {
 
-        typedef enum _AutoConnectStatus {
+        static constexpr const char* PERSISTENT_STORE_CALLSIGN = "org.rdk.PersistentStore";
+        static constexpr const char* PERSISTENT_STORE_NAMESPACE = "Bluetooth";
+        static constexpr const char* PERSISTENT_STORE_KEY_DEVICE_INFO = "deviceInfo";
+#ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+        static constexpr const char* PERSISTENT_STORE_KEY_MIGRATION_VERSION = "migrationVersion";
+        static constexpr const char* BLUETOOTH_MIGRATION_VERSION = "1";
+#endif
+
+        // Forward declaration to avoid circular includes.
+        class IBtAdapter;
+
+        enum AutoConnectStatus {
             AUTO_CONNECT_STATUS_DISABLED    = 0,
             AUTO_CONNECT_STATUS_ENABLED     = 1,
             AUTO_CONNECT_STATUS_UNSET       = 2
-        } AutoConnectStatus;
+        };
 
-        typedef struct _BluetoothDeviceInfo {
+        struct BluetoothDeviceInfo {
             std::string         deviceAddr          = "";
             std::string         deviceType          = "UNKNOWN";
             std::string         friendlyName        = "";
@@ -54,7 +57,7 @@ namespace WPEFramework {
             std::string         lastConnectTimeUtc  = "";
             // BTRMGR reports gamepads as "HUMAN INTERFACE DEVICE"; this disambiguates them.
             bool                isGamePad           = false;
-        } BluetoothDeviceInfo;
+        };
 
         class BluetoothDeviceManager {
 
@@ -66,10 +69,20 @@ namespace WPEFramework {
                 Core::hresult init(PluginHost::IShell* service);
                 void deinit();
 
+                // Inject the SDK adapter before init() is called.
+                // Required for addDevice(), updateCacheFromDevice(), and the migration path.
+                // Intentionally unchanged: set once from Bluetooth::Initialize() before init() and never changed
+                // afterwards, so no synchronisation is needed.
+                void setBtAdapter(IBtAdapter* adapter) { _btAdapter = adapter; }
+
                 Core::hresult setAutoConnect(const std::string& deviceID, bool enable);
                 Core::hresult getAutoConnect(const std::string& deviceID, AutoConnectStatus& status);
                 void setLastConnectTimeUtc(const std::string& deviceID);
                 Core::hresult getLastConnectTimeUtc(const std::string& deviceID, std::string& lastConnectTimeUtc);
+        #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
+                // True only while not migrated and the legacy (AS) record loaded at init() marks the device for autoconnect.
+                bool isLegacyAutoConnect(const std::string& deviceID);
+        #endif
                 Core::hresult setLastVolumeSetting(const std::string& deviceID, long long volumeSetting);
                 Core::hresult addDevice(const std::string& deviceID);
                 Core::hresult removeDevice(const std::string& deviceID);
@@ -83,6 +96,8 @@ namespace WPEFramework {
             private:
 
                 mutable Core::CriticalSection _adminLock;
+                // Serializes writeStorageFromCache(); lock order: _migrationLock -> _persistLock -> _adminLock.
+                mutable Core::CriticalSection _persistLock;
                 PluginHost::IShell* _service = nullptr;
                 std::unordered_map<std::string /* deviceID */, BluetoothDeviceInfo /* deviceInfo */> _pairedDeviceCache;
 
@@ -97,12 +112,15 @@ namespace WPEFramework {
                 void ReleaseService();
         #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
                 Core::hresult writeCacheFromFilesystemPersistence(const std::string& rawContent);
-                void writeFilesystemPersistenceFromCache(const std::unordered_map<std::string, BluetoothDeviceInfo>& cacheSnapshot);
+                // Read-only: fills the cache from the AS file for a plugin that is not migrated. Best effort.
+                void loadCacheFromLegacyFile();
+                void writeFilesystemPersistenceFromCache(std::unordered_map<std::string, BluetoothDeviceInfo> cacheSnapshot);
                 Core::hresult readMigrationVersionFromStorage(std::string& version) const;
                 Core::hresult writeMigrationVersionToStorage();
                 std::atomic<bool> _isMigrated{false};
                 mutable Core::CriticalSection _migrationLock;
         #endif
+                IBtAdapter* _btAdapter = nullptr;
         };
 
     } // Plugin

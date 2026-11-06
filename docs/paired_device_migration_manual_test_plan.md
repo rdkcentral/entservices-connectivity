@@ -12,11 +12,23 @@
 
 Migration is **client-triggered**, not automatic. The plugin does **not** auto-migrate at init. The IUI/AS client is responsible for calling the appropriate API on first boot. Since no client (IUI/AS) currently calls these APIs, the tester simulates client behaviour directly via curl.
 
+### Code-alignment check (source of truth)
+
+This plan was reviewed against the current implementation in `Bluetooth/BluetoothDeviceManager.cpp` and the runtime checks are as follows:
+
+- `performMigration()` reads `migrationVersion` from PersistentStore first. If it is already present and equals `1`, it short-circuits with `migration already completed (migrationVersion=1 present), no sync needed` and sets `_isMigrated=true` without re-importing the AS file.
+- `performMigration()` only imports the AS file when `migrationVersion` is absent or not equal to `1`; the import is followed by BTRMGR enrichment, then `deviceInfo` is written to PersistentStore, then `migrationVersion` is written last.
+- `clearMigration()` deletes both `deviceInfo` and `migrationVersion`, clears the in-memory `_pairedDeviceCache`, and sets `_isMigrated=false`.
+- `init()` re-derives migration state from `migrationVersion` at startup; if the marker is absent, any stale `deviceInfo` is ignored and the cache is loaded read-only from the AS file (nothing is written to PersistentStore or the AS file) until a successful migration replaces it.
+- `setAutoConnect()`, `addDevice()`, `removeDevice()`, `setLastConnectTimeUtc()`, and `setLastVolumeSetting()` all skip persistence writes while `_isMigrated` is false; the AS filesystem sync is also gated by `_isMigrated`.
+
+These checks are the authoritative behavior for this manual test plan and supersede any older or inferred migration expectations.
+
 ### API Summary
 
 | API | Method | Description |
 |-----|--------|-------------|
-| `performMigration` | `org.rdk.Bluetooth.1.performMigration` | **First call:** imports AS file → RDK PersistentStore, writes `migrationVersion=1`. **Subsequent calls:** no-op (migrationVersion already present). |
+| `performMigration` | `org.rdk.Bluetooth.1.performMigration` | **First call:** imports AS file → RDK PersistentStore, writes `migrationVersion=1`. **Subsequent calls:** no-op when `migrationVersion` already equals `1`. |
 | `clearMigration` | `org.rdk.Bluetooth.1.clearMigration` | Deletes `deviceInfo` and `migrationVersion` from RDK PersistentStore, clears the plugin's paired device cache, and resets migration state. AS file is **not** touched. |
 
 ### Migration State
@@ -28,6 +40,22 @@ The plugin tracks whether migration has been performed. Migration state becomes 
 - Pairing and unpairing (`addDevice`/`removeDevice`) update the in-memory device cache but do **not** write to PersistentStore when migration has not been performed.
 - The AS file (filesystem persistence) will **not** be updated by any operation external to IUI/AS (e.g. CURL'd plug-in requests) — pairing, unpairing, or `setAutoConnect` — when migration has not been performed.
 - `getAutoConnect` has a migration guard, but instead of rejecting, it returns `autoconnect: false` (success) for any deviceID when migration has not been performed — it bypasses the cache lookup entirely and returns disabled without error.
+
+### Exact code-derived log strings
+
+The implementation emits these runtime markers and the test plan should treat them as the canonical validation strings:
+
+- `migration_attempted`
+- `migration already completed (migrationVersion=1 present), no sync needed`
+- `initial migration succeeded`
+- `PersistentStore cleared and migration state reset`
+- `setAutoConnect rejected: migration has not been performed yet for deviceID=<ID>`
+- `migration not complete, returning disabled for deviceID=<ID>`
+- `migration not complete, skipping persistence write for deviceID=<ID>`
+- `Filesystem persistence sync succeeded: Persistence payload updated from cache, cache_size=N`
+- `imported cache is empty, skipping BTRMGR enrichment`
+
+A missing filesystem-sync success message is also a valid negative check for the pre-migration or rollback scenarios, because the implementation only calls `writeFilesystemPersistenceFromCache()` when `_isMigrated` is true.
 
 ### Curl Reference Commands
 
@@ -125,7 +153,7 @@ Note the device addresses, `autoConnectStatus`, and `lastConnectionTimeUTC` valu
 
 **Steps:**
 1. Reboot device and wait for Bluetooth plugin activation.
-2. Verify `migrationVersion` is absent from PS. When the migration-enabled build runs `init` with no valid `migrationVersion` present, the cache is left empty and no data is written to PersistentStore — `deviceInfo` will also be absent (or contain only stale data from a prior firmware, not from this boot):
+2. Verify `migrationVersion` is absent from PS. When the migration-enabled build runs `init` with no valid `migrationVersion` present, the cache is loaded read-only from the AS file and no data is written to PersistentStore — `deviceInfo` will also be absent (or contain only stale data from a prior firmware, not from this boot):
    ```bash
    curl --header "Content-Type: application/json" --request POST \
      --data '{"jsonrpc":"2.0","id":1,"method":"org.rdk.PersistentStore.getValue","params":{"namespace":"Bluetooth","key":"migrationVersion"}}' \
@@ -438,7 +466,7 @@ curl --header "Content-Type: application/json" --request POST \
 
 **Expected Results:**
 - `getAutoConnect` DOES have a migration state check. When `_isMigrated=false`, the code immediately returns `AUTO_CONNECT_STATUS_DISABLED` with success — it bypasses the cache lookup entirely. No device-not-found error is returned.
-- Response: `{"success": true, "autoconnect": false}` for any `deviceID` when migration has not been performed, regardless of whether the device exists in the (empty) cache.
+- Response: `{"success": true, "autoconnect": false}` for any `deviceID` when migration has not been performed, regardless of whether the device exists in the cache (which holds only the AS file's contents before migration).
 - This distinguishes it from `setAutoConnect`: `setAutoConnect` explicitly rejects with an error when not migrated; `getAutoConnect` silently returns disabled.
 
 ---
