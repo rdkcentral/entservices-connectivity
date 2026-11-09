@@ -31,5 +31,15 @@
 ## 6. QA guide and SDK gap report
 
 - [x] 6.1 Update `docs/bluetooth_backend_qa_test_guide.md` section 3 (and the matching rows in `docs/bluetooth_backend_developer_test_guide.md`): `onPlaybackPosition` → `onPlaybackProgress`; `activeState` appears only in `getConnectedDevices` and is now at parity; `signalStrength` is real only for unpaired devices and paired devices report 0 on both stacks; `setName` works while `getName` remains unsupported
-- [ ] 6.2 Review `docs/bluetooth_sdk_gap_report.md` with the SDK team and record the outcome of each item
+- [x] 6.2 Review `docs/bluetooth_sdk_gap_report.md` with the SDK team and record the outcome of each item (outcomes recorded in the report, 2026-11-09)
 - [ ] 6.3 Build and run the existing Bluetooth L1 tests and confirm they pass
+- [ ] 6.4 Add an SDK adapter L1 or L2 test that a failed `pair` and a failed `connect` return failure with no `onRequestFailed` notification, and confirm the SDK adapter never calls the asynchronous `pair(false)` / `connect(false)`
+
+## 7. One connected audio output device
+
+- [ ] 7.1 Check that `AuthBridge::isAudioOutputType` (`HEADPHONES`, `LOUDSPEAKER`, `WEARABLE HEADSET`, `HANDSFREE`, `HIFI AUDIO DEVICE`) matches the devices btrCore classifies as `enBTRCoreSpeakers` or `enBTRCoreHeadSet` (`bluetooth/src/btrCore.c:837-905`), and record any difference
+- [ ] 7.2 In `BtSdkAdapterImpl::connectDevice`, when the target is an audio output type, return success if it is already connected; otherwise disconnect every other connected audio output device synchronously, failing the connect if any disconnect fails, then connect. Smartphones and tablets neither trigger nor are hit by the rule
+- [ ] 7.3 Start the new device's `beginDeviceOperation` before the old-device disconnects and keep the disconnects outside any held-status scope of their own, so the old device's `CONNECTION_CHANGE` is not held
+- [ ] 7.4 Add SDK adapter L1 tests: other audio device disconnected first; disconnect failure aborts the connect; only a smartphone connected leaves it alone; smartphone connect leaves the audio device alone; target already connected
+- [ ] 7.5 Test the notification order (old device change, connect response, new device change) at the `EventBridge` level if possible, otherwise verify it on a device against BTMgr
+- [ ] 7.6 Update `docs/bluetooth_sdk_gap_report.md` item 5 and the QA and developer test guides: the connected-list filter is replaced by disconnect-first on connect, and externally connected devices are not covered

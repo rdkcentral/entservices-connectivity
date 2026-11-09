@@ -203,7 +203,7 @@ Maps `AdapterEvent` and `DeviceEvent` from the SDK into the plugin's existing JS
 | `Connected` | `onStatusChanged` | `CONNECTION_CHANGE` | `true` | `true` |
 | `Disconnected` | `onStatusChanged` | `CONNECTION_CHANGE` | `true` | `false` |
 
-**Failure events:** ~~INV-3 confirmed.~~ The SDK emits no failure events — `DeviceEvent` has only `Paired`, `Connected`, `Disconnected`, `ServicesResolved`, `ServicesUnresolved`, `Unpaired`. Failures surface only via the `Status` return from sync calls. The plugin MUST use `pair(sync=true)` / `connect(sync=true)` and emit `onRequestFailed` when Status is non-success. If the SDK team adds `DeviceEvent::PairFailed` / `ConnectFailed` in future, the EventBridge can be updated to handle them directly.
+**Failure events:** ~~INV-3 confirmed.~~ The SDK emits no failure events — `DeviceEvent` has only `Paired`, `Connected`, `Disconnected`, `ServicesResolved`, `ServicesUnresolved`, `Unpaired`. Failures surface only via the `Status` return from sync calls, and the SDK team confirmed that is complete (2026-11-09). The plugin MUST use `pair(sync=true)` / `connect(sync=true)` and report a non-success `Status` as `success:false` in the response. It does **not** emit `onRequestFailed` on the SDK backend: clients use the response as the failure signal. This is a deliberate difference from the BTMgr backend, which still sends `onRequestFailed` for pairing, unpairing and connection failures. The plugin must never use the asynchronous `pair(false)` / `connect(false)`, since an async failure would not be visible.
 
 ### Media Events (AUDIO_SUPPORT)
 

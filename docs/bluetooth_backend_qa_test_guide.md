@@ -43,9 +43,10 @@ The SDK stack currently has these documented gaps. Confirm that they behave as d
 
 | Feature | BTMgr stack | SDK stack (today) |
 |---|---|---|
-| Get the box's Bluetooth name (`getName`) | Works | Fails (reported as unsupported) |
+| Get the box's Bluetooth name (`getName`) | Works | Fails (reported as unsupported) until the SDK adds a getter (planned) |
 | Set the box's Bluetooth name (`setName`) | Works (names longer than 63 bytes are cut) | Works the same; as `getName` is unsupported on this stack, confirm the new name with `bluetoothctl show` (the `Alias` line) |
-| Discoverable mode (`isDiscoverable`, `setDiscoverable`) | Works | Fails (reported as unsupported) |
+| Discoverable mode (`isDiscoverable`, `setDiscoverable`) | Works | Fails (reported as unsupported); not planned, only audio-in needs it |
+| Failed pair or connect | Response `success:false` **and** an `onRequestFailed` notification | Response `success:false` only; **no** `onRequestFailed` (accepted difference) |
 | Audio control: `setAudioStream`, `sendAudioPlaybackCommand`, volume/mute (`getDeviceVolumeMuteInfo`, `setDeviceVolumeMuteInfo`), track info (`getAudioInfo`) | Works | Fails / returns nothing (audio not yet available in the SDK) |
 | Playback/media notifications (`onPlaybackChange`, `onPlaybackProgress`, `onPlaybackNewTrack`, `onDeviceMediaStatus`, `onPlaybackRequest`) | Sent | Not sent |
 | Incoming connection from an **unpaired gamepad** | Handled by BTMgr's gamepad-specific rules | Treated like any other device (client is asked) |
@@ -151,7 +152,7 @@ These focus on behavior that BTMgr performed on its own and the SDK stack had to
 | SUP-05 | **Scan by profile** | Run `startScan` with each profile (no profile, audio output, smartphone/tablet, HID, audio+HID, LE). Compare which devices are found. RDK remotes should appear only when no profile (or an unrecognized profile) is given. Also try different `timeout` values, including 0 or less, and `stopScan` |
 | SUP-06 | **Names during discovery** | Use devices that advertise without a name (speaker, gamepad, phone). Compare the name shown and how long the device takes to appear. Unnamed gamepads should show as `Game Controller`. Expect devices to take up to a few seconds to appear on SDK |
 | SUP-07 | **Notifications and their order** | For `pair`, `unpair`, `connect`, `disconnect`, `enable`, `disable`: record the response and every notification (`onStatusChanged` and its values, etc.). Notification must come **after** the response; nothing missing or duplicated. For scans: scan started/completed notifications, `onDiscoveredDevice`, `onDeviceFound`, `onDeviceLost` |
-| SUP-08 | **Failures** | Pair/connect a device that is off, out of range or rejects; pair an already-paired device; connect an unpaired device; use an unknown device ID. Compare the failure response and the `onRequestFailed` notification |
+| SUP-08 | **Failures** | Pair/connect a device that is off, out of range or rejects; pair an already-paired device; connect an unpaired device; use an unknown device ID. Compare the failure response on both stacks. `onRequestFailed` is expected on the BTMgr stack only; do not file its absence on the SDK stack |
 | SUP-09 | **Requests started by the device** | Pair/connect *from* a phone/tablet, headphones, remote/keyboard, a classic gamepad and an LE gamepad. Compare: which request notification the client gets (`onPairingRequest` / `onConnectionRequest`), whether accept and reject (via `respondToEvent`) are honored, and what happens when nobody answers (it should be rejected after a short, device-specific wait). Judge by baseline A, not by an assumed time |
 | SUP-10 | **Gamepads and sleep** | With a gamepad and a remote connected, put the box in STANDBY and in LIGHT_SLEEP: the gamepad disconnects and does not reconnect or show up in scans; the remote stays connected and still wakes the box. Return to ON: the gamepad can reconnect and be found again. DEEP_SLEEP and OFF should not by themselves change gamepad behavior |
 | SUP-11 | **Reconnect at power-on** | With a speaker/headphones that was the last one used, (a) reboot and (b) wake from standby. It reconnects by itself on both stacks, in comparable time. If an audio device is already connected, nothing extra connects. A client rejecting the connection request keeps it disconnected |

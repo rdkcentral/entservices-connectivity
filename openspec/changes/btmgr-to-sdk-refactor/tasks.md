@@ -8,12 +8,11 @@
 - [x] **INV-2: D-Bus event loop and Thunder IPC model** ~~CLOSED~~
   Thunder JSON-RPC (`respondToEvent`) uses Thunder's own WebSocket/HTTP transport, independent of D-Bus. Blocking the D-Bus thread during auth wait is safe. AuthBridge uses simple condvar polling (30s max). BtSdkAdapter needs a dedicated event loop thread (confirm whether Thunder already provides one at integration time).
 
-- [ ] **INV-3: SDK failure events** (nice-to-have, not blocking)
-  Confirmed absent today — SDK emits no failure DeviceEvents. Plugin uses sync calls + Status check as the confirmed fallback. If SDK team adds `DeviceEvent::PairFailed` / `ConnectFailed` in future, EventBridge can be enhanced to use them directly.
-  Owner: TBD. Does not block implementation.
+- [x] **INV-3: SDK failure events** ~~CLOSED (2026-11-09)~~
+  The SDK emits no failure DeviceEvents and none are needed. The plugin calls `pair(true)` and `connect(true)` only, and the SDK team confirmed that for synchronous calls every pairing or connection problem is reported through the return `Status`. The contract is that a client uses the response (`success:false`) as the failure signal; on the SDK backend there is **no** `onRequestFailed` for a failed pair or connect. The BTMgr backend still sends it. See the "Pair and connect failure reporting" requirement in `bluetooth-sdk-contract-parity`.
 
 - [ ] **INV-4: AUDIO_SUPPORT API surface**
-  Obtain AUDIO_SUPPORT API specification from bluetooth-sdk team. Confirm method signatures for media control, track info, and volume operations. Note: audio uses BlueZ AVRCP (org.bluez.MediaPlayer1/MediaControl1) — confirmed from `btrCore_avMedia.c`.
+  Partly answered by the SDK team (2026-11-09): volume and mute use `Device::setVolume/getVolume/setMute/isMuted` and `AudioEvent::VolumeChanged` / `MuteStateChanged`, `AUDIO_SUPPORT` is enabled wherever the SDK is built, and the plugin persists volume and updates the UI immediately as BTMgr does. Media control and track info (`org.bluez.MediaPlayer1`) are **not required**: they serve audio-in (stream-in) only, which is out of scope. Still to obtain: the exact signatures for the volume operations. Audio uses BlueZ AVRCP — confirmed from `btrCore_avMedia.c`.
   Owner: TBD. Blocks: T-7.
 
 ---

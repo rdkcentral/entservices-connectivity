@@ -17,7 +17,7 @@
 
 **Non-Goals:**
 - Any SDK change (`getName`, discoverable, media, streaming state).
-- Audio, playback and volume behavior, gamepad connection rules, and the connected-list "currently streaming" filter. Those need SDK input and are tracked in the gap report.
+- Audio, playback and volume behavior, and gamepad connection rules. Those need SDK input and are tracked in the gap report. The connected-list "currently streaming" filter is handled by D8 instead.
 - Improving legacy behavior. Where legacy looks odd (for example RSSI `0` for paired devices), it is reproduced.
 
 ## Decisions
@@ -51,6 +51,10 @@ A scripted heuristic found only the three new-track fields, but it cannot type v
 - [`setName` half-works until `getName` ships] → Called out in the gap report and the QA guide.
 - [Audit finds additional differences that exceed this change] → Record them in the gap report or a follow-up change instead of widening scope.
 
+### D8: Disconnect-first on connect replaces the connected-list filter
+BTMgr lists only the streaming audio output device because `btrMgr_StartAudioStreamingOut` stops the streaming device and disconnects any other connected speaker or headset before it connects a new one, so at most one audio output device is connected. The SDK team confirmed the plugin should treat the connected audio output device as the streaming one and that the SDK needs no transport-state API for this. `BtSdkAdapterImpl::connectDevice` reproduces the disconnect-first rule, using the existing `isAudioOutputType` predicate, so `getConnectedDevices` needs no filter. Smartphones and tablets are not audio output devices here: stream-in is out of scope. Devices that connect from their own side are deferred. Event order follows BTMgr: the old device's disconnect runs inside the connect call and is not held, while the new device's change is held until after the response.
+
 ## Open Questions
 
-- Whether the BTMgr connected-list filter (only the currently streaming audio-output device is listed) should be handled here. Current view: no, it needs a streaming notion tied to audio routing, so it goes in the gap report.
+- Whether `isAudioOutputType` matches BTMgr's `enBTRCoreSpeakers` / `enBTRCoreHeadSet` classification exactly (task 7.1).
+- Whether the notification order can be tested at the `EventBridge` level or only on a device (task 7.5).
