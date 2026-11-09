@@ -97,11 +97,14 @@ if(SRC_FILES)
         # inject the real bluetooth-sdk-backed adapter via BtAdapter::setImpl().
         # bluetoothSDKMock.h pulls in bluetooth/{Adapter,Device,Manager}.h from
         # Tests/mocks (GMock-friendly stubs); every other bluetooth-sdk header
-        # falls back to the bundled bluetooth-sdk-stub.
+        # falls back to the bundled bluetooth-sdk-stub. Source-level include
+        # directories precede the target-level ones, so Tests/mocks is listed
+        # here ahead of the stub to keep the stub's copies from shadowing the mocks.
         # Scoped to the SDK harness: the plugin's Module.h and the stub's generic header
         # names (Status.h, Events.h, ...) must not leak into the BTMgr harness.
         set_property(SOURCE tests/Bluetooth_Sdk_L2Test.cpp APPEND PROPERTY INCLUDE_DIRECTORIES
             ${CMAKE_SOURCE_DIR}/Bluetooth
+            ${CMAKE_SOURCE_DIR}/Tests/mocks
             ${CMAKE_SOURCE_DIR}/Bluetooth/bluetooth-sdk-stub/include)
     endif()
 
