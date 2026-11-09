@@ -47,11 +47,12 @@ The SDK stack currently has these documented gaps. Confirm that they behave as d
 | Set the box's Bluetooth name (`setName`) | Works (names longer than 63 bytes are cut) | Works the same; as `getName` is unsupported on this stack, confirm the new name with `bluetoothctl show` (the `Alias` line) |
 | Discoverable mode (`isDiscoverable`, `setDiscoverable`) | Works | Fails (reported as unsupported); not planned, only audio-in needs it |
 | Failed pair or connect | Response `success:false` **and** an `onRequestFailed` notification | Response `success:false` only; **no** `onRequestFailed` (accepted difference) |
-| Audio control: `setAudioStream`, `sendAudioPlaybackCommand`, volume/mute (`getDeviceVolumeMuteInfo`, `setDeviceVolumeMuteInfo`), track info (`getAudioInfo`) | Works | Fails / returns nothing (audio not yet available in the SDK) |
-| Playback/media notifications (`onPlaybackChange`, `onPlaybackProgress`, `onPlaybackNewTrack`, `onDeviceMediaStatus`, `onPlaybackRequest`) | Sent | Not sent |
+| Connecting an audio output device while another one is connected | The other one is disconnected first, then the new one connects | Same (the plugin does it). Smartphones and tablets are not audio output devices and are left connected. A device that connects *from its own side* is not handled yet |
+| Playback and track control (`sendAudioPlaybackCommand` with `PLAY`, `PAUSE`, `STOP`, `SKIP_NEXT` and the like), track info (`getAudioInfo`), `setAudioStream` with `AUXILIARY` | Works | Fails / returns nothing (stream-in features; the SDK has no media player, and its one stream is `PRIMARY`). `setAudioStream` with `PRIMARY` succeeds |
+| Playback notifications (`onPlaybackChange`, `onPlaybackProgress`, `onPlaybackNewTrack`, `onPlaybackRequest`) | Sent | Not sent (stream-in features) |
 | Incoming connection from an **unpaired gamepad** | Handled by BTMgr's gamepad-specific rules | Treated like any other device (client is asked) |
 
-Not differences (a mismatch here **is** a defect): `activeState` in `getConnectedDevices` is `"1"` for every connected device, and `getDeviceInfo` reports `rssi` and `signalStrength` exactly as the baseline does. For a **paired** device both are `"0"` on every stack. For a device that is **not paired** (for example found by a scan), `rssi` is the raw value and `signalStrength` is 1 to 4 (4 at -60 or stronger, 3 at -70, 2 at -90, otherwise 1); when no RSSI is known the baseline shows `-2147483648` and `1`.
+Not differences (a mismatch here **is** a defect): volume and mute work the same on both stacks (`getDeviceVolumeMuteInfo` and `setDeviceVolumeMuteInfo` use 0 to 255, `VOLUME_UP`, `VOLUME_DOWN`, `AUDIO_MUTE` and `AUDIO_UNMUTE` work, the last volume and mute are kept and the volume is restored when the speaker reconnects, and `onDeviceMediaStatus` is sent after every change including those made with the speaker's own buttons); `activeState` in `getConnectedDevices` is `"1"` for every connected device, and `getDeviceInfo` reports `rssi` and `signalStrength` exactly as the baseline does. For a **paired** device both are `"0"` on every stack. For a device that is **not paired** (for example found by a scan), `rssi` is the raw value and `signalStrength` is 1 to 4 (4 at -60 or stronger, 3 at -70, 2 at -90, otherwise 1); when no RSSI is known the baseline shows `-2147483648` and `1`.
 
 Also, **do not file** these either:
 
@@ -128,7 +129,7 @@ Use [bluetooth_pre_migration_regression_test_plan.md](./bluetooth_pre_migration_
 | 3. Pairing & unpairing | Pair/unpair | Run | Run | Watch notification order |
 | 4. Connection management | Connect/disconnect | Run | Run | |
 | 5. AutoConnect guard | Expected "divergence" for auto-connect | Run | Run | Same on both; not a bug |
-| 6. Device info, audio & playback | Device info, audio, playback commands, responding to requests | Run | **Partly** | Audio items and `getAudioInfo` are known differences on SDK. `getDeviceInfo` (including `rssi` and `signalStrength`) and responding to requests must pass |
+| 6. Device info, audio & playback | Device info, audio, playback commands, responding to requests | Run | **Partly** | Volume and mute (`getDeviceVolumeMuteInfo`, `setDeviceVolumeMuteInfo`, the volume and mute commands, `onDeviceMediaStatus`) must pass on both stacks. Playback commands, `getAudioInfo` and `setAudioStream` with `AUXILIARY` are known differences on SDK. `getDeviceInfo` (including `rssi` and `signalStrength`) and responding to requests must pass |
 | 7. Volume & mute | Volume/mute | Run | **Known difference** | Record as "known gap – confirmed" |
 | 8. Adapter control | Enable/disable, discoverable, name | Run | **Partly** | `enable`/`disable` and `setName` must pass; `getName` and discoverable are known differences on SDK |
 | 9. Gamepad / HID | Pairing and connecting HID/gamepads | Run | Run | Device type must read `HUMAN INTERFACE DEVICE` on both |

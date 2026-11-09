@@ -30,6 +30,7 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
+#include <strings.h>
 #include <UtilsLogging.h>
 #include <UtilsTelemetry.h>
 #include <LogRedirect.h>
@@ -103,8 +104,18 @@ std::string BtSdkAdapterImpl::init(PluginHost::IShell* /* service */,
     if (m_callbackGate) m_callbackGate->closeAndDrain();
     m_callbackGate = std::make_shared<CallbackGate>();
     auto gate = m_callbackGate;
+    AudioBridge::Callbacks audioCallbacks;
+    audioCallbacks.onDeviceMediaStatus = eventCallbacks.onDeviceMediaStatus;
+    audioCallbacks.getLastVolume = authCallbacks.getLastVolume;
+    audioCallbacks.setLastVolume = authCallbacks.setLastVolume;
+    audioCallbacks.getLastMute = authCallbacks.getLastMute;
+    audioCallbacks.setLastMute = authCallbacks.setLastMute;
     m_eventBridge = std::make_unique<EventBridge>(m_registry, std::move(eventCallbacks));
     m_authBridge  = std::make_unique<AuthBridge>(m_registry, std::move(authCallbacks));
+    audioCallbacks.resolveDeviceType = [this](const std::shared_ptr<bluetooth::Device>& device, const std::string& handleStr) {
+        return m_authBridge ? m_authBridge->resolveDeviceType(device, handleStr) : m_registry.getDeviceType(handleStr);
+    };
+    m_audioBridge = std::make_unique<AudioBridge>(m_registry, std::move(audioCallbacks));
     m_authBridge->setOperationInProgressPredicate([this](const std::string& mac) { return isOperationInProgress(mac); });
     // Reset here, as the power handler applies the current state again after the plugin is activated.
     m_gamepadStandby = false;
@@ -210,6 +221,7 @@ void BtSdkAdapterImpl::deinit() {
     // and the SDK callbacks are unregistered and workers stopped above; a shared_mutex on every entry point is not worth the cost.
     m_adapter.reset();
     m_manager.reset();
+    m_audioBridge.reset();
     m_eventBridge.reset();
     m_authBridge.reset();
     m_registry.clear();
@@ -495,11 +507,45 @@ bool BtSdkAdapterImpl::unpairDevice(const std::string& handleStr) {
     LOGINFO("BtSdkAdapterImpl::unpairDevice: exit successfully");
     return true;
 }
+bool BtSdkAdapterImpl::disconnectOtherAudioOutputDevices(const std::string& targetHandle) {
+    LOGINFO("BtSdkAdapterImpl::disconnectOtherAudioOutputDevices: entry target=%s", targetHandle.c_str());
+    if (!m_adapter || !m_authBridge) {
+        LOGERR("BtSdkAdapterImpl::disconnectOtherAudioOutputDevices: exit with error: adapter is unavailable");
+        return false;
+    }
+    for (auto& other : m_adapter->getDevices(bluetooth::DeviceState::Connected)) {
+        if (!other) continue;
+        std::string mac;
+        other->address(mac);
+        const std::string handle = DeviceRegistry::deriveHandle(mac);
+        if (!DeviceRegistry::isValidHandle(handle) || handle == targetHandle) continue;
+        if (!AuthBridge::isAudioOutputType(m_authBridge->resolveDeviceType(other, handle))) continue;
+
+        LOGINFO("BtSdkAdapterImpl::disconnectOtherAudioOutputDevices: disconnecting handle=%s", handle.c_str());
+        // Not held by an operation of its own: its CONNECTION_CHANGE is sent at once, ahead of the connect response.
+        Status status = other->disconnect(true);
+        if (!status) {
+            sendTelemetry("BTDiscFail_split", telemetryDeviceInfo(other));
+            LOGERR("BtSdkAdapterImpl::disconnectOtherAudioOutputDevices: exit with error: %s", status.get_message().c_str());
+            return false;
+        }
+        sendTelemetry("BTDiscSucc_split", telemetryDeviceInfo(other));
+    }
+    LOGINFO("BtSdkAdapterImpl::disconnectOtherAudioOutputDevices: exit successfully");
+    return true;
+}
 bool BtSdkAdapterImpl::connectDevice(const std::string& handleStr, const std::string& /*deviceType*/) {
     LOGINFO("BtSdkAdapterImpl::connectDevice: entry handle=%s", handleStr.c_str());
     const std::shared_ptr<bluetooth::Device> device = findDevice(handleStr);
     if (!device) {
         LOGERR("BtSdkAdapterImpl::connectDevice: exit with error: device handle was not found");
+        return false;
+    }
+    // The device's own type decides, not the client's deviceType, which defaults to SMARTPHONE when omitted.
+    // Done before beginDeviceOperation so a failure here has no held changes to release.
+    if (m_authBridge && AuthBridge::isAudioOutputType(m_authBridge->resolveDeviceType(device, handleStr)) &&
+        !disconnectOtherAudioOutputDevices(handleStr)) {
+        LOGERR("BtSdkAdapterImpl::connectDevice: exit with error: another audio output device could not be disconnected");
         return false;
     }
     // Hold this device's status changes so the CONNECTION_CHANGE reaches the client after the connect response.
@@ -610,30 +656,46 @@ bool BtSdkAdapterImpl::respondToEvent(const std::string& handleStr, const std::s
     return true;
 }
 
-// Audio stubs — implemented when BLUETOOTH_AUDIO_SUPPORT / SDK AUDIO_SUPPORT module is available (T-7).
+// Audio. Volume, mute and their commands go through AudioBridge over the SDK's audio API. The SDK has one capture
+// stream, PRIMARY, which cannot be changed at run time, so that is the only name accepted; it reports what is already
+// true, while AUXILIARY is refused instead of appearing to succeed.
 bool BtSdkAdapterImpl::setAudioStream(long long int deviceID, const std::string& streamName) {
     LOGINFO("BtSdkAdapterImpl::setAudioStream: entry deviceID=%lld streamName=%s", deviceID, streamName.c_str());
-    LOGERR("BtSdkAdapterImpl::setAudioStream: exit with error: audio support is unavailable");
-    return false;
+    if (strcasecmp(streamName.c_str(), "PRIMARY") != 0) {
+        LOGERR("BtSdkAdapterImpl::setAudioStream: exit with error: only the PRIMARY stream is available");
+        return false;
+    }
+    LOGINFO("BtSdkAdapterImpl::setAudioStream: exit successfully");
+    return true;
 }
 bool BtSdkAdapterImpl::setAudioControlCommand(long long int deviceID, const std::string& cmd) {
     LOGINFO("BtSdkAdapterImpl::setAudioControlCommand: entry deviceID=%lld command=%s", deviceID, cmd.c_str());
-    LOGERR("BtSdkAdapterImpl::setAudioControlCommand: exit with error: audio support is unavailable");
-    return false;
+    if (!m_audioBridge) {
+        LOGERR("BtSdkAdapterImpl::setAudioControlCommand: exit with error: adapter is unavailable");
+        return false;
+    }
+    return m_audioBridge->sendCommand(findDevice(std::to_string(deviceID)), cmd);
 }
 bool BtSdkAdapterImpl::setDeviceVolumeMute(long long int deviceID, const std::string& profile, uint8_t volume, bool mute) {
     LOGINFO("BtSdkAdapterImpl::setDeviceVolumeMute: entry deviceID=%lld profile=%s volume=%u mute=%d", deviceID, profile.c_str(), static_cast<unsigned>(volume), mute);
-    LOGERR("BtSdkAdapterImpl::setDeviceVolumeMute: exit with error: audio support is unavailable");
-    return false;
+    if (!m_audioBridge) {
+        LOGERR("BtSdkAdapterImpl::setDeviceVolumeMute: exit with error: adapter is unavailable");
+        return false;
+    }
+    return m_audioBridge->setVolumeMute(findDevice(std::to_string(deviceID)), profile, volume, mute);
 }
 IBtAdapter::BtDeviceVolumeMute BtSdkAdapterImpl::getDeviceVolumeMute(long long int deviceID, const std::string& profile) const {
     LOGINFO("BtSdkAdapterImpl::getDeviceVolumeMute: entry deviceID=%lld profile=%s", deviceID, profile.c_str());
-    LOGERR("BtSdkAdapterImpl::getDeviceVolumeMute: exit with error: audio support is unavailable");
-    return {};
+    if (!m_audioBridge) {
+        LOGERR("BtSdkAdapterImpl::getDeviceVolumeMute: exit with error: adapter is unavailable");
+        return {};
+    }
+    return m_audioBridge->getVolumeMute(findDevice(std::to_string(deviceID)), profile);
 }
+// The SDK has no media player, so track info stays unavailable (stream-in only).
 IBtAdapter::BtMediaTrackInfo BtSdkAdapterImpl::getMediaTrackInfo(long long int deviceID) const {
     LOGINFO("BtSdkAdapterImpl::getMediaTrackInfo: entry deviceID=%lld", deviceID);
-    LOGERR("BtSdkAdapterImpl::getMediaTrackInfo: exit with error: audio support is unavailable");
+    LOGERR("BtSdkAdapterImpl::getMediaTrackInfo: exit with error: track info is unavailable");
     return {};
 }
 
@@ -1024,8 +1086,23 @@ void BtSdkAdapterImpl::registerDeviceEvents(std::shared_ptr<bluetooth::Device> d
             if (!gate) return;
             CallbackGate::Entry entry(*gate);
             if (!entry) return;
+            if (m_audioBridge) {
+                if (ev == bluetooth::DeviceEvent::Connected) m_audioBridge->onDeviceConnected(dev);
+                if (ev == bluetooth::DeviceEvent::Disconnected) m_audioBridge->onDeviceDisconnected(dev);
+            }
             if (m_eventBridge) m_eventBridge->onDeviceEvent(ev, std::move(dev));
         });
+#ifdef AUDIO_SUPPORT
+    // Weak: the device owns this callback, so holding it here would keep the device alive forever.
+    device->registerForAudioEvents(
+        [this, gate = m_callbackGate, weak = std::weak_ptr<bluetooth::Device>(device)](
+            bluetooth::AudioEvent ev, bluetooth::AudioEventData data) {
+            if (!gate) return;
+            CallbackGate::Entry entry(*gate);
+            if (!entry) return;
+            if (m_audioBridge) m_audioBridge->onAudioEvent(ev, data, weak.lock());
+        });
+#endif
     LOGINFO("BtSdkAdapterImpl::registerDeviceEvents: exit handle=%s", handle.c_str());
 }
 

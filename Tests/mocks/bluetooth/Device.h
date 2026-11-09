@@ -26,6 +26,7 @@
 
 #include <Events.h>
 #include <Status.h>
+#include <bluetooth/Audio.h>
 #include <bluetooth/GattClient.h>
 
 #include <cstdint>
@@ -108,6 +109,15 @@ public:
     // Non-pure so existing Device test doubles need not implement them.
     virtual Status setAutoconnectOn() { return Status(); }
     virtual Status setAutoconnectOff() { return Status(); }
+
+    // The SDK's audio API (AUDIO_SUPPORT). Declared whatever the build flag is, so the mock has one layout for the
+    // plugin and the tests; non-pure for the same reason as above.
+    virtual Status setVolume(float) { return Status(); }
+    virtual float getVolume() { return 0.0f; }
+    virtual Status setMute(bool) { return Status(); }
+    virtual bool isMuted() { return false; }
+    virtual Status setDelayCompensation(uint32_t) { return Status(); }
+    virtual void registerForAudioEvents(std::function<void(AudioEvent, AudioEventData)>) {}
 };
 
 } // namespace bluetooth

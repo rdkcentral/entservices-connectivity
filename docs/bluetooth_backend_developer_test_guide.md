@@ -92,7 +92,7 @@ Build/product variants you may encounter:
 ### 3.3 Optional features that interact with backend choice
 
 - `BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION` (compile-time) controls the guarded behaviors described in the pre-migration plan (e.g. `setAutoConnect` rejected, `getAutoConnect` always false until `performMigration`). It is orthogonal to the backend: the same guards apply to both. Confirm the build flag state before testing, since the pre-migration plan assumes it is **ON**.
-- `BLUETOOTH_AUDIO_SUPPORT` (compile-time) is currently a build flag only; SDK audio operations are not implemented yet (see [§5](#5-known-differences-and-gaps-expected-not-new-bugs)).
+- `BLUETOOTH_AUDIO_SUPPORT` (CMake option, ON by default) makes the plugin use the SDK audio API and keeps the bundled stub's `AUDIO_SUPPORT` in step; SDK volume, mute and their notifications use it (see [§5](#5-known-differences-and-gaps-expected-not-new-bugs)).
 
 ---
 
@@ -127,8 +127,9 @@ These are **documented gaps in the SDK backend** as of this build. They are *not
 | `getName` | Works | Returns failure (`unsupported`) | SDK has `Adapter::setName` but no getter; the SDK team will add one. Covered by `Bluetooth_Sdk_L2Test.BluetoothGetNameUnsupported` |
 | `setName` | Works (name cut to 63 bytes) | Works (BlueZ `Alias`, name cut to 63 bytes) | Not a gap. Covered by `Bluetooth_Sdk_L2Test.BluetoothSetName_*` |
 | `isDiscoverable`, `setDiscoverable` | Works | Returns failure (`unsupported`) | Accepted difference: only audio-in needs it. Covered by `Bluetooth_Sdk_L2Test.BluetoothDiscoverableUnsupportedAndScan` |
-| Audio: `setAudioStream`, `sendAudioPlaybackCommand`, `getDeviceVolumeMuteInfo`, `setDeviceVolumeMuteInfo`, `getAudioInfo` (track info) | Works | Returns failure / empty (audio support unavailable) | Waiting on SDK `AUDIO_SUPPORT` module |
-| Playback / media events (`onPlaybackChange`, `onPlaybackProgress`, `onPlaybackNewTrack`, `onDeviceMediaStatus`, `onPlaybackRequest`) | Emitted | Not emitted | Same dependency as above |
+| `sendAudioPlaybackCommand` playback commands (`PLAY`, `PAUSE`, ...), `getAudioInfo` (track info), `setAudioStream` with `AUXILIARY` | Works | Returns failure / empty | Stream-in features, not provided by the SDK; `PRIMARY` succeeds. Covered by `BluetoothSdkAdapterTest.setAudioStream_AcceptsOnlyPrimary` and `setAudioControlCommand_OtherCommandsAndDevices_Fail` |
+| Volume and mute (`getDeviceVolumeMuteInfo`, `setDeviceVolumeMuteInfo`, `VOLUME_UP`, `VOLUME_DOWN`, `AUDIO_MUTE`, `AUDIO_UNMUTE`) and `onDeviceMediaStatus` | Works | Works (SDK audio API, persisted volume, restored on connect) | Not a gap. Covered by `BluetoothSdkAdapterTest.setDeviceVolumeMute_*`, `getDeviceVolumeMute_*`, `setAudioControlCommand_*`, `audioEvent_*` and `deviceConnects_*`
+| Playback events (`onPlaybackChange`, `onPlaybackProgress`, `onPlaybackNewTrack`, `onPlaybackRequest`) | Emitted | Not emitted | Stream-in features |
 | `activeState` (in `getConnectedDevices`) | `"1"` for every connected device | `"1"` for every connected device | Not a gap. Covered by `Bluetooth_Sdk_L2Test.GetConnectedDevices_ReportsActiveStateOne` |
 | `rssi` / `signalStrength` (in `getDeviceInfo`) | Paired device: `0` / `0`. Not paired: raw RSSI (`INT_MIN` if unknown) and level 4/3/2/1 at -60/-70/-90 | Same | Not a gap. See `SignalLevel.h` and `Bluetooth_Sdk_L2Test.GetDeviceInfo_*` |
 | Gamepad connection handling | BTMgr special cases (gamepad RFC, last-disconnected logic; unpaired gamepad rejected) | Those special cases are **not** mirrored; an unpaired gamepad follows the normal client-escalation flow | Documented in [AuthBridge.h](../Bluetooth/AuthBridge.h) |
@@ -198,7 +199,7 @@ The primary test cases already exist in [bluetooth_pre_migration_regression_test
 | §3 Pairing & unpairing | `pair`/`unpair` | Yes | Yes | Check event order (row 6) |
 | §4 Connection management | `connect`/`disconnect` | Yes | Yes | |
 | §5 AutoConnect guard | Guard-driven divergence | Yes | Yes | Identical on both backends; **not** a defect |
-| §6 Device info, audio & playback | `getDeviceInfo`, `getAudioInfo`, `setAudioStream`, playback commands, `respondToEvent` | Yes | **Partly** | Audio items and `getAudioInfo` are known gaps on SDK; `getDeviceInfo` and `respondToEvent` must pass |
+| §6 Device info, audio & playback | `getDeviceInfo`, `getAudioInfo`, `setAudioStream`, playback commands, `respondToEvent` | Yes | **Partly** | Volume and mute must pass; playback commands, `getAudioInfo` and `setAudioStream` with `AUXILIARY` are known gaps on SDK; `getDeviceInfo` and `respondToEvent` must pass |
 | §7 Volume & mute | `get/setDeviceVolumeMuteInfo` | Yes | **Known gap** | Record as known gap on SDK |
 | §8 Adapter control | `enable`/`disable`/discoverable/name | Yes | **Partly** | `enable`/`disable` and `setName` must pass; `getName`/discoverable are known gaps on SDK |
 | §9 Gamepad / HID classification | Pair/connect HID and gamepad | Yes | Yes | Type string must be `HUMAN INTERFACE DEVICE` on both |
@@ -282,5 +283,5 @@ Include in each report: backend (and how you verified it), build/flags, device m
 ### Open items for the dev team to confirm before QA starts
 
 1. The supported procedure for switching a unit between BTMgr and SDK (which services to stop/start besides toggling `BLUETOOTH_SDK_ENABLED` and restarting the plugin).
-2. Whether the §5 gaps (`getName`, discoverable, audio and playback events) are accepted for this release or are blockers.
+2. Whether the §5 gaps (`getName`, discoverable, playback commands and events, track info) are accepted for this release or are blockers.
 3. Which flag configuration (`BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION`, `BLUETOOTH_AUDIO_SUPPORT`) the build under test uses.

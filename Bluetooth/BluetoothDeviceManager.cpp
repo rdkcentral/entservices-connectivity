@@ -394,6 +394,7 @@ namespace WPEFramework {
                     deviceInfo.autoConnectStatus = autoConnectStatus;
                     deviceInfo.lastConnectTimeUtc = std::move(lastConnectTimeUtc);
                     deviceInfo.lastVolumeSetting = lastVolumeSetting;
+                    deviceInfo.lastVolumeStored = deviceInfoObj.HasLabel("lastVolumeStored") ? deviceInfoObj["lastVolumeStored"].Boolean() : (lastVolumeSetting > 0);
                     deviceInfo.isGamePad = deviceInfoObj.HasLabel("isGamePad") ? deviceInfoObj["isGamePad"].Boolean() : false;
 
                     LOGINFO("Loaded device info for deviceID=%s, autoConnectStatus=%d, lastConnectTimeUtc=%s, lastVolumeSetting=%lld\n",
@@ -532,6 +533,9 @@ namespace WPEFramework {
                 deviceInfoObj["autoconnect"] = static_cast<int>(deviceInfo.autoConnectStatus);
                 deviceInfoObj["lastConnectTimeUtc"] = deviceInfo.lastConnectTimeUtc;
                 deviceInfoObj["lastVolumeSetting"] = deviceInfo.lastVolumeSetting;
+                if (deviceInfo.lastVolumeStored) {
+                    deviceInfoObj["lastVolumeStored"] = true;
+                }
 
                 deviceInfoArray.Add(deviceInfoObj);
 #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
@@ -809,7 +813,14 @@ namespace WPEFramework {
                 return Core::ERROR_NOT_EXIST;
             }
 
+            // The audio path stores the volume it has just set, as the plugin does after the same call.
+            if (deviceInfo.lastVolumeStored && deviceInfo.lastVolumeSetting == volumeSetting) {
+                _adminLock.Unlock();
+                return Core::ERROR_NONE;
+            }
+
             deviceInfo.lastVolumeSetting = volumeSetting;
+            deviceInfo.lastVolumeStored = true;
             _pairedDeviceCache[deviceID] = std::move(deviceInfo);
             _adminLock.Unlock();
 
@@ -824,6 +835,102 @@ namespace WPEFramework {
                 LOGERR("Failed to update storage from cache after setting lastVolumeSetting for deviceID=%s", deviceID.c_str());
             }
 
+            return result;
+        }
+
+        bool BluetoothDeviceManager::getLastVolumeSetting(const std::string& deviceID, long long& volumeSetting)
+        {
+            Core::SafeSyncType<Core::CriticalSection> lock(_adminLock);
+            const auto it = _pairedDeviceCache.find(deviceID);
+            if (it == _pairedDeviceCache.end() || !(it->second.lastVolumeStored || it->second.lastVolumeSetting > 0)) {
+                return false;
+            }
+            volumeSetting = it->second.lastVolumeSetting;
+            return true;
+        }
+
+        bool BluetoothDeviceManager::getLastMuteState(bool& mute)
+        {
+            {
+                Core::SafeSyncType<Core::CriticalSection> lock(_adminLock);
+                if (_lastMuteLoaded) {
+                    mute = _lastMute;
+                    return _lastMuteStored;
+                }
+            }
+
+            bool stored = false;
+            bool value = false;
+            bool readOk = false;
+            PluginHost::IShell* service = AcquireService();
+            if (service != nullptr) {
+                Exchange::IStore* pPersistentStore = service->QueryInterfaceByCallsign<Exchange::IStore>(PERSISTENT_STORE_CALLSIGN);
+                service->Release();
+                if (pPersistentStore != nullptr) {
+                    string muteStr;
+                    const Core::hresult result = pPersistentStore->GetValue(PERSISTENT_STORE_NAMESPACE, PERSISTENT_STORE_KEY_LAST_MUTE, muteStr);
+                    pPersistentStore->Release();
+                    if (Core::ERROR_NONE == result) {
+                        readOk = true;
+                        stored = true;
+                        value = (muteStr == "true");
+                    } else if (missingFromPersistentStore(result)) {
+                        readOk = true;
+                    } else {
+                        LOGERR("Failed to read lastMute from PersistentStore, hresult=%d", result);
+                    }
+                } else {
+                    LOGERR("Failed to get PersistentStore interface");
+                }
+            }
+
+            Core::SafeSyncType<Core::CriticalSection> lock(_adminLock);
+            // A set that ran while the store was being read wins. A failed read is not remembered, so the next
+            // call tries again.
+            if (!_lastMuteLoaded && readOk) {
+                _lastMuteLoaded = true;
+                _lastMuteStored = stored;
+                _lastMute = value;
+            }
+            if (!_lastMuteLoaded) {
+                return false;
+            }
+            mute = _lastMute;
+            return _lastMuteStored;
+        }
+
+        Core::hresult BluetoothDeviceManager::setLastMuteState(bool mute)
+        {
+            LOGINFO("mute=%d", mute);
+
+            {
+                Core::SafeSyncType<Core::CriticalSection> lock(_adminLock);
+                if (_lastMuteLoaded && _lastMuteStored && _lastMute == mute) {
+                    return Core::ERROR_NONE;
+                }
+                _lastMuteLoaded = true;
+                _lastMuteStored = true;
+                _lastMute = mute;
+            }
+
+            PluginHost::IShell* service = AcquireService();
+            if (service == nullptr) {
+                LOGERR("Service is null");
+                return Core::ERROR_GENERAL;
+            }
+
+            Exchange::IStore* pPersistentStore = service->QueryInterfaceByCallsign<Exchange::IStore>(PERSISTENT_STORE_CALLSIGN);
+            service->Release();
+            if (pPersistentStore == nullptr) {
+                LOGERR("Failed to get PersistentStore interface");
+                return Core::ERROR_GENERAL;
+            }
+
+            const Core::hresult result = pPersistentStore->SetValue(PERSISTENT_STORE_NAMESPACE, PERSISTENT_STORE_KEY_LAST_MUTE, mute ? "true" : "false");
+            pPersistentStore->Release();
+            if (Core::ERROR_NONE != result) {
+                LOGERR("Failed to save lastMute to PersistentStore, hresult=%d", result);
+            }
             return result;
         }
 

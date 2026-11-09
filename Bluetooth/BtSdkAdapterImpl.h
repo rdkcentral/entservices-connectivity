@@ -40,6 +40,7 @@
 #include <bluetooth/Manager.h>
 #include <Status.h>
 
+#include "AudioBridge.h"
 #include "AuthBridge.h"
 #include "DeviceRegistry.h"
 #include "DeviceTypeClassifier.h"
@@ -89,7 +90,8 @@ public:
 
     bool respondToEvent(const std::string& handleStr, const std::string& eventType, bool accepted) override;
 
-    // Audio stubs pending T-7 (BLUETOOTH_AUDIO_SUPPORT / AUDIO_SUPPORT SDK module).
+    // Volume, mute and the volume/mute commands use the SDK's audio API (AUDIO_SUPPORT); setAudioStream accepts only
+    // PRIMARY, the SDK's one stream. Track info is not provided.
     bool               setAudioStream(long long int deviceID, const std::string& streamName) override;
     bool               setAudioControlCommand(long long int deviceID, const std::string& cmd) override;
     bool               setDeviceVolumeMute(long long int deviceID, const std::string& profile,
@@ -144,6 +146,10 @@ private:
         std::string       m_mac;
     };
     bool isOperationInProgress(const std::string& mac) const;
+
+    // Like BTMgr's btrMgr_StartAudioStreamingOut, keeps at most one audio output device connected: disconnects every
+    // connected audio output device other than targetHandle. False if one of them cannot be disconnected.
+    bool disconnectOtherAudioOutputDevices(const std::string& targetHandle);
 
     // Discovery name gate (see DiscoveryNameGate): unpaired devices BlueZ has not named yet are held back
     // from clients, and re-read by a worker thread until they are named or their wait runs out.
@@ -249,6 +255,7 @@ private:
     DeviceRegistry m_registry;
     std::unique_ptr<EventBridge> m_eventBridge;
     std::unique_ptr<AuthBridge>  m_authBridge;
+    std::unique_ptr<AudioBridge> m_audioBridge;
 };
 
 } // namespace Plugin

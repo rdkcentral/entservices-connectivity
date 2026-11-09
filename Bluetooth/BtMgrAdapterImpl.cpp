@@ -28,6 +28,7 @@
 #include <mutex>
 
 #include "btmgr.h"
+#include "VolumeUtils.h"
 #include <UtilsIarm.h>
 #include <UtilsLogging.h>
 #include <UtilsString.h>
@@ -812,19 +813,14 @@ int BtMgrAdapterImpl::deviceOpTypeFromProfile(const std::string& p) {
 
 // static
 int BtMgrAdapterImpl::volumeOpTypeFromDeviceType(const std::string& t) {
-    if (Utils::String::contains(t, "LOUDSPEAKER") || Utils::String::contains(t, "HEADPHONES") ||
-        Utils::String::contains(t, "WEARABLE HEADSET") || Utils::String::contains(t, "HIFI AUDIO DEVICE"))
-        return static_cast<int>(BTRMGR_DEVICE_OP_TYPE_AUDIO_OUTPUT);
-    if (Utils::String::contains(t, "SMARTPHONE") || Utils::String::contains(t, "TABLET"))
-        return static_cast<int>(BTRMGR_DEVICE_OP_TYPE_AUDIO_INPUT);
-    if (Utils::String::contains(t, "KEYBOARD") || Utils::String::contains(t, "MOUSE") ||
-        Utils::String::contains(t, "JOYSTICK"))
-        return static_cast<int>(BTRMGR_DEVICE_OP_TYPE_HID);
-    if (Utils::String::contains(t, "LE TILE") || Utils::String::contains(t, "LE"))
-        return static_cast<int>(BTRMGR_DEVICE_OP_TYPE_LE);
-    if (Utils::String::contains(t, "DEFAULT"))
-        return static_cast<int>(BTRMGR_DEVICE_OP_TYPE_UNKNOWN);
-    return static_cast<int>(BTRMGR_DEVICE_OP_TYPE_AUDIO_OUTPUT);
+    switch (WPEFramework::Plugin::volumeOpTypeFromDeviceType(t)) {
+        case VolumeOpType::AudioOutput: return static_cast<int>(BTRMGR_DEVICE_OP_TYPE_AUDIO_OUTPUT);
+        case VolumeOpType::AudioInput:  return static_cast<int>(BTRMGR_DEVICE_OP_TYPE_AUDIO_INPUT);
+        case VolumeOpType::Hid:         return static_cast<int>(BTRMGR_DEVICE_OP_TYPE_HID);
+        case VolumeOpType::Le:          return static_cast<int>(BTRMGR_DEVICE_OP_TYPE_LE);
+        case VolumeOpType::Unknown:     break;
+    }
+    return static_cast<int>(BTRMGR_DEVICE_OP_TYPE_UNKNOWN);
 }
 
 void BtMgrAdapterImpl::cacheHandleToMac(const std::string& handleStr,

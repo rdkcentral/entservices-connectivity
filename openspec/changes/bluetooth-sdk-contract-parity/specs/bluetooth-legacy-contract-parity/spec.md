@@ -117,7 +117,7 @@ For `getDeviceVolumeMuteInfo` and `setDeviceVolumeMuteInfo` on the BTMgr backend
 - **THEN** the volume and mute operation uses the audio output type
 
 ### Requirement: One connected audio output device
-Connecting an audio output device on the SDK backend SHALL first disconnect every other connected audio output device, as BTMgr's `btrMgr_StartAudioStreamingOut` does, so that at most one audio output device is connected. If any of those disconnects fails, the connect SHALL fail and SHALL NOT be attempted on the new device. A smartphone or tablet SHALL NOT count as an audio output device: connecting one SHALL NOT disconnect anything, and connecting an audio output device SHALL NOT disconnect one. Connecting a device that is already connected SHALL succeed without disconnecting anything. Devices that connect from their own side are out of scope.
+Connecting an audio output device on the SDK backend SHALL first disconnect every other connected audio output device, as BTMgr's `btrMgr_StartAudioStreamingOut` does, so that at most one audio output device is connected. If any of those disconnects fails, the connect SHALL fail and SHALL NOT be attempted on the new device. A smartphone or tablet SHALL NOT count as an audio output device: connecting one SHALL NOT disconnect anything, and connecting an audio output device SHALL NOT disconnect one. Connecting a device that is already connected SHALL succeed, and SHALL disconnect only other connected audio output devices, if any. Devices that connect from their own side are out of scope.
 
 The old device's disconnect SHALL run synchronously inside the connect call, outside the new device's held-status scope, so its `CONNECTION_CHANGE` reaches the client before the connect response, as on BTMgr. The new device's `CONNECTION_CHANGE` is still held until after the connect response.
 
@@ -138,7 +138,7 @@ The old device's disconnect SHALL run synchronously inside the connect call, out
 - **THEN** the audio output device stays connected
 
 #### Scenario: Target already connected
-- **WHEN** a client connects an audio output device that is already connected
+- **WHEN** a client connects an audio output device that is already connected and no other audio output device is connected
 - **THEN** the connect reports success and no device is disconnected
 
 #### Scenario: Notification order
@@ -166,6 +166,112 @@ The following differences between the SDK backend and legacy SHALL be accepted, 
 #### Scenario: Gap report review recorded
 - **WHEN** the gap report is reviewed
 - **THEN** each item lists the SDK team's outcome and who owns any remaining work
+
+### Requirement: SDK volume and mute get and set
+On the SDK backend, `getDeviceVolumeMuteInfo` and `setDeviceVolumeMuteInfo` SHALL work for a connected audio output device through the SDK's `Device::getVolume/setVolume/isMuted/setMute`, as BTMgr's `BTRMGR_GetDeviceVolumeMute` and `BTRMGR_SetDeviceVolumeMute` do for audio output.
+
+- The plugin volume is 0 to 255 and the SDK volume is a float from 0.0 to 1.0. The conversion SHALL be `sdk = plugin / 255` and `plugin = round(sdk * 255)`, so a set value reads back unchanged.
+- The device operation type SHALL come from the same device-type mapping as the BTMgr backend. Only the audio output type is supported: any other type (smartphone, tablet, HID, LE), a device that is not connected, or a device with no SDK audio SHALL fail.
+- `set` SHALL apply the volume and then the mute, and SHALL succeed only if both SDK calls succeed. A mute other than 0 or 1 SHALL fail.
+- `get` SHALL report `valid` false for a device that is not a connected audio output device, so the response carries an empty `volumeinfo` as on BTMgr. The SDK reports no error for a read, so nothing else makes it invalid.
+- AVRCP absolute volume is the SDK's job (the bluez5 SPA plugin in PipeWire). The plugin SHALL NOT pin the stream volume to maximum as BTMgr does.
+
+#### Scenario: Set then get
+- **WHEN** a client sets volume 100 and mute 0 on a connected speaker, then reads it back
+- **THEN** the SDK volume is set to `100/255` and the read returns volume 100 and mute false
+
+#### Scenario: Not an audio output device
+- **WHEN** a client sets the volume of a smartphone
+- **THEN** the call fails and the SDK is not called
+
+#### Scenario: Device not connected
+- **WHEN** a client sets the volume of a paired speaker that is not connected
+- **THEN** the call fails
+
+#### Scenario: SDK mute fails
+- **WHEN** the SDK volume call succeeds and the SDK mute call fails
+- **THEN** the call fails
+
+#### Scenario: Not a connected audio output device
+- **WHEN** a client reads the volume of a smartphone, or of a speaker that is not connected
+- **THEN** `getDeviceVolumeMuteInfo` returns an empty `volumeinfo`
+
+### Requirement: Volume and mute commands
+On the SDK backend, `sendAudioPlaybackCommand` SHALL support `VOLUME_UP`, `VOLUME_DOWN`, `AUDIO_MUTE` and `AUDIO_UNMUTE` for a connected audio output device, and every other command SHALL keep failing as unsupported. BTMgr tries AVRCP first and falls back to local steps; with the SDK the AVRCP path is below the plugin, so the plugin SHALL apply the local step:
+
+- `VOLUME_UP`: from a current volume below 5 the new volume is 5, from 5 to 245 it is the current volume plus 10, above 245 it is 255.
+- `VOLUME_DOWN`: from a current volume above 250 the new volume is 250, from 10 to 250 it is the current volume minus 10, below 10 it is 0.
+- Both volume commands report mute as true only when the new volume is 0.
+- `AUDIO_MUTE` and `AUDIO_UNMUTE` set the mute and leave the volume unchanged.
+
+#### Scenario: Volume up from a low volume
+- **WHEN** the current volume is 3 and `VOLUME_UP` is sent
+- **THEN** the volume becomes 5
+
+#### Scenario: Volume down near zero
+- **WHEN** the current volume is 7 and `VOLUME_DOWN` is sent
+- **THEN** the volume becomes 0 and the reported mute is true
+
+#### Scenario: Unsupported command
+- **WHEN** `PAUSE` is sent
+- **THEN** the call fails, as today
+
+### Requirement: Device media status notification
+On the SDK backend the plugin SHALL send `onDeviceMediaStatus` with `volume` (0 to 255), `mute` and `command` (`VOLUME_UP`, `VOLUME_DOWN`, `AUDIO_MUTE`, `AUDIO_UNMUTE` or unknown) for every successful volume or mute set, for every volume or mute command above, and for every change the device or the platform makes (`AudioEvent::VolumeChanged` and `MuteStateChanged`), so that the client updates without waiting for the device.
+
+The `command` SHALL be derived as BTMgr's set does, by comparing with the previous state of that device: a mute change gives `AUDIO_MUTE` or `AUDIO_UNMUTE`; otherwise a higher volume gives `VOLUME_UP`, a lower one `VOLUME_DOWN`, and an equal one unknown. The previous state is the last value stored for the device (see the persistence requirement), starting from volume 254 and mute false.
+
+A change the plugin made itself SHALL produce exactly one notification: the SDK event that echoes it SHALL be recognised and dropped.
+
+#### Scenario: Volume set from the client
+- **WHEN** a client raises the volume of a speaker
+- **THEN** one `onDeviceMediaStatus` is sent with the new volume and `"command":"VOLUME_UP"`
+
+#### Scenario: Mute set from the client
+- **WHEN** a client mutes an unmuted speaker
+- **THEN** one `onDeviceMediaStatus` is sent with `"mute":true` and `"command":"AUDIO_MUTE"`
+
+#### Scenario: Volume changed with the headset buttons
+- **WHEN** the SDK reports `AudioEvent::VolumeChanged` that the plugin did not cause
+- **THEN** one `onDeviceMediaStatus` is sent with the new volume and a derived command
+
+#### Scenario: SDK echo of the plugin's own change
+- **WHEN** the SDK reports the volume change the plugin has just set
+- **THEN** no second notification is sent
+
+#### Scenario: Failed set
+- **WHEN** a set fails
+- **THEN** no notification is sent
+
+### Requirement: Volume and mute persistence
+On the SDK backend the plugin SHALL keep, as BTMgr does with `RDKTV_PERSIST_VOLUME` (always enabled), the last volume of each audio output device and one mute state for the box, in the plugin's own stored device data.
+
+- A successful set, a volume or mute command and a device-initiated change SHALL update the stored values.
+- `getDeviceVolumeMuteInfo` SHALL return the stored volume and mute when they exist, and the live SDK values otherwise.
+- When an audio output device with a stored volume connects, the plugin SHALL apply that volume to the SDK device once its audio is available, which is when the SDK first reports a volume or mute change for it after the connection, and send one `onDeviceMediaStatus` with the stored volume and mute and a `command` derived from the device's own volume. That first change is not reported itself. The pending apply is dropped if the device disconnects first. SDK volume events caused by that apply SHALL NOT produce further notifications, and the suppression SHALL end after the apply is confirmed or after 4 seconds.
+
+#### Scenario: Volume restored on connect
+- **WHEN** a speaker with a stored volume of 120 connects
+- **THEN** the SDK volume is set to `120/255` and one `onDeviceMediaStatus` with volume 120 is sent
+
+#### Scenario: Nothing stored
+- **WHEN** a speaker with no stored volume connects
+- **THEN** the SDK volume is left as it is
+
+#### Scenario: Stored value wins on read
+- **WHEN** a client reads the volume of a device with a stored volume
+- **THEN** the stored value is returned
+
+### Requirement: Audio stream selection
+On the SDK backend `setAudioStream` SHALL succeed for `PRIMARY` and fail for `AUXILIARY` and for any other name. The SDK's capture stream is fixed to PRIMARY and cannot be changed at run time, and not every platform has an auxiliary source, so `PRIMARY` reports what is already true and `AUXILIARY` is refused rather than silently ignored.
+
+#### Scenario: Primary stream
+- **WHEN** a client calls `setAudioStream` with `PRIMARY`
+- **THEN** the response contains `"success":true`
+
+#### Scenario: Auxiliary stream
+- **WHEN** a client calls `setAudioStream` with `AUXILIARY`
+- **THEN** the response contains `"success":false`
 
 ### Requirement: Payload audit against legacy
 Every notification and response payload produced by the plugin SHALL be compared field-by-field with `rdk_develop_branch` for key names, JSON types and presence rules, and each difference SHALL be fixed or recorded in the SDK gap report or a follow-up change.

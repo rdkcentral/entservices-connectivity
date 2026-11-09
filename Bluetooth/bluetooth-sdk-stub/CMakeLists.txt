@@ -7,8 +7,10 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(Threads REQUIRED)
 
-# Build the fake librdk_bluetooth.so with no external dependencies
-option(AUDIO_SUPPORT "Enable Bluetooth audio API symbols (no WirePlumber linking required)" OFF)
+# Build the fake librdk_bluetooth.so with no external dependencies.
+# ON by default: the real SDK ships the audio API, and the plugin references those symbols, so a product that
+# runs the plugin against this stub needs them exported too or the plugin fails to load.
+option(AUDIO_SUPPORT "Enable Bluetooth audio API symbols (no WirePlumber linking required)" ON)
 
 add_library(rdk_bluetooth SHARED
     stub/Adapter.cpp

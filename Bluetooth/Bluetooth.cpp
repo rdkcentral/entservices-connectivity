@@ -438,6 +438,23 @@ namespace WPEFramework
             authCbs.onAutoConnected = [this](const std::string& handleStr) {
                 m_bluetoothDeviceManager.setLastConnectTimeUtc(handleStr);
             };
+            authCbs.getLastVolume = [this](const std::string& handleStr, uint8_t& volume) -> bool {
+                long long stored = 0;
+                if (!m_bluetoothDeviceManager.getLastVolumeSetting(handleStr, stored) || stored < 0 || stored > 255) {
+                    return false;
+                }
+                volume = static_cast<uint8_t>(stored);
+                return true;
+            };
+            authCbs.setLastVolume = [this](const std::string& handleStr, uint8_t volume) {
+                (void)m_bluetoothDeviceManager.setLastVolumeSetting(handleStr, static_cast<long long>(volume));
+            };
+            authCbs.getLastMute = [this](bool& mute) -> bool {
+                return m_bluetoothDeviceManager.getLastMuteState(mute);
+            };
+            authCbs.setLastMute = [this](bool mute) {
+                (void)m_bluetoothDeviceManager.setLastMuteState(mute);
+            };
 
             message = m_btAdapter.init(service, std::move(evtCbs), std::move(authCbs));
             if (!message.empty()) {

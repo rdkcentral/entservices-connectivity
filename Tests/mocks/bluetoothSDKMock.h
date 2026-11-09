@@ -99,4 +99,12 @@ public:
     MOCK_METHOD(Status, unpair,     (),              (override));
     MOCK_METHOD(Status, setAutoconnectOn,  (),       (override));
     MOCK_METHOD(Status, setAutoconnectOff, (),       (override));
+
+    MOCK_METHOD(Status, setVolume,  (float),         (override));
+    MOCK_METHOD(float,  getVolume,  (),              (override));
+    MOCK_METHOD(Status, setMute,    (bool),          (override));
+    MOCK_METHOD(bool,   isMuted,    (),              (override));
+    MOCK_METHOD(Status, setDelayCompensation, (uint32_t), (override));
+    MOCK_METHOD(void,   registerForAudioEvents,
+        (std::function<void(bluetooth::AudioEvent, bluetooth::AudioEventData)>), (override));
 };

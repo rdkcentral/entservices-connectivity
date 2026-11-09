@@ -34,6 +34,8 @@ namespace WPEFramework {
         static constexpr const char* PERSISTENT_STORE_CALLSIGN = "org.rdk.PersistentStore";
         static constexpr const char* PERSISTENT_STORE_NAMESPACE = "Bluetooth";
         static constexpr const char* PERSISTENT_STORE_KEY_DEVICE_INFO = "deviceInfo";
+        // The last mute state is one value for the box, so it is kept apart from the per-device entries.
+        static constexpr const char* PERSISTENT_STORE_KEY_LAST_MUTE = "lastMute";
 #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
         static constexpr const char* PERSISTENT_STORE_KEY_MIGRATION_VERSION = "migrationVersion";
         static constexpr const char* BLUETOOTH_MIGRATION_VERSION = "1";
@@ -53,6 +55,8 @@ namespace WPEFramework {
             std::string         deviceType          = "UNKNOWN";
             std::string         friendlyName        = "";
             long long           lastVolumeSetting   = 0;
+            // Set once a volume has been stored; entries from before this field carry a volume above 0 instead.
+            bool                lastVolumeStored    = false;
             AutoConnectStatus   autoConnectStatus   = AUTO_CONNECT_STATUS_UNSET;
             std::string         lastConnectTimeUtc  = "";
             // BTRMGR reports gamepads as "HUMAN INTERFACE DEVICE"; this disambiguates them.
@@ -84,6 +88,11 @@ namespace WPEFramework {
                 bool isLegacyAutoConnect(const std::string& deviceID);
         #endif
                 Core::hresult setLastVolumeSetting(const std::string& deviceID, long long volumeSetting);
+                // False when no volume is stored for the device.
+                bool getLastVolumeSetting(const std::string& deviceID, long long& volumeSetting);
+                // False when no mute state is stored. Read from the persistent store on first use.
+                bool getLastMuteState(bool& mute);
+                Core::hresult setLastMuteState(bool mute);
                 Core::hresult addDevice(const std::string& deviceID);
                 Core::hresult removeDevice(const std::string& deviceID);
                 std::unordered_map<std::string /* deviceID */, BluetoothDeviceInfo /* deviceInfo */> getPairedDeviceInfos();
@@ -100,6 +109,11 @@ namespace WPEFramework {
                 mutable Core::CriticalSection _persistLock;
                 PluginHost::IShell* _service = nullptr;
                 std::unordered_map<std::string /* deviceID */, BluetoothDeviceInfo /* deviceInfo */> _pairedDeviceCache;
+
+                // Mute state: the value is unknown until the first read, then it follows the writes.
+                bool _lastMuteLoaded = false;
+                bool _lastMuteStored = false;
+                bool _lastMute       = false;
 
                 Core::hresult getPairedDeviceInfo(const std::string& deviceID, BluetoothDeviceInfo& deviceInfo);
                 Core::hresult updateCacheFromStorage();

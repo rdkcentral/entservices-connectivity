@@ -17,7 +17,7 @@ Evidence paths: `P` = `rdk_develop_branch/entservices-connectivity/Bluetooth/Blu
 | 3 | AVRCP media player: controls, track info, state events | `sendAudioPlaybackCommand`, `getAudioInfo`, `onPlaybackChange`, `onPlaybackProgress`, `onPlaybackNewTrack` | none | **Not needed.** Only for stream-in; the SDK will not use the media player object |
 | 4 | A2DP transport state ("playing") | `onPlaybackRequest` | none | **Not needed.** Stream-in only; if it returns it will probably use HFP or HSP |
 | 5 | "Currently streaming" audio device | `getConnectedDevices` | none | **Plugin.** Connecting an audio output device first disconnects any other, so the connected audio output device is the streaming one |
-| 6 | Audio volume/mute parity and events | `getDeviceVolumeMuteInfo`, `setDeviceVolumeMuteInfo`, `onDeviceMediaStatus` | `AUDIO_SUPPORT` | **Answered.** SDK covers the AVRCP absolute volume path and events; the plugin persists volume and updates the UI immediately as BTMgr does |
+| 6 | Audio volume/mute parity and events | `getDeviceVolumeMuteInfo`, `setDeviceVolumeMuteInfo`, `onDeviceMediaStatus` | `AUDIO_SUPPORT` | **Answered.** SDK covers the AVRCP absolute volume path and events; the plugin implements volume and mute with BTMgr's persisted volume and immediate `onDeviceMediaStatus` (`AudioBridge`) |
 | 7 | Primary/auxiliary audio stream selection | `setAudioStream` | none | **Not needed now.** The SDK is fixed to PRIMARY; auxiliary can be added if required |
 | 8 | Device-type-specific connect semantics | `connect` / `disconnect` | generic `Device::connect` | **Not needed.** A plain connect works for A2DP source; sink (stream-in) is not enabled |
 | 9 | Failure events | `onRequestFailed` | no failure `DeviceEvent`s | **Closed.** The plugin uses synchronous `pair`/`connect`; failure is the response, with no `onRequestFailed` on the SDK stack |
@@ -81,7 +81,7 @@ Items 1 to 9 were what the plugin team could not close alone. Items resolvable i
 
 ## 6. Audio volume and mute
 
-**Outcome:** answered. (1) A Route volume change reaches the speaker as AVRCP absolute volume when the remote supports it; the bluez5 SPA plugin handles that. The plugin keeps the persisted volume and updates the UI immediately, as BTMgr does. (2) Device-initiated changes arrive as `AudioEvent::VolumeChanged`; mute is handled in PipeWire and the plugin relies on `MuteStateChanged`. (3) `initAudio` is covered at L3 only, since it needs the real WirePlumber node. (4) `AUDIO_SUPPORT` is enabled wherever the SDK is built.
+**Outcome:** answered. (1) A Route volume change reaches the speaker as AVRCP absolute volume when the remote supports it; the bluez5 SPA plugin handles that. The plugin reproduces BTMgr's persisted volume and its immediate `onDeviceMediaStatus` after a set (`AudioBridge`). (2) Device-initiated changes arrive as `AudioEvent::VolumeChanged`; mute is handled in PipeWire and the plugin relies on `MuteStateChanged`. (3) `initAudio` is covered at L3 only, since it needs the real WirePlumber node. (4) `AUDIO_SUPPORT` is enabled wherever the SDK is built.
 
 - **Legacy (`M:7577`, `BTRMGR_SetDeviceVolumeMute`):**
   - Scale is 0 to 255.

@@ -37,6 +37,7 @@ set(BLUETOOTH_PLUGIN_SOURCES
         BtSdkAdapterImpl.cpp
         EventBridge.cpp
         AuthBridge.cpp
+        AudioBridge.cpp
         DeviceTypeClassifier.cpp
         ScanFilterPolicy.cpp
         DiscoveryNameGate.cpp
@@ -49,6 +50,11 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/")
 # Every build requires the Bluetooth SDK. Product recipes select whether this
 # resolves to the real SDK or the stub SDK.
 find_package(BLUETOOTH_SDK REQUIRED)
+
+# The SDK is built with its audio API (AUDIO_SUPPORT) wherever it is used, and the plugin drives volume and mute
+# through it. The stub must declare the same API, so its option follows this one.
+option(BLUETOOTH_AUDIO_SUPPORT "Use the Bluetooth SDK audio API (volume and mute)" ON)
+set(AUDIO_SUPPORT ${BLUETOOTH_AUDIO_SUPPORT} CACHE BOOL "Enable Bluetooth audio API symbols in the bundled SDK stub" FORCE)
 
 add_subdirectory("${BLUETOOTH_SDK_STUB_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/bluetooth-sdk-stub")
 
@@ -169,7 +175,9 @@ if (BUILD_ENABLE_TELEMETRY_LOGGING)
 endif()
 
 if(BLUETOOTH_AUDIO_SUPPORT)
-    target_compile_definitions(${MODULE_NAME} PRIVATE BLUETOOTH_AUDIO_SUPPORT=1)
+    # AUDIO_SUPPORT makes the SDK headers (bundled stub or test mocks) declare the audio API. Test builds do not
+    # link the stub target, which would otherwise carry it.
+    target_compile_definitions(${MODULE_NAME} PRIVATE BLUETOOTH_AUDIO_SUPPORT=1 AUDIO_SUPPORT)
 endif()
 
 if (NOT RDK_SERVICES_L1_TEST)

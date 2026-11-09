@@ -105,6 +105,13 @@ struct BtAuthCallbacks {
     // Called after the startup reconnect connected a device itself, so the plugin records the connection time
     // as it does for a connect requested through the API.
     std::function<void(const std::string& handleStr)> onAutoConnected;
+
+    // The last audio output volume and mute, which BTMgr kept itself (RDKTV_PERSIST_VOLUME). The volume is stored
+    // per device and the mute is one value for the box. The getters return false when nothing is stored.
+    std::function<bool(const std::string& handleStr, uint8_t& volume)> getLastVolume;
+    std::function<void(const std::string& handleStr, uint8_t volume)> setLastVolume;
+    std::function<bool(bool& mute)> getLastMute;
+    std::function<void(bool mute)> setLastMute;
 };
 
 } // namespace Plugin
