@@ -132,10 +132,12 @@ if (BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION)
 endif ()
 
 # The bundled bluetooth-sdk-stub headers (Status.h, Events.h, ...) are only needed by the SDK
-# adapter tests. They come after Tests/mocks so the GMock-friendly bluetooth/{Adapter,Device,Manager}.h
-# shadow the stub's copies, as in the plugin build; the generic header names must not leak into other tests.
+# adapter tests. Source-level include directories precede the target-level ones on the compile line,
+# so Tests/mocks is repeated here ahead of the stub to let the GMock-friendly bluetooth/{Adapter,Device,Manager}.h
+# shadow the stub's copies; the generic header names must not leak into other tests.
 set_property(SOURCE tests/test_BluetoothSdkAdapter.cpp
     APPEND PROPERTY INCLUDE_DIRECTORIES
+    ${CMAKE_SOURCE_DIR}/../entservices-connectivity/Tests/mocks
     ${CMAKE_SOURCE_DIR}/../entservices-connectivity/Bluetooth/bluetooth-sdk-stub/include)
 
 # Signal to BtAdapter.cpp (dispatch) that real SDK impl is not available.
