@@ -27,6 +27,7 @@
 #include <string>
 #include <vector>
 
+#include "Telemetry.h"
 #include "bluetoothSDKMock.h"
 #include "BtSdkAdapterImpl.h"
 
@@ -41,14 +42,25 @@ using WPEFramework::Plugin::BtSdkAdapterImpl;
 
 const Status kSdkFailure(StatusCodes::BLUETOOTH_ERROR, "sdk failure");
 
+class SdkTelemetryMock : public TelemetryApiImpl {
+public:
+    MOCK_METHOD(void, t2_init, (char*), (override));
+    MOCK_METHOD(void, t2_uninit, (), (override));
+    MOCK_METHOD(T2ERROR, t2_event_s, (const char*, const char*), (override));
+    MOCK_METHOD(T2ERROR, t2_event_d, (const char*, int), (override));
+    MOCK_METHOD(T2ERROR, t2_event_f, (char*, double), (override));
+};
+
 class BluetoothSdkAdapterTest : public ::testing::Test {
 protected:
+    NiceMock<SdkTelemetryMock> telemetry;
     NiceMock<MockManagerStub> manager;
     std::shared_ptr<NiceMock<MockAdapter>> adapter;
     std::unique_ptr<BtSdkAdapterImpl> sdkAdapter;
 
     void SetUp() override
     {
+        TelemetryApi::setImpl(&telemetry);
         adapter = std::make_shared<NiceMock<MockAdapter>>();
         sdkAdapter = std::make_unique<BtSdkAdapterImpl>();
         bluetooth::g_managerStub = &manager;
@@ -71,6 +83,7 @@ protected:
         sdkAdapter.reset();
         bluetooth::g_managerStub = nullptr;
         adapter.reset();
+        TelemetryApi::setImpl(nullptr);
     }
 
     std::string initAdapter()
