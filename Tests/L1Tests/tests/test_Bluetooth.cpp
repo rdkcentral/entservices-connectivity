@@ -475,7 +475,7 @@ TEST_F(BluetoothTest, disconnectWrapper_Failed)
     EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
-// setAudioStream is AUDIO_SUPPORT-gated and returns false until SDK audio support lands.
+// setAudioStream reports failure for these stream names.
 TEST_F(BluetoothTest, setAudioStreamWrapper_Primary_Success)
 {
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("setAudioStream"), _T("{\"deviceID\":\"123\",\"audioStreamName\":\"PRIMARY\"}"), response));
@@ -603,7 +603,7 @@ TEST_F(BluetoothTest, setNameWrapper_Failed)
     EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
-// Audio playback commands are AUDIO_SUPPORT-gated (stubs return false).
+// Audio playback commands.
 TEST_F(BluetoothTest, sendAudioPlaybackCommandWrapper_Play_Success)
 {
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("sendAudioPlaybackCommand"), _T("{\"deviceID\":\"123\",\"command\":\"PLAY\"}"), response));
@@ -766,7 +766,7 @@ TEST(SignalLevelTest, UnknownRssiIsPoorNeverZero)
     EXPECT_EQ(1, signalLevelFromRssi(BT_RSSI_UNKNOWN));
 }
 
-// getAudioInfo and volume/mute methods are AUDIO_SUPPORT-gated stubs.
+// getAudioInfo and volume/mute methods.
 TEST_F(BluetoothTest, getMediaTrackInfoWrapper_Success)
 {
     IBtAdapter::BtMediaTrackInfo info;
@@ -791,7 +791,7 @@ TEST_F(BluetoothTest, getMediaTrackInfoWrapper_Failed)
     EXPECT_TRUE(response.find("\"success\":true") != string::npos);
 }
 
-// Volume/mute methods are AUDIO_SUPPORT-gated stubs.
+// Volume/mute methods.
 TEST_F(BluetoothTest, getDeviceVolumeMuteInfoWrapper_Success)
 {
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getDeviceVolumeMuteInfo"), _T("{\"deviceID\":\"123\",\"deviceType\":\"HEADPHONES\"}"), response));

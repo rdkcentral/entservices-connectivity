@@ -90,7 +90,7 @@ public:
 
     bool respondToEvent(const std::string& handleStr, const std::string& eventType, bool accepted) override;
 
-    // Volume, mute and the volume/mute commands use the SDK's audio API (AUDIO_SUPPORT); setAudioStream accepts only
+    // Volume, mute and the volume/mute commands use the SDK's audio API; setAudioStream accepts only
     // PRIMARY, the SDK's one stream. Track info is not provided.
     bool               setAudioStream(long long int deviceID, const std::string& streamName) override;
     bool               setAudioControlCommand(long long int deviceID, const std::string& cmd) override;

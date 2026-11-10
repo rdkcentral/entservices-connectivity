@@ -7,7 +7,7 @@
 ```bash
 cd bluetooth-sdk-stub-integration-example
 mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release -DAUDIO_SUPPORT=ON
+cmake .. -DCMAKE_BUILD_TYPE=Release
 cmake --build . --parallel
 ```
 
@@ -47,14 +47,14 @@ adapter->setPowered(true);
 
 - All hardware operations return `Status::BLUETOOTH_ERROR`.
 - State is tracked locally (useful for testing state machines).
-- Audio methods are available when built with `-DAUDIO_SUPPORT=ON`.
+- Audio methods are always available.
 - **No PipeWire, WirePlumber, BlueZ, or D-Bus required.**
 
 ### 5. Switch to Real SDK (Optional)
 
 To use the real Bluetooth SDK instead:
 
-1. Build the real SDK with: `cmake -S . -B build -DAUDIO_SUPPORT=ON -DBUILD_STUB_SDK=OFF`
+1. Build the real SDK with: `cmake -S . -B build -DBUILD_STUB_SDK=OFF`
 2. Replace `librdk_bluetooth.so` at runtime.
 3. Your middleware code doesn't change—the ABI is identical.
 
@@ -103,7 +103,6 @@ int main() {
 
 | Option | Value | Effect |
 |--------|-------|--------|
-| `AUDIO_SUPPORT` | `ON` or `OFF` | Include audio method symbols (no linking overhead) |
 | `CMAKE_BUILD_TYPE` | `Release` or `Debug` | Optimization level |
 
 ## File Structure
@@ -120,7 +119,7 @@ bluetooth-sdk-stub-integration-example/
 │       ├── Manager.h       ← Main entry point
 │       ├── Adapter.h       ← Adapter operations
 │       ├── Device.h        ← Device operations
-│       ├── Audio.h         ← Audio control (when AUDIO_SUPPORT=ON)
+│       ├── Audio.h         ← Audio control
 │       ├── GattClient.h    ← GATT client
 │       ├── GattServer.h    ← GATT server
 │       └── ...
@@ -138,10 +137,10 @@ bluetooth-sdk-stub-integration-example/
 A: No. The stub is completely independent.
 
 **Q: Do I need PipeWire or WirePlumber?**  
-A: No, even with `-DAUDIO_SUPPORT=ON`. Audio method signatures are available, but the stub doesn't call them.
+A: No. Audio method signatures are available, but the stub doesn't call them.
 
 **Q: Can I switch between stub and real SDK without recompiling my code?**  
-A: Yes! Just replace the `.so` file at runtime. The ABI is identical when both are built with the same `-DAUDIO_SUPPORT=` setting.
+A: Yes! Just replace the `.so` file at runtime. The ABI is identical.
 
 **Q: Why does every call return an error?**  
 A: That's expected. The stub doesn't have a real Bluetooth backend. For development/testing, this is fine—your code can still exercise the API.

@@ -131,7 +131,6 @@ Status Device::adapterSetPairable(bool pairable) {
   return Status(StatusCodes::BLUETOOTH_ERROR, "Adapter not available");
 }
 
-#ifdef AUDIO_SUPPORT
 Status Device::setVolume(float) { return unavailable(); }
 float Device::getVolume() { return 0.0f; }
 Status Device::setMute(bool) { return unavailable(); }
@@ -139,6 +138,5 @@ bool Device::isMuted() { return false; }
 Status Device::setDelayCompensation(uint32_t) { return unavailable(); }
 void Device::registerForAudioEvents(std::function<void(AudioEvent, AudioEventData)>) {}
 Status Device::initAudio(WpNode*, WpProxy*) { return unavailable(); }
-#endif
 
 }  // namespace bluetooth

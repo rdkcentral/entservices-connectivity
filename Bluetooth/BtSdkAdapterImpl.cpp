@@ -112,7 +112,8 @@ std::string BtSdkAdapterImpl::init(PluginHost::IShell* /* service */,
     audioCallbacks.setLastMute = authCallbacks.setLastMute;
     m_eventBridge = std::make_unique<EventBridge>(m_registry, std::move(eventCallbacks));
     m_authBridge  = std::make_unique<AuthBridge>(m_registry, std::move(authCallbacks));
-    audioCallbacks.resolveDeviceType = [this](const std::shared_ptr<bluetooth::Device>& device, const std::string& handleStr) {
+    audioCallbacks.resolveDeviceType = [this](const std::shared_ptr<bluetooth::Device>& device,
+                                              const std::string& handleStr) -> std::string {
         return m_authBridge ? m_authBridge->resolveDeviceType(device, handleStr) : m_registry.getDeviceType(handleStr);
     };
     m_audioBridge = std::make_unique<AudioBridge>(m_registry, std::move(audioCallbacks));
@@ -1092,7 +1093,6 @@ void BtSdkAdapterImpl::registerDeviceEvents(std::shared_ptr<bluetooth::Device> d
             }
             if (m_eventBridge) m_eventBridge->onDeviceEvent(ev, std::move(dev));
         });
-#ifdef AUDIO_SUPPORT
     // Weak: the device owns this callback, so holding it here would keep the device alive forever.
     device->registerForAudioEvents(
         [this, gate = m_callbackGate, weak = std::weak_ptr<bluetooth::Device>(device)](
@@ -1102,7 +1102,6 @@ void BtSdkAdapterImpl::registerDeviceEvents(std::shared_ptr<bluetooth::Device> d
             if (!entry) return;
             if (m_audioBridge) m_audioBridge->onAudioEvent(ev, data, weak.lock());
         });
-#endif
     LOGINFO("BtSdkAdapterImpl::registerDeviceEvents: exit handle=%s", handle.c_str());
 }
 

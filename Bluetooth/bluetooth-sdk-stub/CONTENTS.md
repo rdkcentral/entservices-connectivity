@@ -75,14 +75,13 @@ stub/
 - **CMakeLists.txt** — Complete build configuration
   - Builds `librdk_bluetooth.so` / `librdk_bluetooth.dylib`
   - No external dependencies (not even BlueZ, sdbus-c++, PipeWire, WirePlumber)
-  - `AUDIO_SUPPORT` option for compile-time audio API inclusion
   - Install targets for deployment
 
 ## Key Features
 
 ✅ **Zero Dependencies** — No BlueZ, D-Bus, sdbus-c++, PipeWire, or WirePlumber required  
-✅ **Audio Support** — Include audio method signatures with `-DAUDIO_SUPPORT=ON`  
-✅ **ABI Compatible** — Identical symbol set when both stub and real SDK built with same options  
+✅ **Audio Support** — Audio method signatures are always included  
+✅ **ABI Compatible** — Identical symbol set to the real SDK  
 ✅ **Minimal Overhead** — ~100KB library, only C++ and system libraries  
 ✅ **pImpl Design** — All implementation details hidden, API is purely header-based  
 ✅ **Production Ready** — Can ship stub `.so` for products without SDK  
@@ -90,12 +89,8 @@ stub/
 ## Quick Build
 
 ```bash
-# Default (no audio)
+# The audio API is always included (no PipeWire/WirePlumber needed)
 cmake -S . -B build
-cmake --build build
-
-# With audio support (stub only; no PipeWire/WirePlumber needed)
-cmake -S . -B build -DAUDIO_SUPPORT=ON
 cmake --build build
 ```
 
@@ -115,7 +110,7 @@ target_link_libraries(btmgr PRIVATE rdk_bluetooth)
 ```bash
 # Build once
 cd bluetooth-sdk-stub-integration-example
-cmake -S . -B build -DAUDIO_SUPPORT=ON
+cmake -S . -B build
 cmake --install build --prefix /opt/rdk
 
 # Link in your project
@@ -143,7 +138,7 @@ Then explore:
 - `Adapter` — Device discovery and enumeration
 - `Device` — Pairing, connection, properties
 - `GattClient` / `GattServer` — GATT operations
-- `Audio` — Volume, mute, delay compensation (when `AUDIO_SUPPORT=ON`)
+- `Audio` — Volume, mute, delay compensation
 
 ## File Manifest
 

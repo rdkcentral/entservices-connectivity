@@ -110,8 +110,7 @@ public:
     virtual Status setAutoconnectOn() { return Status(); }
     virtual Status setAutoconnectOff() { return Status(); }
 
-    // The SDK's audio API (AUDIO_SUPPORT). Declared whatever the build flag is, so the mock has one layout for the
-    // plugin and the tests; non-pure for the same reason as above.
+    // The SDK's audio API; non-pure for the same reason as above.
     virtual Status setVolume(float) { return Status(); }
     virtual float getVolume() { return 0.0f; }
     virtual Status setMute(bool) { return Status(); }

@@ -130,8 +130,8 @@ protected:
     {
         const std::vector<std::shared_ptr<bluetooth::Device>> allDevices(all.begin(), all.end());
         const std::vector<std::shared_ptr<bluetooth::Device>> connectedDevices(connected.begin(), connected.end());
-        ON_CALL(*adapter, getDevices()).WillByDefault(::testing::Return(allDevices));
-        ON_CALL(*adapter, getDevices(bluetooth::DeviceState::Connected)).WillByDefault(::testing::Return(connectedDevices));
+        ON_CALL(*adapter, getDevices()).WillByDefault(::testing::Return(std::move(allDevices)));
+        ON_CALL(*adapter, getDevices(bluetooth::DeviceState::Connected)).WillByDefault(::testing::Return(std::move(connectedDevices)));
         ASSERT_EQ(std::string(""), sdkAdapter->init(nullptr, BtEventCallbacks(callbacks), BtAuthCallbacks(authCallbacks)));
     }
 
@@ -724,7 +724,7 @@ TEST_F(BluetoothSdkAdapterTest, setDeviceVolumeMute_DeviceNotConnected_Fails)
 TEST_F(BluetoothSdkAdapterTest, setDeviceVolumeMute_UnknownDevice_Fails)
 {
     auto speaker = makeAudioDevice("AA:BB:CC:DD:EE:02");
-    initAudioDevices({speaker});
+    initAudioDevices({std::move(speaker)});
 
     EXPECT_FALSE(sdkAdapter->setDeviceVolumeMute(9999, "LOUDSPEAKER", 100, false));
 }

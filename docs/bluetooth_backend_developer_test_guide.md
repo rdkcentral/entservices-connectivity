@@ -92,7 +92,7 @@ Build/product variants you may encounter:
 ### 3.3 Optional features that interact with backend choice
 
 - `BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION` (compile-time) controls the guarded behaviors described in the pre-migration plan (e.g. `setAutoConnect` rejected, `getAutoConnect` always false until `performMigration`). It is orthogonal to the backend: the same guards apply to both. Confirm the build flag state before testing, since the pre-migration plan assumes it is **ON**.
-- `BLUETOOTH_AUDIO_SUPPORT` (CMake option, ON by default) makes the plugin use the SDK audio API and keeps the bundled stub's `AUDIO_SUPPORT` in step; SDK volume, mute and their notifications use it (see [§5](#5-known-differences-and-gaps-expected-not-new-bugs)).
+- The plugin always uses the SDK audio API; SDK volume, mute and their notifications use it (see [§5](#5-known-differences-and-gaps-expected-not-new-bugs)).
 
 ---
 
@@ -169,7 +169,7 @@ Do this at the start of **every** run and after every reboot/plugin restart.
 ### 6.3 Environment and prerequisites
 
 - Dual-backend image with a real SDK (not the stub), reachable device shell and logs.
-- Know the build flags (`BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION` ON per the pre-migration plan; `BLUETOOTH_AUDIO_SUPPORT` state).
+- Know the build flags (`BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION` ON per the pre-migration plan).
 - `performMigration` never called (verify as in pre-migration plan "Prerequisites", P3).
 - A JSON-RPC client (curl against `http://127.0.0.1:9998/jsonrpc`) **and** a way to subscribe to notifications (to observe events and order), since many parity points are event-related.
 - Device matrix (as many as available; see [§6.4](#64-device-matrix)):
@@ -284,4 +284,4 @@ Include in each report: backend (and how you verified it), build/flags, device m
 
 1. The supported procedure for switching a unit between BTMgr and SDK (which services to stop/start besides toggling `BLUETOOTH_SDK_ENABLED` and restarting the plugin).
 2. Whether the §5 gaps (`getName`, discoverable, playback commands and events, track info) are accepted for this release or are blockers.
-3. Which flag configuration (`BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION`, `BLUETOOTH_AUDIO_SUPPORT`) the build under test uses.
+3. Which flag configuration (`BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION`) the build under test uses.

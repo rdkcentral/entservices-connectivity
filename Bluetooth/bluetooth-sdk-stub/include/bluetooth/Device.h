@@ -22,9 +22,7 @@
 #include <Events.h>
 #include <Status.h>
 
-#ifdef AUDIO_SUPPORT
 #include "bluetooth/Audio.h"
-#endif
 
 #include <cstdint>
 #include <map>
@@ -214,18 +212,14 @@ class Device : public EventEmitter<DeviceEvent, std::shared_ptr<Device>>,
  */
   std::shared_ptr<gattClient::Client> getGattClient();
 
-#ifdef AUDIO_SUPPORT
   Status setVolume(float volume);
   float getVolume();
   Status setMute(bool mute);
   bool isMuted();
   Status setDelayCompensation(uint32_t delayMs);
   void registerForAudioEvents(std::function<void(AudioEvent, AudioEventData)> callback);
-#endif
-#ifdef AUDIO_SUPPORT
  protected:
   Status initAudio(WpNode* node, WpProxy* device);
-#endif
 
 public:
 /**

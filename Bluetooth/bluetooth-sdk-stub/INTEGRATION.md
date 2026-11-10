@@ -162,7 +162,7 @@ for (const auto& service : services) {
 }
 ```
 
-### Audio Control (with AUDIO_SUPPORT=ON)
+### Audio Control
 
 ```cpp
 #include <bluetooth/Device.h>
@@ -274,15 +274,6 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ```
 
-### Build with Audio Support (stub only)
-
-```bash
-cd /path/to/plugin
-cmake -B build -DCMAKE_BUILD_TYPE=Release \
-    -DAUDIO_SUPPORT=ON
-cmake --build build
-```
-
 ## Step 5: Deployment
 
 ### For Development/Testing
@@ -294,7 +285,7 @@ Link against the stub; no runtime Bluetooth hardware or services required.
 - Products without SDK: Ship stub `.so` (built once, no dependencies).
 - Products with SDK: Replace stub `.so` with real `librdk_bluetooth.so` at runtime.
 
-Middleware code remains unchanged because the ABI is identical when both are built with the same `-DAUDIO_SUPPORT=` setting.
+Middleware code remains unchanged because the ABI is identical.
 
 ## Common Patterns
 
@@ -344,7 +335,6 @@ for (const auto& adapter : adapters) {
 |-------|-------|----------|
 | Undefined reference to `bluetooth::*` | Missing SDK includes | Add `-I../bluetooth-sdk-stub-integration-example/include` |
 | Undefined reference to `librdk_bluetooth` | Missing SDK library | Link `-lrdk_bluetooth` or add it to `target_link_libraries` |
-| AUDIO_SUPPORT methods not found | Built without `-DAUDIO_SUPPORT=ON` | Rebuild with `-DAUDIO_SUPPORT=ON` |
 | Status returns error on every call | Using stub SDK | Expected; stub returns errors for real device operations |
 
 ## See Also

@@ -17,7 +17,7 @@ Evidence paths: `P` = `rdk_develop_branch/entservices-connectivity/Bluetooth/Blu
 | 3 | AVRCP media player: controls, track info, state events | `sendAudioPlaybackCommand`, `getAudioInfo`, `onPlaybackChange`, `onPlaybackProgress`, `onPlaybackNewTrack` | none | **Not needed.** Only for stream-in; the SDK will not use the media player object |
 | 4 | A2DP transport state ("playing") | `onPlaybackRequest` | none | **Not needed.** Stream-in only; if it returns it will probably use HFP or HSP |
 | 5 | "Currently streaming" audio device | `getConnectedDevices` | none | **Plugin.** Connecting an audio output device first disconnects any other, so the connected audio output device is the streaming one |
-| 6 | Audio volume/mute parity and events | `getDeviceVolumeMuteInfo`, `setDeviceVolumeMuteInfo`, `onDeviceMediaStatus` | `AUDIO_SUPPORT` | **Answered.** SDK covers the AVRCP absolute volume path and events; the plugin implements volume and mute with BTMgr's persisted volume and immediate `onDeviceMediaStatus` (`AudioBridge`) |
+| 6 | Audio volume/mute parity and events | `getDeviceVolumeMuteInfo`, `setDeviceVolumeMuteInfo`, `onDeviceMediaStatus` | SDK audio API | **Answered.** SDK covers the AVRCP absolute volume path and events; the plugin implements volume and mute with BTMgr's persisted volume and immediate `onDeviceMediaStatus` (`AudioBridge`) |
 | 7 | Primary/auxiliary audio stream selection | `setAudioStream` | none | **Not needed now.** The SDK is fixed to PRIMARY; auxiliary can be added if required |
 | 8 | Device-type-specific connect semantics | `connect` / `disconnect` | generic `Device::connect` | **Not needed.** A plain connect works for A2DP source; sink (stream-in) is not enabled |
 | 9 | Failure events | `onRequestFailed` | no failure `DeviceEvent`s | **Closed.** The plugin uses synchronous `pair`/`connect`; failure is the response, with no `onRequestFailed` on the SDK stack |
@@ -55,7 +55,7 @@ Items 1 to 9 were what the plugin team could not close alone. Items resolvable i
   - Track info: `getAudioInfo` returns album, genre, title, artist, duration, track number, number of tracks (`P:1013`, `M:7810`).
   - Events: `onPlaybackChange` actions `started`, `paused`, `stopped`, `ended`; `onPlaybackProgress`; `onPlaybackNewTrack` (`P:1257`-`1315`).
   - Source: `C: btrCore_avMedia.c` `btrCore_AVMedia_PlaybackPositionPolling` (around line 782) polls the BlueZ `MediaPlayer1.Position` property once per second while playing and every 100 ms otherwise. `started` is emitted on the first poll after a track change. `ended` is emitted when the player object disappears. A pause is emitted only when the state changes.
-- **SDK today:** none. `specs/` contains only `org.bluez.Media1`, with no `MediaPlayer1`. `AUDIO_SUPPORT` covers volume, mute and delay only.
+- **SDK today:** none. `specs/` contains only `org.bluez.Media1`, with no `MediaPlayer1`. The SDK audio API covers volume, mute and delay only.
 - **Request:** a media player wrapper over `org.bluez.MediaPlayer1` with:
   - controls: play, pause, stop, next, previous (and fast-forward, rewind for completeness);
   - properties: `Status`, `Position`, `Track` (Title, Artist, Album, Genre, Duration, TrackNumber, NumberOfTracks);
@@ -81,7 +81,7 @@ Items 1 to 9 were what the plugin team could not close alone. Items resolvable i
 
 ## 6. Audio volume and mute
 
-**Outcome:** answered. (1) A Route volume change reaches the speaker as AVRCP absolute volume when the remote supports it; the bluez5 SPA plugin handles that. The plugin reproduces BTMgr's persisted volume and its immediate `onDeviceMediaStatus` after a set (`AudioBridge`). (2) Device-initiated changes arrive as `AudioEvent::VolumeChanged`; mute is handled in PipeWire and the plugin relies on `MuteStateChanged`. (3) `initAudio` is covered at L3 only, since it needs the real WirePlumber node. (4) `AUDIO_SUPPORT` is enabled wherever the SDK is built.
+**Outcome:** answered. (1) A Route volume change reaches the speaker as AVRCP absolute volume when the remote supports it; the bluez5 SPA plugin handles that. The plugin reproduces BTMgr's persisted volume and its immediate `onDeviceMediaStatus` after a set (`AudioBridge`). (2) Device-initiated changes arrive as `AudioEvent::VolumeChanged`; mute is handled in PipeWire and the plugin relies on `MuteStateChanged`. (3) `initAudio` is covered at L3 only, since it needs the real WirePlumber node. (4) The SDK audio API is always built.
 
 - **Legacy (`M:7577`, `BTRMGR_SetDeviceVolumeMute`):**
   - Scale is 0 to 255.
@@ -90,12 +90,12 @@ Items 1 to 9 were what the plugin team could not close alone. Items resolvable i
   - `VOLUME_UP` and `VOLUME_DOWN` try AVRCP first, then fall back to local steps of 10 (minimum 5 going up, maximum 250 going down) (`M:7040`-`7124`).
   - Volume is persisted per device and profile when `RDKTV_PERSIST_VOLUME` is defined.
   - Device-initiated volume changes also raise `onDeviceMediaStatus` (`M:10877`-`10953`).
-- **SDK today:** `Device::setVolume/getVolume/setMute/isMuted/setDelayCompensation` and `registerForAudioEvents` behind `AUDIO_SUPPORT`, using the PipeWire Route volume (float 0.0 to 1.0). The option defaults to OFF and needs WirePlumber.
+- **SDK today:** `Device::setVolume/getVolume/setMute/isMuted/setDelayCompensation` and `registerForAudioEvents`, using the PipeWire Route volume (float 0.0 to 1.0). It needs WirePlumber.
 - **Questions for the SDK team:**
   1. Does a Route volume change reach the speaker as AVRCP absolute volume (for example through WirePlumber's Bluetooth hardware-volume support), or only change the local sink? The plugin needs to know whether the SDK path covers both legacy branches.
   2. Is a device-initiated volume change (headset buttons) reliably delivered through `AudioEvent::VolumeChanged` and `MuteStateChanged`?
   3. L2 states that automatic `Manager` to `Device` audio binding (`initAudio`) is not covered. Is it covered by L3 on hardware?
-  4. Is the `AUDIO_SUPPORT` build expected to be the default for product images?
+  4. Is the audio API always built for product images? Answered: yes, the SDK always supports audio.
 
 ## 7. Primary or auxiliary audio stream
 

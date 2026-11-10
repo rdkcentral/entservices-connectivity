@@ -74,12 +74,7 @@ bool AudioBridge::storedMute(bool& mute) const {
 uint8_t AudioBridge::currentVolume(const std::shared_ptr<bluetooth::Device>& device, const std::string& handleStr) const {
     uint8_t volume = 0;
     if (storedVolume(handleStr, volume)) return volume;
-#ifdef AUDIO_SUPPORT
     return volumeFromSdk(device->getVolume());
-#else
-    (void)device;
-    return volume;
-#endif
 }
 
 void AudioBridge::persistVolume(const std::string& handleStr, uint8_t volume) {
@@ -98,8 +93,6 @@ void AudioBridge::emitMediaStatus(const std::shared_ptr<bluetooth::Device>& devi
     m_callbacks.onDeviceMediaStatus(std::strtoll(handleStr.c_str(), nullptr, 10), deviceDisplayName(device),
                                     type, volume, mute, command);
 }
-
-#ifdef AUDIO_SUPPORT
 
 namespace {
 
@@ -219,7 +212,7 @@ bool AudioBridge::setVolumeMute(const std::shared_ptr<bluetooth::Device>& device
     (void)storedMute(previousMute);
 
     {
-        Expectation expectation(*this, mac, &volume, &mute);
+        Expectation expectation(*this, std::move(mac), &volume, &mute);
         Status status = device->setVolume(volumeToSdk(volume));
         if (!status) {
             LOGERR("AudioBridge::setVolumeMute: exit with error: %s", status.get_message().c_str());
@@ -273,7 +266,7 @@ bool AudioBridge::sendCommand(const std::shared_ptr<bluetooth::Device>& device, 
         const uint8_t current = currentVolume(device, handle);
         const uint8_t next = (command == "VOLUME_UP") ? volumeStepUp(current) : volumeStepDown(current);
         {
-            Expectation expectation(*this, mac, &next, nullptr);
+            Expectation expectation(*this, std::move(mac), &next, nullptr);
             Status status = device->setVolume(volumeToSdk(next));
             if (!status) {
                 LOGERR("AudioBridge::sendCommand: exit with error: %s", status.get_message().c_str());
@@ -286,7 +279,7 @@ bool AudioBridge::sendCommand(const std::shared_ptr<bluetooth::Device>& device, 
     } else {
         const bool mute = (command == "AUDIO_MUTE");
         {
-            Expectation expectation(*this, mac, nullptr, &mute);
+            Expectation expectation(*this, std::move(mac), nullptr, &mute);
             Status status = device->setMute(mute);
             if (!status) {
                 LOGERR("AudioBridge::sendCommand: exit with error: %s", status.get_message().c_str());
@@ -299,20 +292,6 @@ bool AudioBridge::sendCommand(const std::shared_ptr<bluetooth::Device>& device, 
     LOGINFO("AudioBridge::sendCommand: exit successfully");
     return true;
 }
-
-#else // AUDIO_SUPPORT
-
-// Without the SDK's audio API every audio operation is unavailable, as the plugin reported before it was used.
-void AudioBridge::onAudioEvent(bluetooth::AudioEvent, const bluetooth::AudioEventData&,
-                               const std::shared_ptr<bluetooth::Device>&) {}
-void AudioBridge::onDeviceConnected(const std::shared_ptr<bluetooth::Device>&) {}
-void AudioBridge::onDeviceDisconnected(const std::shared_ptr<bluetooth::Device>&) {}
-bool AudioBridge::restoreStoredVolume(const std::shared_ptr<bluetooth::Device>&, const std::string&, const std::string&) { return false; }
-bool AudioBridge::setVolumeMute(const std::shared_ptr<bluetooth::Device>&, const std::string&, uint8_t, bool) { return false; }
-IBtAdapter::BtDeviceVolumeMute AudioBridge::getVolumeMute(const std::shared_ptr<bluetooth::Device>&, const std::string&) { return {}; }
-bool AudioBridge::sendCommand(const std::shared_ptr<bluetooth::Device>&, const std::string&) { return false; }
-
-#endif // AUDIO_SUPPORT
 
 } // namespace Plugin
 } // namespace WPEFramework

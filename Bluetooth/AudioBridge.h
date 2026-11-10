@@ -38,7 +38,7 @@ namespace Plugin {
 
 /**
  * Volume and mute of the SDK's audio output devices, with the behavior of BTMgr's BTRMGR_SetDeviceVolumeMute,
- * BTRMGR_GetDeviceVolumeMute and volume/mute media control, over the SDK's audio API (AUDIO_SUPPORT).
+ * BTRMGR_GetDeviceVolumeMute and volume/mute media control, over the SDK's audio API.
  *
  * The SDK sets the volume on the speaker (AVRCP absolute volume, through PipeWire), so what is left to do here is
  * what BTMgr did above that layer: the 0 to 255 scale, the local volume steps, the last volume and mute kept for

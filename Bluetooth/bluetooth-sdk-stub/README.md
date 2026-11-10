@@ -18,25 +18,17 @@ This folder contains a minimal, standalone example of the Bluetooth SDK stub imp
 ## Key Features
 
 - **Zero External Dependencies:** No BlueZ, D-Bus, sdbus-c++, PipeWire, or WirePlumber required.
-- **Compile-Time Audio API:** Audio method signatures are available when built with `-DAUDIO_SUPPORT=ON`, but the resulting library has no WirePlumber runtime dependency.
-- **SDK ABI Compatible:** Exports the same public symbols as the real SDK when built with matching options.
+- **Audio API:** Audio method signatures are always available, but the resulting library has no WirePlumber runtime dependency.
+- **SDK ABI Compatible:** Exports the same public symbols as the real SDK.
 - **pImpl-Based Design:** All D-Bus and implementation details are hidden behind public class pointers, making the API dependency-free.
 
 ## Build
 
-### Default (no audio support)
+The audio API is always included.
 
 ```bash
 mkdir build && cd build
 cmake -DCMAKE_BUILD_TYPE=Release ..
-cmake --build . --parallel
-```
-
-### With Audio API Support
-
-```bash
-mkdir build && cd build
-cmake -DCMAKE_BUILD_TYPE=Release -DAUDIO_SUPPORT=ON ..
 cmake --build . --parallel
 ```
 
@@ -206,7 +198,7 @@ The stub implements these key classes:
 - **Device:** Pairing, connection, properties, and GATT (stub: no-op with state tracking).
 - **GattClient / GattServer:** GATT operations (stub: minimal).
 - **Advertisement / AdvertisementMgr:** BLE advertisement (stub: no-op).
-- **Audio:** Volume, mute, and delay compensation (stub: no-op when `AUDIO_SUPPORT=ON`).
+- **Audio:** Volume, mute, and delay compensation (stub: no-op).
 - **GattServices:** Example Heart Rate / Battery Level / Current Time GATT services built on top of `GattServer` (header-only; no stub `.cpp`, bring your own implementation if you need these).
 
 All methods return `Status::BLUETOOTH_ERROR` with "stub: no Bluetooth backend available" on real device operations. State changes (e.g., `Device::state()`) are tracked locally for integration testing.
@@ -218,7 +210,7 @@ not be included when building against the zero-dependency stub.
 
 ## Audio Support
 
-When compiled with `-DAUDIO_SUPPORT=ON`:
+The stub always includes the audio API:
 
 - Public headers export audio method signatures.
 - Constructor signatures match the real SDK (e.g., `Device::initAudio(WpNode*, WpProxy*)`).
@@ -245,7 +237,6 @@ This allows middleware to compile against audio-enabled SDK headers and link the
 
 | Variable | Default | Effect |
 |----------|---------|--------|
-| `AUDIO_SUPPORT` | `OFF` | Enable audio method compilation. No external dependencies required. |
 | `CMAKE_BUILD_TYPE` | (unset) | Set to `Release` or `Debug` for optimization. |
 
 ## Example Yocto Recipe
@@ -260,8 +251,6 @@ SRCREV = "${AUTOREV}"
 S = "${WORKDIR}/git"
 
 inherit cmake
-
-EXTRA_OECMAKE = "-DAUDIO_SUPPORT=ON"
 
 do_install:append() {
     install -D -m 0755 ${B}/librdk_bluetooth.so ${D}${libdir}/librdk_bluetooth.so
@@ -545,5 +534,5 @@ WantedBy=multi-user.target
 
 - The stub is **not** a real Bluetooth implementation; it provides stubs and no-ops for all hardware operations.
 - For testing/CI, middleware can link the stub and exercise its API without actual Bluetooth hardware.
-- The stub's symbol set matches the real SDK when both are built with identical `-DAUDIO_SUPPORT=` settings.
+- The stub's symbol set matches the real SDK when built from the same SDK version.
 - To see integration patterns, refer to the parent `bluetooth-sdk` repository at `src/bluetooth/` (real implementation) and `stub/` (this example).

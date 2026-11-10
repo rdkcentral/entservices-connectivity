@@ -8,9 +8,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 find_package(Threads REQUIRED)
 
 # Build the fake librdk_bluetooth.so with no external dependencies.
-# ON by default: the real SDK ships the audio API, and the plugin references those symbols, so a product that
-# runs the plugin against this stub needs them exported too or the plugin fails to load.
-option(AUDIO_SUPPORT "Enable Bluetooth audio API symbols (no WirePlumber linking required)" ON)
+# The audio API symbols are always exported: the real SDK ships them and the plugin references them.
 
 add_library(rdk_bluetooth SHARED
     stub/Adapter.cpp
@@ -35,11 +33,6 @@ target_include_directories(rdk_bluetooth
     ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 target_link_libraries(rdk_bluetooth PUBLIC Threads::Threads)
-
-# Enable audio API symbols (compile-time only; no WirePlumber linking needed for stub)
-if(AUDIO_SUPPORT)
-    target_compile_definitions(rdk_bluetooth PUBLIC AUDIO_SUPPORT)
-endif()
 
 # Library versioning
 # VERSION: Full version number (1.0.0) -> librdk_bluetooth.so.1.0.0
