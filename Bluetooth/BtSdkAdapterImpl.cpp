@@ -1192,6 +1192,15 @@ bool BtSdkAdapterImpl::isFilteredFromDiscovery(const std::shared_ptr<bluetooth::
 
     // Classify afresh: the type cached in the registry can predate the device's properties being populated.
     std::string deviceType = DeviceTypeClassifier::classify(appearance, classOfDevice, uuids);
+    // <pca> TEMPORARY: only HEADPHONES are reported as discovered to clients; remove to restore normal discovery.
+    // The type is judged as the client sees it (before the icon fallback below). As with the audio-scan rule in
+    // ScanFilterPolicy, an unclassified device is only filtered once its type has settled.
+    if (deviceType != "HEADPHONES" && (typeSettled || deviceType != "UNKNOWN DEVICE")) {
+        LOGINFO("BtSdkAdapterImpl::isFilteredFromDiscovery: skipping non-HEADPHONES mac=%s name=%s type=%s",
+                mac.c_str(), name.c_str(), deviceType.c_str());
+        return true;
+    }
+    // </pca>
     if (deviceType == "UNKNOWN DEVICE") {
         deviceType = ScanFilterPolicy::deviceTypeFromIcon(icon);
     }
