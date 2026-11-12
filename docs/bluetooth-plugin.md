@@ -123,9 +123,9 @@ Key methods:
 Snippet (storage key constants):
 
 ```cpp
-#define PERSISTENT_STORE_CALLSIGN "org.rdk.PersistentStore"
-#define PERSISTENT_STORE_NAMESPACE "Bluetooth"
-#define PERSISTENT_STORE_KEY_DEVICE_INFO "deviceInfo"
+static constexpr const char* PERSISTENT_STORE_CALLSIGN = "org.rdk.PersistentStore";
+static constexpr const char* PERSISTENT_STORE_NAMESPACE = "Bluetooth";
+static constexpr const char* PERSISTENT_STORE_KEY_DEVICE_INFO = "deviceInfo";
 ```
 
 Source: [`Bluetooth/BluetoothDeviceManager.h`](../Bluetooth/BluetoothDeviceManager.h)

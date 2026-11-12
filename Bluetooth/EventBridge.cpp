@@ -1,0 +1,344 @@
+/**
+* If not stated otherwise in this file or this component's LICENSE
+* file the following copyright and licenses apply:
+*
+* Copyright 2026 RDK Management
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+* http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+**/
+
+#include "EventBridge.h"
+
+#include <algorithm>
+
+#include <core/core.h>
+#include <UtilsLogging.h>
+
+#include "DeviceDisplayName.h"
+
+namespace WPEFramework {
+namespace Plugin {
+
+namespace {
+
+// Returns false, leaving the outputs unset, when the device has no valid handle and must not be reported.
+bool populateDeviceFields(std::shared_ptr<bluetooth::Device> device,
+                          DeviceRegistry& registry,
+                          std::string& outId, std::string& outName,
+                          std::string& outType, uint32_t& outRaw, uint16_t& outBle) {
+    std::string mac;
+    device->address(mac);
+    outId = registry.getHandleForMac(mac);
+    if (outId.empty()) outId = DeviceRegistry::deriveHandle(mac);
+    if (!DeviceRegistry::isValidHandle(outId)) {
+        LOGWARN("EventBridge: dropping event for device with invalid handle, mac=%s", mac.c_str());
+        return false;
+    }
+
+    outName = deviceDisplayName(device);
+
+    bluetooth::DeviceProperties props;
+    const bool havePropsRead = static_cast<bool>(device->getAllProperties(props));
+    if (havePropsRead) {
+        outRaw = props.classOfDevice.value_or(0);
+        outBle = props.appearance.value_or(0);
+    }
+
+    outType = registry.getDeviceType(outId);
+    // A cached "UNKNOWN DEVICE" may predate the device's properties, so it is classified again.
+    if ((outType.empty() || outType == "UNKNOWN DEVICE") && havePropsRead) {
+        std::string classified = DeviceTypeClassifier::classify(outBle, outRaw,
+                                                                      props.uuids.value_or(std::vector<std::string>{}));
+        if (classified != "UNKNOWN DEVICE") {
+            outType = std::move(classified);
+            // A device that is no longer registered (e.g. DeviceDisappeared) must not get its type cached again.
+            if (!registry.getHandleForMac(mac).empty()) registry.setDeviceType(outId, outType);
+        }
+    }
+    if (outType.empty()) outType = "UNKNOWN DEVICE";
+    return true;
+}
+
+} // namespace
+
+void EventBridge::onAdapterEvent(bluetooth::AdapterEvent event, bluetooth::AdapterEventData data) {
+    switch (event) {
+        case bluetooth::AdapterEvent::DiscoveryStarted:
+            if (m_callbacks.onStatusChanged) {
+                m_callbacks.onStatusChanged("onStatusChanged", "DISCOVERY_STARTED",
+                    "", "", "", 0, 0, false, false, false, false, false);
+            }
+            break;
+
+        case bluetooth::AdapterEvent::DiscoveryStopped:
+            if (m_callbacks.onStatusChanged) {
+                m_callbacks.onStatusChanged("onStatusChanged", "DISCOVERY_COMPLETED",
+                    "", "", "", 0, 0, false, false, false, false, false);
+            }
+            break;
+
+        case bluetooth::AdapterEvent::PoweredOn:
+            if (m_callbacks.onStatusChanged) {
+                m_callbacks.onStatusChanged("onStatusChanged", "HARDWARE_AVAILABLE",
+                    "", "", "", 0, 0, false, false, false, false, false);
+            }
+            break;
+
+        case bluetooth::AdapterEvent::PoweredOff:
+            if (m_callbacks.onStatusChanged) {
+                m_callbacks.onStatusChanged("onStatusChanged", "SOFTWARE_DISABLED",
+                    "", "", "", 0, 0, false, false, false, false, false);
+            }
+            break;
+
+        case bluetooth::AdapterEvent::DeviceDiscovered: {
+            if (!data.device) break;
+            std::string deviceId, name, deviceType;
+            uint32_t rawType = 0;
+            uint16_t bleType = 0;
+            if (!populateDeviceFields(data.device, m_registry, deviceId, name, deviceType, rawType, bleType)) break;
+
+            const bluetooth::DeviceState state = data.device->state();
+            const bool paired = (state == bluetooth::DeviceState::Paired ||
+                                 state == bluetooth::DeviceState::Connected);
+
+            if (m_callbacks.onDiscoveredDevice) {
+                m_callbacks.onDiscoveredDevice(deviceId, name, deviceType, rawType, bleType,
+                                               paired, false, "DISCOVERED");
+            }
+            // For previously known (paired) devices also emit onDeviceFound.
+            if (paired && m_callbacks.onDeviceFound) {
+                m_callbacks.onDeviceFound(deviceId, name, deviceType, rawType, bleType, false);
+            }
+            break;
+        }
+
+        case bluetooth::AdapterEvent::DeviceDisappeared: {
+            if (!data.device) break;
+            std::string deviceId, name, deviceType;
+            uint32_t rawType = 0;
+            uint16_t bleType = 0;
+            if (!populateDeviceFields(data.device, m_registry, deviceId, name, deviceType, rawType, bleType)) break;
+
+            const bluetooth::DeviceState state = data.device->state();
+            const bool paired = (state == bluetooth::DeviceState::Paired ||
+                                 state == bluetooth::DeviceState::Connected);
+
+            if (m_callbacks.onDiscoveredDevice) {
+                m_callbacks.onDiscoveredDevice(deviceId, name, deviceType, rawType, bleType,
+                                               paired, false, "LOST");
+            }
+            if (paired && m_callbacks.onDeviceLost) {
+                m_callbacks.onDeviceLost(deviceId, name, deviceType, rawType, bleType, false);
+            }
+            break;
+        }
+    }
+}
+
+EventBridge::~EventBridge() {
+    stop();
+}
+
+// Pending notifications are dropped rather than flushed: they hold SDK Device objects and call back into the
+// plugin, neither of which may be used once the adapter is being torn down.
+// Intentionally unchanged: m_stopping is never reset - stop() is only called from deinit()/the destructor and a fresh
+// EventBridge is created on every init().
+void EventBridge::stop() {
+    {
+        std::lock_guard<std::mutex> lock(m_taskMutex);
+        m_stopping = true;
+        m_tasks.clear();
+    }
+    m_taskCv.notify_all();
+    if (m_worker.joinable()) m_worker.join();
+    std::lock_guard<std::mutex> lock(m_opsMutex);
+    m_ops.clear();
+}
+
+void EventBridge::enqueue(std::chrono::steady_clock::time_point due, std::function<void()> run) {
+    {
+        std::lock_guard<std::mutex> lock(m_taskMutex);
+        if (m_stopping) return;
+        m_tasks.push_back({due, std::move(run)});
+        // Started on first use so an EventBridge that never sees a device event costs no thread.
+        if (!m_worker.joinable()) m_worker = std::thread(&EventBridge::worker, this);
+    }
+    m_taskCv.notify_all();
+}
+
+void EventBridge::worker() {
+    std::unique_lock<std::mutex> lock(m_taskMutex);
+    for (;;) {
+        m_taskCv.wait(lock, [this] { return m_stopping || !m_tasks.empty(); });
+        if (m_stopping) return;
+        // Tasks run strictly in order, so a delayed task also delays the ones queued behind it. That is
+        // intentional: anything queued after a request completed must not be delivered before that request's
+        // held status changes.
+        const auto due = m_tasks.front().due;
+        if (m_taskCv.wait_until(lock, due, [this] { return m_stopping; })) return;
+        std::function<void()> run = std::move(m_tasks.front().run);
+        m_tasks.pop_front();
+        // Run unlocked: building a notification makes D-Bus calls and the plugin callback may take its own
+        // locks, and the SDK event thread must stay free to enqueue meanwhile.
+        lock.unlock();
+        run();
+        lock.lock();
+    }
+}
+
+EventBridge::OperationId EventBridge::beginDeviceOperation(const std::shared_ptr<bluetooth::Device>& device) {
+    if (!device) return 0;
+    std::string mac;
+    device->address(mac);
+    std::lock_guard<std::mutex> lock(m_opsMutex);
+    DeviceOperation op;
+    op.id = m_nextOpId++;
+    const OperationId id = op.id;
+    m_ops[mac].push_back(std::move(op));
+    return id;
+}
+
+void EventBridge::completeDeviceOperation(OperationId id, bluetooth::DeviceEvent event,
+                                          std::shared_ptr<bluetooth::Device> device, bool succeeded) {
+    if (!device || id == 0) return;
+    std::string mac;
+    device->address(mac);
+    // Status changes keep being held until the release runs, so ones the SDK raises just after the request
+    // returned (it can return before raising them) are still delivered after the response, not ahead of it.
+    enqueue(std::chrono::steady_clock::now() + kCompletionDelay,
+            [this, mac = std::move(mac), id, event, device = std::move(device), succeeded]() mutable {
+                releaseDeviceOperation(mac, id, event, std::move(device), succeeded);
+            });
+}
+
+void EventBridge::releaseDeviceOperation(const std::string& mac, OperationId id, bluetooth::DeviceEvent event,
+                                         std::shared_ptr<bluetooth::Device> device, bool succeeded) {
+    std::vector<HeldEvent> held;
+    bool seen = false;
+    {
+        std::lock_guard<std::mutex> lock(m_opsMutex);
+        auto it = m_ops.find(mac);
+        if (it == m_ops.end()) return;
+        auto& ops = it->second;
+        auto op = std::find_if(ops.begin(), ops.end(), [id](const DeviceOperation& o) { return o.id == id; });
+        if (op == ops.end()) return;
+        held = std::move(op->held);
+        seen = (op->seen & (1u << static_cast<unsigned>(event))) != 0;
+        ops.erase(op);
+        if (ops.empty()) m_ops.erase(it);
+    }
+    // <pca> debug
+    // TESTING: observing client behavior when PAIRING_CHANGE is sent before CONNECTION_CHANGE after a successful pair.
+    // BlueZ may connect the device while pairing, so the SDK raises Connected before Paired. For a successful pair
+    // the Paired change is emitted first (the legacy stack reported pairing completion first); the old behavior
+    // is kept below, commented out.
+    const bool pairSucceeded = succeeded && event == bluetooth::DeviceEvent::Paired;
+    bool pairEmittedFirst = false;
+    if (pairSucceeded) {
+        if (!seen) {
+            // The SDK raised no Paired change; acknowledge the pair ahead of any held Connected.
+            LOGINFO("EventBridge::releaseDeviceOperation: SDK reported no event for event=%d mac=%s, emitting it",
+                    static_cast<int>(event), mac.c_str());
+            emitDeviceEvent(event, device);
+            pairEmittedFirst = true;
+        }
+        std::stable_partition(held.begin(), held.end(),
+                              [](const HeldEvent& h) { return h.event == bluetooth::DeviceEvent::Paired; });
+    }
+    for (auto& h : held) emitDeviceEvent(h.event, std::move(h.device));
+    // Old behavior: held changes are emitted in the order the SDK raised them, e.g. Connected then Paired while pairing.
+    // for (auto& h : held) emitDeviceEvent(h.event, std::move(h.device));
+    // </pca>
+    
+    // A successful request must always be acknowledged, as the legacy stack did. The SDK raises nothing when
+    // there was no state change, e.g. connecting a device BlueZ already connected while pairing it.
+    // if (succeeded && !seen) {   // Old condition, before the pair-first emit above.
+    if (succeeded && !seen && !pairEmittedFirst) {
+        LOGINFO("EventBridge::releaseDeviceOperation: SDK reported no event for event=%d mac=%s, emitting it",
+                static_cast<int>(event), mac.c_str());
+        emitDeviceEvent(event, std::move(device));
+    }
+}
+
+void EventBridge::onDeviceEvent(bluetooth::DeviceEvent event, std::shared_ptr<bluetooth::Device> device) {
+    if (!device) return;
+    std::string mac;
+    device->address(mac);
+    {
+        std::lock_guard<std::mutex> lock(m_opsMutex);
+        auto it = m_ops.find(mac);
+        if (it != m_ops.end() && !it->second.empty()) {
+            // A pair/connect request for this device is in progress. Every running request saw the change, but
+            // only the newest holds it, so it is emitted once, after that request's response is out.
+            for (auto& op : it->second) op.seen |= 1u << static_cast<unsigned>(event);
+            it->second.back().held.push_back({event, std::move(device)});
+            return;
+        }
+    }
+    // Unsolicited changes (e.g. the device dropping the link) are due now, but still go through the queue so they
+    // stay behind any pending release of earlier, held changes.
+    enqueue(std::chrono::steady_clock::now(),
+            [this, event, device = std::move(device)]() mutable { emitDeviceEvent(event, std::move(device)); });
+}
+
+void EventBridge::emitDeviceEvent(bluetooth::DeviceEvent event, std::shared_ptr<bluetooth::Device> device) {
+    switch (event) {
+        case bluetooth::DeviceEvent::Paired: {
+            // BlueZ may already have connected the device while pairing (e.g. headphones).
+            const bool connected = (device->state() == bluetooth::DeviceState::Connected);
+            emitDeviceStatusChanged("PAIRING_CHANGE", std::move(device), true, connected);
+            break;
+        }
+
+        case bluetooth::DeviceEvent::Unpaired:
+            emitDeviceStatusChanged("PAIRING_CHANGE", std::move(device), false, false);
+            break;
+
+        case bluetooth::DeviceEvent::Connected:
+            emitDeviceStatusChanged("CONNECTION_CHANGE", std::move(device), true, true);
+            break;
+
+        case bluetooth::DeviceEvent::Disconnected:
+            emitDeviceStatusChanged("CONNECTION_CHANGE", std::move(device), true, false);
+            break;
+
+        default:
+            break;
+    }
+}
+
+void EventBridge::emitDeviceStatusChanged(const std::string& newStatus,
+                                          std::shared_ptr<bluetooth::Device> device,
+                                          bool paired, bool connected) {
+    if (!m_callbacks.onStatusChanged) return;
+
+    std::string deviceId, name, deviceType;
+    uint32_t rawType = 0;
+    uint16_t bleType = 0;
+    if (!populateDeviceFields(std::move(device), m_registry, deviceId, name, deviceType, rawType, bleType)) return;
+
+    bool hasAutoConnect = false;
+    bool autoConnect    = false;
+    if (m_callbacks.getAutoConnect) {
+        hasAutoConnect = m_callbacks.getAutoConnect(deviceId, autoConnect);
+    }
+
+    m_callbacks.onStatusChanged("onStatusChanged", newStatus,
+                                deviceId, name, deviceType, rawType, bleType,
+                                paired, connected, false,
+                                hasAutoConnect, autoConnect);
+}
+
+} // namespace Plugin
+} // namespace WPEFramework

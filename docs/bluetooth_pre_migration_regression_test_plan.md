@@ -33,7 +33,8 @@ These are the **only** code paths in `BluetoothDeviceManager`/`Bluetooth` that c
 | `setLastVolumeSetting` (called internally on `setDeviceVolumeMuteInfo`) | Same as above. |
 | `writeStorageFromCache` → `writeFilesystemPersistenceFromCache` | The AS filesystem file write is only ever triggered from inside `writeStorageFromCache`, and only `if (_isMigrated)`. Pre-migration, this code path is simply never reached. |
 | `onPowerModeChanged` | Returns immediately (`if (!isMigrated()) return;`) before evaluating any power-state transition. The entire power-mode-triggered disconnect feature (`disconnectExternallyConnectedDevices`) is inert pre-migration. |
-| Plugin `init()` | Cache is **not** warmed from `PersistentStore` even if stale `deviceInfo` exists from a different firmware; init logs `migration not yet complete, ignoring any stale store data` and leaves the cache empty. |
+| Plugin `init()` | Cache is **not** warmed from `PersistentStore` even if stale `deviceInfo` exists from a different firmware; init logs `migration not yet complete, ignoring any stale store data`. The AS file is then read (never written) into the in-memory cache, so the startup reconnect (Section 13) can see each device's last connect time and autoconnect mark; a missing or malformed file, or a failed adapter query, leaves the cache empty. |
+| Startup reconnect (bluetooth-sdk backend) | Asks the client for each audio output device with a known last connect time; the client connects the device it accepts, and the plugin only connects one the autoconnect status accepts; see Section 13. |
 
 Everything else — `startScan`/`stopScan`, `getDiscoveredDevices`, `getPairedDevices`/`getConnectedDevices` (device enumeration itself, which is always sourced live from BTRMGR, not the cache), `connect`/`disconnect`, `pair`/`unpair` (BTRMGR side-effects), `enable`/`disable`, `setDiscoverable`/`isDiscoverable`, `getName`/`setName`, `setAudioStream`, `sendAudioPlaybackCommand`, `respondToEvent`, `getDeviceInfo`, `getAudioInfo`, `getDeviceVolumeMuteInfo`/`setDeviceVolumeMuteInfo` (the actual BTRMGR volume/mute control), and all plugin events — has **no** migration-state check anywhere in the call path.
 
@@ -226,6 +227,7 @@ md5sum /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
 
 **Expected Results:**
 - The `autoconnect` field is present and `false` for every device in both responses — both enumeration methods derive this field by calling `getAutoConnect` internally, which is guarded as described in TC-PREREG-09. This is expected and does **not** indicate an actual auto-connect preference of `false`; it simply means auto-connect state cannot be honored until migration is performed.
+- A device recorded in the AS file also reports its `lastConnectTimeUtc` from that file, as the AS file is loaded into the in-memory cache at boot.
 
 ---
 
@@ -324,7 +326,7 @@ md5sum /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
 3. Confirm the previously-connected device remains connected after the transition (i.e. is not force-disconnected).
 
 **Expected Results:**
-- The plugin's `onPowerModeChanged` handler returns immediately, before logging the power-state transition message or evaluating any disconnect logic — because `isMigrated()` is `false`.
+- The plugin's device power policy returns before logging the power-state transition message or evaluating any disconnect logic — because `isMigrated()` is `false`. Two things still run, as they do not depend on migration: the gamepad standby handling, and the reconnect pass on a transition to ON (Section 13).
 - `disconnectExternallyConnectedDevices()` is never invoked.
 - Connected devices are **not** force-disconnected by the plugin as a side effect of the power transition (this disconnect-on-power-transition behavior is new functionality introduced for migration and only activates once migration is active — it is not a feature of pre-migration-capable builds either, so its absence here is expected, not a regression).
 
@@ -380,10 +382,99 @@ md5sum /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
 
 ---
 
+## Section 13: Startup Reconnect (bluetooth-sdk backend)
+
+> This section applies only to the bluetooth-sdk backend. Unlike Sections 1–12, it describes behavior that a non-migration-capable BTMgr build does not have: BTMgr reconnects at boot by itself, so the SDK plugin does it, and before migration it uses the AS file as its record of the previously used devices.
+
+**Prerequisites for this section:**
+- At least one audio output device (headphones or speaker) is paired and in range, and appears in the AS file with `lastConnectionTimeUTC` greater than 0. Record its `autoConnectStatus` in the AS file for each case below.
+- A client is subscribed to `onConnectionRequest`. A client that is not subscribed cannot answer, which is what the no-answer cases below exercise.
+- Record the AS file checksum and the PersistentStore `Bluetooth/deviceInfo` value before each case (see TC-PREREG-18).
+
+### TC-PREREG-21: Client accepts the startup connection request
+
+**Steps:**
+1. With the device powered on and in range, reboot the box (or deactivate and reactivate the Bluetooth plugin).
+2. Wait for `onConnectionRequest` for the device.
+3. Within 200 ms, call `respondToEvent` with `{"deviceID":"<ID>","eventType":"onConnectionRequest","responseValue":"ACCEPTED"}`.
+4. Call `getConnectedDevices`, then call `connect` for the device and call `getConnectedDevices` again.
+
+**Expected Results:**
+- The plugin does not connect the device itself: after step 3 the device is not listed by `getConnectedDevices`, and the log shows `the client accepted <MAC> and is responsible for connecting it`.
+- Exactly one `BtSdkAdapterImpl::connectDevice` entry is logged, from the client's `connect` call; there is no overlapping `connectDevice` and no `In Progress` error.
+- The device is listed by `getConnectedDevices` after the client's `connect`.
+- Only one device is asked about, even if several audio output devices are paired.
+
+---
+
+### TC-PREREG-22: Client rejects the startup connection request
+
+**Steps:**
+1. Make the AS file mark the device with `autoConnectStatus` true.
+2. Reboot, wait for `onConnectionRequest`, and call `respondToEvent` with `"responseValue":"REJECTED"`.
+
+**Expected Results:**
+- The device is not connected, even though the AS file marks it for autoconnect. An explicit rejection is always honoured.
+- If other paired audio output devices have a last connect time, the next most recent one is asked about (and, if the client accepts it, left to the client to connect).
+
+---
+
+### TC-PREREG-23: Client does not answer; device marked for autoconnect in the AS file
+
+**Steps:**
+1. Make the AS file mark the device with `autoConnectStatus` true.
+2. Reboot with no client answering `onConnectionRequest`.
+3. Watch the logs for about 45 seconds.
+
+**Expected Results:**
+- `onConnectionRequest` is sent for the device, then sent again about 40 seconds later; neither is answered.
+- On the second pass the log shows `connecting it as the legacy record marks it for autoconnect` and the device is connected.
+
+---
+
+### TC-PREREG-24: Client does not answer; device not marked
+
+**Steps:**
+1. Make the AS file mark the device with `autoConnectStatus` false.
+2. Reboot with no client answering and watch the logs for about 45 seconds.
+
+**Expected Results:**
+- `onConnectionRequest` is sent twice, about 40 seconds apart, and the device is never connected.
+
+---
+
+### TC-PREREG-25: Startup reconnect leaves persistence untouched
+
+**Steps:**
+1. After TC-PREREG-21 to TC-PREREG-24, compare the AS file checksum and PersistentStore `Bluetooth/deviceInfo` and `Bluetooth/migrationVersion` with the values recorded before.
+
+**Expected Results:**
+- All three are unchanged. The AS file is read at boot and never written before migration, and a successful reconnect updates the last connect time in memory only.
+- Logs do not show `Filesystem persistence sync succeeded`.
+
+---
+
+### TC-PREREG-26: Startup reconnect and power state changes
+
+**Steps:**
+1. Reboot with no client answering `onConnectionRequest` for an audio output device (as in TC-PREREG-23).
+2. Within 40 seconds of the first `onConnectionRequest`, put the box into standby (or deep sleep).
+3. Watch the logs for 45 seconds, then return the box to power ON.
+4. Separately: with the box in standby, reactivate the Bluetooth plugin.
+
+**Expected Results:**
+- After step 2 the log shows `setSystemPowerOn: on=0`, no second `onConnectionRequest` is sent after 40 seconds, and the device is not connected, even if the AS file marks it for autoconnect.
+- On return to ON the log shows `setSystemPowerOn: on=1` followed by a new reconnect pass (`onConnectionRequest` is sent again at once).
+- In step 4 the plugin logs `exit: stopped, or the box is not in power state ON` or does not start a pass at all, and connects nothing until the box is ON.
+- Before migration, the standby and deep-sleep disconnects and Bluetooth enabling on wake stay inactive, as in TC-PREREG-17; only the reconnect pass follows the power state.
+
+---
+
 ## Exit Criteria / Sign-off Checklist
 
 - [ ] All Section 1–4, 6–9, 11–12 test cases pass with behavior **identical** to a non-migration-capable build.
 - [ ] All Section 5 and 10 test cases pass with the **documented, guard-driven divergence** (and only that divergence).
+- [ ] On the bluetooth-sdk backend, all Section 13 test cases pass.
 - [ ] No PersistentStore `deviceInfo`/`migrationVersion` writes or AS-file writes occur anywhere during the pass.
 - [ ] No crashes, unhandled exceptions, or unexpected error logs attributable to the migration feature being compiled in.
 - [ ] `performMigration` was confirmed to have never been called at the start and end of the pass.
