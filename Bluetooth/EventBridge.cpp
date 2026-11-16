@@ -189,6 +189,7 @@ void EventBridge::worker() {
         if (m_taskCv.wait_until(lock, due, [this] { return m_stopping; })) return;
         std::function<void()> run = std::move(m_tasks.front().run);
         m_tasks.pop_front();
+        LOGINFO("EventBridge::worker: running task (%zu still queued)", m_tasks.size());
         // Run unlocked: building a notification makes D-Bus calls and the plugin callback may take its own
         // locks, and the SDK event thread must stay free to enqueue meanwhile.
         lock.unlock();
@@ -214,6 +215,9 @@ void EventBridge::completeDeviceOperation(OperationId id, bluetooth::DeviceEvent
     if (!device || id == 0) return;
     std::string mac;
     device->address(mac);
+    LOGINFO("EventBridge::completeDeviceOperation: id=%llu event=%d mac=%s succeeded=%d, release in %lld ms",
+            static_cast<unsigned long long>(id), static_cast<int>(event), mac.c_str(), succeeded,
+            static_cast<long long>(kCompletionDelay.count()));
     // Status changes keep being held until the release runs, so ones the SDK raises just after the request
     // returned (it can return before raising them) are still delivered after the response, not ahead of it.
     enqueue(std::chrono::steady_clock::now() + kCompletionDelay,
@@ -229,15 +233,25 @@ void EventBridge::releaseDeviceOperation(const std::string& mac, OperationId id,
     {
         std::lock_guard<std::mutex> lock(m_opsMutex);
         auto it = m_ops.find(mac);
-        if (it == m_ops.end()) return;
+        if (it == m_ops.end()) {
+            LOGWARN("EventBridge::releaseDeviceOperation: exit, no operations for mac=%s (id=%llu)", mac.c_str(),
+                    static_cast<unsigned long long>(id));
+            return;
+        }
         auto& ops = it->second;
         auto op = std::find_if(ops.begin(), ops.end(), [id](const DeviceOperation& o) { return o.id == id; });
-        if (op == ops.end()) return;
+        if (op == ops.end()) {
+            LOGWARN("EventBridge::releaseDeviceOperation: exit, operation id=%llu not found for mac=%s",
+                    static_cast<unsigned long long>(id), mac.c_str());
+            return;
+        }
         held = std::move(op->held);
         seen = (op->seen & (1u << static_cast<unsigned>(event))) != 0;
         ops.erase(op);
         if (ops.empty()) m_ops.erase(it);
     }
+    LOGINFO("EventBridge::releaseDeviceOperation: entry id=%llu event=%d mac=%s succeeded=%d seen=%d held=%zu",
+            static_cast<unsigned long long>(id), static_cast<int>(event), mac.c_str(), succeeded, seen, held.size());
     // <pca> debug
     // TESTING: observing client behavior when PAIRING_CHANGE is sent before CONNECTION_CHANGE after a successful pair.
     // BlueZ may connect the device while pairing, so the SDK raises Connected before Paired. For a successful pair
@@ -275,6 +289,8 @@ void EventBridge::onDeviceEvent(bluetooth::DeviceEvent event, std::shared_ptr<bl
     if (!device) return;
     std::string mac;
     device->address(mac);
+    LOGINFO("EventBridge::onDeviceEvent: entry event=%d mac=%s device=%p", static_cast<int>(event), mac.c_str(),
+            static_cast<void*>(device.get()));
     {
         std::lock_guard<std::mutex> lock(m_opsMutex);
         auto it = m_ops.find(mac);
@@ -282,10 +298,15 @@ void EventBridge::onDeviceEvent(bluetooth::DeviceEvent event, std::shared_ptr<bl
             // A pair/connect request for this device is in progress. Every running request saw the change, but
             // only the newest holds it, so it is emitted once, after that request's response is out.
             for (auto& op : it->second) op.seen |= 1u << static_cast<unsigned>(event);
+            LOGINFO("EventBridge::onDeviceEvent: event=%d mac=%s held by operation id=%llu (%zu running)",
+                    static_cast<int>(event), mac.c_str(),
+                    static_cast<unsigned long long>(it->second.back().id), it->second.size());
             it->second.back().held.push_back({event, std::move(device)});
             return;
         }
     }
+    LOGINFO("EventBridge::onDeviceEvent: event=%d mac=%s no operation in progress, queueing for delivery",
+            static_cast<int>(event), mac.c_str());
     // Unsolicited changes (e.g. the device dropping the link) are due now, but still go through the queue so they
     // stay behind any pending release of earlier, held changes.
     enqueue(std::chrono::steady_clock::now(),
@@ -321,12 +342,21 @@ void EventBridge::emitDeviceEvent(bluetooth::DeviceEvent event, std::shared_ptr<
 void EventBridge::emitDeviceStatusChanged(const std::string& newStatus,
                                           std::shared_ptr<bluetooth::Device> device,
                                           bool paired, bool connected) {
-    if (!m_callbacks.onStatusChanged) return;
+    LOGINFO("EventBridge::emitDeviceStatusChanged: entry newStatus=%s paired=%d connected=%d",
+            newStatus.c_str(), paired, connected);
+    if (!m_callbacks.onStatusChanged) {
+        LOGWARN("EventBridge::emitDeviceStatusChanged: exit, no onStatusChanged callback");
+        return;
+    }
 
     std::string deviceId, name, deviceType;
     uint32_t rawType = 0;
     uint16_t bleType = 0;
-    if (!populateDeviceFields(std::move(device), m_registry, deviceId, name, deviceType, rawType, bleType)) return;
+    if (!populateDeviceFields(std::move(device), m_registry, deviceId, name, deviceType, rawType, bleType)) {
+        LOGWARN("EventBridge::emitDeviceStatusChanged: exit, event dropped (no valid device handle) newStatus=%s",
+                newStatus.c_str());
+        return;
+    }
 
     bool hasAutoConnect = false;
     bool autoConnect    = false;
@@ -334,10 +364,14 @@ void EventBridge::emitDeviceStatusChanged(const std::string& newStatus,
         hasAutoConnect = m_callbacks.getAutoConnect(deviceId, autoConnect);
     }
 
+    LOGINFO("EventBridge::emitDeviceStatusChanged: notifying newStatus=%s deviceId=%s paired=%d connected=%d",
+            newStatus.c_str(), deviceId.c_str(), paired, connected);
     m_callbacks.onStatusChanged("onStatusChanged", newStatus,
                                 deviceId, name, deviceType, rawType, bleType,
                                 paired, connected, false,
                                 hasAutoConnect, autoConnect);
+    LOGINFO("EventBridge::emitDeviceStatusChanged: exit notified newStatus=%s deviceId=%s",
+            newStatus.c_str(), deviceId.c_str());
 }
 
 } // namespace Plugin

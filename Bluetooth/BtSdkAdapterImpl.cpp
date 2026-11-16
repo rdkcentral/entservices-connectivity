@@ -1083,10 +1083,12 @@ void BtSdkAdapterImpl::registerDeviceEvents(std::shared_ptr<bluetooth::Device> d
     }
 
     device->registerForEvents(
-        [this, gate = m_callbackGate](bluetooth::DeviceEvent ev, std::shared_ptr<bluetooth::Device> dev) {
+        [this, gate = m_callbackGate, mac](bluetooth::DeviceEvent ev, std::shared_ptr<bluetooth::Device> dev) {
             if (!gate) return;
             CallbackGate::Entry entry(*gate);
             if (!entry) return;
+            LOGINFO("BtSdkAdapterImpl: SDK device event=%d mac=%s device=%p", static_cast<int>(ev), mac.c_str(),
+                    static_cast<void*>(dev.get()));
             if (m_audioBridge) {
                 if (ev == bluetooth::DeviceEvent::Connected) m_audioBridge->onDeviceConnected(dev);
                 if (ev == bluetooth::DeviceEvent::Disconnected) m_audioBridge->onDeviceDisconnected(dev);
