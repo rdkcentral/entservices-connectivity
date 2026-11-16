@@ -103,6 +103,7 @@ protected:
     static constexpr uint32_t kLoudspeakerClass = 0x0414;
     static constexpr uint32_t kSmartphoneClass  = 0x020C;
     static constexpr uint32_t kKeyboardClass    = 0x0540;
+    static constexpr uint32_t kHeadphonesClass  = 0x0418;
 
     static std::string handleOf(const std::string& mac)
     {
@@ -360,6 +361,30 @@ TEST_F(BluetoothSdkAdapterTest, startScan_SdkFailure)
 TEST_F(BluetoothSdkAdapterTest, startScan_NotInitialised_Fails)
 {
     EXPECT_FALSE(sdkAdapter->startScan("HEADPHONES"));
+}
+
+// Clients poll the discovered list while scanning and every property read is a D-Bus call, so the filter and the
+// device info share reads instead of repeating them.
+TEST_F(BluetoothSdkAdapterTest, getDiscoveredDevices_ReadsPropertiesOncePerStep)
+{
+    auto device = makeDevice("AA:BB:CC:DD:EE:01", kHeadphonesClass);
+    bluetooth::DeviceProperties props;
+    props.classOfDevice = kHeadphonesClass;
+    props.name = "Test Headphones";
+    ON_CALL(*device, getAllProperties(_))
+        .WillByDefault(::testing::DoAll(::testing::SetArgReferee<0>(props), ::testing::Return(Status{})));
+    ON_CALL(*device, state()).WillByDefault(::testing::Return(bluetooth::DeviceState::Discovered));
+    initWithDevices({device}, {});
+    const std::vector<std::shared_ptr<bluetooth::Device>> discovered{device};
+    ON_CALL(*adapter, getDevices(bluetooth::DeviceState::Discovered)).WillByDefault(::testing::Return(discovered));
+
+    EXPECT_CALL(*device, getAllProperties(_)).Times(2);
+    EXPECT_CALL(*device, name(_)).Times(0);
+
+    const auto result = sdkAdapter->getDiscoveredDevices();
+
+    ASSERT_EQ(1u, result.size());
+    EXPECT_EQ(std::string("Test Headphones"), result[0].name);
 }
 
 TEST_F(BluetoothSdkAdapterTest, stopScan_Success)

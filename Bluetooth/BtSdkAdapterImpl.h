@@ -168,6 +168,8 @@ private:
                          int heldMs, DiscoveryNameGate::Kind& kind) const;
     void holdDevice(const std::string& mac, bluetooth::AdapterEventData&& event);
     bool isHeld(const std::string& mac) const;
+    // True for a device already filtered out (never announced, or pruned by us); needs no further D-Bus reads.
+    bool isSuppressed(const std::string& mac) const;
     void clearHeldDevices();
     void pendingWorker();
     void stopPendingWorker();
@@ -229,7 +231,7 @@ private:
     std::unordered_map<std::string, unsigned> m_operationsInProgress;
 
     // MACs whose DeviceDisappeared event must not be forwarded (never announced, or pruned by us).
-    std::mutex m_suppressedMutex;
+    mutable std::mutex m_suppressedMutex;
     std::unordered_set<std::string> m_suppressedMacs;
 
     // Mode of the most recent startScan(); retained after stopScan() so the discovered list stays consistent.

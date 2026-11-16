@@ -31,6 +31,14 @@ namespace Plugin {
 
 // The name to show for a device. Like btrCore, the Alias is preferred over the Name; bluetooth::Device::name()
 // is only a fallback, as it returns the literal "Unnamed Advertisement" when BlueZ has no Name.
+// The display name from properties already read, for callers that need the properties too.
+inline std::string deviceDisplayName(const std::string& mac, const bluetooth::DeviceProperties& props) {
+    std::string alias = props.alias.value_or("");
+    std::string name  = DiscoveryNameGate::effectiveName(props.name.value_or(""), alias);
+    if (!name.empty() && !DiscoveryNameGate::isNameSameAsAddress(name, mac)) return name;
+    return DiscoveryNameGate::fallbackName(std::move(alias), mac, props.classOfDevice.value_or(0));
+}
+
 inline std::string deviceDisplayName(const std::shared_ptr<bluetooth::Device>& device) {
     if (!device) return "";
 
@@ -38,12 +46,7 @@ inline std::string deviceDisplayName(const std::shared_ptr<bluetooth::Device>& d
     device->address(mac);
 
     bluetooth::DeviceProperties props;
-    if (device->getAllProperties(props)) {
-        std::string alias = props.alias.value_or("");
-        std::string name  = DiscoveryNameGate::effectiveName(props.name.value_or(""), alias);
-        if (!name.empty() && !DiscoveryNameGate::isNameSameAsAddress(name, mac)) return name;
-        return DiscoveryNameGate::fallbackName(std::move(alias), mac, props.classOfDevice.value_or(0));
-    }
+    if (device->getAllProperties(props)) return deviceDisplayName(mac, props);
 
     std::string name;
     if (device->name(name) && !name.empty() && name != "Unnamed Advertisement" && !DiscoveryNameGate::isNameSameAsAddress(name, mac)) return name;

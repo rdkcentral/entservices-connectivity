@@ -361,14 +361,16 @@ IBtAdapter::BtDeviceInfo BtSdkAdapterImpl::deviceToInfo(
     device->address(mac);
     info.mac = mac;
     info.handleStr = DeviceRegistry::deriveHandle(mac);
-    info.name = deviceDisplayName(device);
+    // One property read serves the name and the fields below; each read is a D-Bus call, and clients poll the lists.
+    bluetooth::DeviceProperties props;
+    const bool havePropsRead = static_cast<bool>(device->getAllProperties(props));
+    info.name = havePropsRead ? deviceDisplayName(mac, props) : deviceDisplayName(device);
     info.deviceType = m_registry.getDeviceType(info.handleStr);
     const bluetooth::DeviceState state = device->state();
     info.connected  = (state == bluetooth::DeviceState::Connected);
     info.paired     = (state == bluetooth::DeviceState::Paired
                      || state == bluetooth::DeviceState::Connected);
-    bluetooth::DeviceProperties props;
-    if (device->getAllProperties(props)) {
+    if (havePropsRead) {
         info.classOfDevice = props.classOfDevice.value_or(0);
         info.appearance    = props.appearance.value_or(0);
         info.isGamePad     = AuthBridge::isGamepad(mac, props);
@@ -389,10 +391,11 @@ std::vector<IBtAdapter::BtDeviceInfo> BtSdkAdapterImpl::getDiscoveredDevices() c
         return result;
     }
     for (auto& d : m_adapter->getDevices(bluetooth::DeviceState::Discovered)) {
-        if (isFilteredFromDiscovery(d)) continue;
         std::string mac;
         d->address(mac);
-        if (isHeld(mac)) continue;
+        // Clients poll this while scanning; the checks that read the device over D-Bus come last.
+        if (isHeld(mac) || isSuppressed(mac)) continue;
+        if (isFilteredFromDiscovery(d)) continue;
         BtDeviceInfo info = deviceToInfo(d);
         if (!DeviceRegistry::isValidHandle(info.handleStr)) continue;
         result.push_back(std::move(info));
@@ -1196,18 +1199,23 @@ bool BtSdkAdapterImpl::isFilteredFromDiscovery(const std::shared_ptr<bluetooth::
     std::string mac;
     std::string name;
     device->address(mac);
-    device->name(name);
 
     uint16_t appearance = 0;
     uint32_t classOfDevice = 0;
     std::vector<std::string> uuids;
     std::string icon;
+    // One property read for the name too: each read is a D-Bus call, and clients poll the discovered list.
     bluetooth::DeviceProperties props;
     if (device->getAllProperties(props)) {
+        name          = props.name.value_or("");
+        // As bluetooth::Device::name() reports a device without a Name.
+        if (name.empty()) name = "Unnamed Advertisement";
         appearance    = props.appearance.value_or(0);
         classOfDevice = props.classOfDevice.value_or(0);
         uuids         = props.uuids.value_or(std::vector<std::string>{});
         icon          = props.icon.value_or("");
+    } else {
+        device->name(name);
     }
 
     // Classify afresh: the type cached in the registry can predate the device's properties being populated.
@@ -1273,6 +1281,11 @@ void BtSdkAdapterImpl::holdDevice(const std::string& mac, bluetooth::AdapterEven
 bool BtSdkAdapterImpl::isHeld(const std::string& mac) const {
     std::lock_guard<std::mutex> lock(m_pendingMutex);
     return m_pending.find(mac) != m_pending.end();
+}
+
+bool BtSdkAdapterImpl::isSuppressed(const std::string& mac) const {
+    std::lock_guard<std::mutex> lock(m_suppressedMutex);
+    return m_suppressedMacs.find(mac) != m_suppressedMacs.end();
 }
 
 void BtSdkAdapterImpl::clearHeldDevices() {
