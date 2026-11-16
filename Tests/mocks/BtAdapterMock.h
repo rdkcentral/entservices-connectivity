@@ -38,6 +38,8 @@ public:
                 out = getPairedDevices();
                 return true;
             }));
+        // A real backend that does not override isScanning() reports true; keep the plugin's own record in charge.
+        ON_CALL(*this, isScanning()).WillByDefault(::testing::Return(true));
     }
     virtual ~BtAdapterImplMock() = default;
 
@@ -55,6 +57,7 @@ public:
 
     MOCK_METHOD(bool, startScan, (const std::string&), (override));
     MOCK_METHOD(bool, stopScan,  (),                   (override));
+    MOCK_METHOD(bool, isScanning, (),                  (const, override));
 
     MOCK_METHOD(std::vector<IBtAdapter::BtDeviceInfo>, getDiscoveredDevices, (), (const, override));
     MOCK_METHOD(std::vector<IBtAdapter::BtDeviceInfo>, getPairedDevices,     (), (const, override));

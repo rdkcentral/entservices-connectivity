@@ -51,6 +51,10 @@ public:
     virtual bool startScan(const std::string& profile) = 0;
     virtual bool stopScan() = 0;
 
+    // Whether a scan is running. A backend may stop the scan itself before a connect or pair (BTMgr does), so the
+    // plugin checks this before trusting its own record of a running scan. Defaults to true, leaving that record in charge.
+    virtual bool isScanning() const { return true; }
+
     // Device list queries return a handle-string-keyed list of descriptors.
     // The BtDeviceInfo structs contain all fields needed to build JSON responses
     // without requiring shared_ptr<bluetooth::Device> in callers.

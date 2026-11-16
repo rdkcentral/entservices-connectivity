@@ -29,13 +29,9 @@
 namespace WPEFramework {
 namespace Plugin {
 
-namespace {
-
-bool isHidType(const std::string& deviceType) {
+bool AuthBridge::isHidType(const std::string& deviceType) {
     return deviceType == "HUMAN INTERFACE DEVICE";
 }
-
-} // namespace
 
 // Device types the BTMgr connection policy treats as audio output (mirrors btrMgr_ConnectionInAuthenticationCb).
 bool AuthBridge::isAudioOutputType(const std::string& deviceType) {

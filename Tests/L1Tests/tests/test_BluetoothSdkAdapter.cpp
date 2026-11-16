@@ -102,6 +102,7 @@ protected:
 
     static constexpr uint32_t kLoudspeakerClass = 0x0414;
     static constexpr uint32_t kSmartphoneClass  = 0x020C;
+    static constexpr uint32_t kKeyboardClass    = 0x0540;
 
     static std::string handleOf(const std::string& mac)
     {
@@ -585,6 +586,76 @@ TEST_F(BluetoothSdkAdapterTest, connectDevice_SdkFailure_ReturnsFalseWithoutRequ
 
     std::this_thread::sleep_for(std::chrono::milliseconds(400));
     EXPECT_EQ(0, requestFailed);
+}
+
+TEST_F(BluetoothSdkAdapterTest, connectDevice_WhileScanning_StopsScanFirst)
+{
+    auto device = makeDevice("AA:BB:CC:DD:EE:01", kLoudspeakerClass);
+    initWithDevices({device}, {});
+    EXPECT_CALL(*adapter, startScan(_)).WillOnce(::testing::Return(Status{}));
+    ASSERT_TRUE(sdkAdapter->startScan("HEADPHONES"));
+    ASSERT_TRUE(sdkAdapter->isScanning());
+
+    ::testing::InSequence order;
+    EXPECT_CALL(*adapter, stopScan()).WillOnce(::testing::Return(Status{}));
+    EXPECT_CALL(*device, connect(true, _)).WillOnce(::testing::Return(Status{}));
+
+    EXPECT_TRUE(sdkAdapter->connectDevice(handleOf("AA:BB:CC:DD:EE:01"), "LOUDSPEAKER"));
+    EXPECT_FALSE(sdkAdapter->isScanning());
+}
+
+TEST_F(BluetoothSdkAdapterTest, connectDevice_ScanCannotBeStopped_DoesNotConnect)
+{
+    auto device = makeDevice("AA:BB:CC:DD:EE:01", kLoudspeakerClass);
+    initWithDevices({device}, {});
+    EXPECT_CALL(*adapter, startScan(_)).WillOnce(::testing::Return(Status{}));
+    ASSERT_TRUE(sdkAdapter->startScan("HEADPHONES"));
+
+    EXPECT_CALL(*adapter, stopScan()).WillOnce(::testing::Return(kSdkFailure));
+    EXPECT_CALL(*device, connect(_, _)).Times(0);
+
+    EXPECT_FALSE(sdkAdapter->connectDevice(handleOf("AA:BB:CC:DD:EE:01"), "LOUDSPEAKER"));
+    EXPECT_TRUE(sdkAdapter->isScanning());
+}
+
+TEST_F(BluetoothSdkAdapterTest, connectDevice_NotScanning_DoesNotStopScan)
+{
+    auto device = makeDevice("AA:BB:CC:DD:EE:01", kLoudspeakerClass);
+    initWithDevices({device}, {});
+
+    EXPECT_CALL(*adapter, stopScan()).Times(0);
+    EXPECT_CALL(*device, connect(true, _)).WillOnce(::testing::Return(Status{}));
+
+    EXPECT_TRUE(sdkAdapter->connectDevice(handleOf("AA:BB:CC:DD:EE:01"), "LOUDSPEAKER"));
+}
+
+TEST_F(BluetoothSdkAdapterTest, pairDevice_WhileScanning_StopsScanFirst)
+{
+    auto device = makeDevice("AA:BB:CC:DD:EE:01", kLoudspeakerClass);
+    initWithDevices({device}, {});
+    EXPECT_CALL(*adapter, startScan(_)).WillOnce(::testing::Return(Status{}));
+    ASSERT_TRUE(sdkAdapter->startScan("HEADPHONES"));
+
+    ::testing::InSequence order;
+    EXPECT_CALL(*adapter, stopScan()).WillOnce(::testing::Return(Status{}));
+    EXPECT_CALL(*device, pair(true, _)).WillOnce(::testing::Return(Status{}));
+
+    EXPECT_TRUE(sdkAdapter->pairDevice(handleOf("AA:BB:CC:DD:EE:01")));
+    EXPECT_FALSE(sdkAdapter->isScanning());
+}
+
+TEST_F(BluetoothSdkAdapterTest, pairDevice_HidDeviceWhileScanning_KeepsScanning)
+{
+    auto device = makeDevice("AA:BB:CC:DD:EE:01", kKeyboardClass);
+    initWithDevices({device}, {});
+    EXPECT_CALL(*adapter, startScan(_)).WillOnce(::testing::Return(Status{}));
+    ASSERT_TRUE(sdkAdapter->startScan("HEADPHONES"));
+
+    EXPECT_CALL(*adapter, stopScan()).Times(0);
+    EXPECT_CALL(*device, pair(true, _)).WillOnce(::testing::Return(Status{}));
+
+    EXPECT_TRUE(sdkAdapter->pairDevice(handleOf("AA:BB:CC:DD:EE:01")));
+    EXPECT_TRUE(sdkAdapter->isScanning());
 }
 
 TEST_F(BluetoothSdkAdapterTest, pairAndConnect_Success_UseTheSynchronousCalls)

@@ -177,6 +177,7 @@ bool BtAdapter::setAdapterDiscoverable(bool d, int t) { return getImpl().setAdap
 
 bool BtAdapter::startScan(const std::string& profile) { return getImpl().startScan(profile); }
 bool BtAdapter::stopScan()                             { return getImpl().stopScan(); }
+bool BtAdapter::isScanning() const                     { return getImpl().isScanning(); }
 
 std::vector<IBtAdapter::BtDeviceInfo> BtAdapter::getDiscoveredDevices() const { return getImpl().getDiscoveredDevices(); }
 std::vector<IBtAdapter::BtDeviceInfo> BtAdapter::getPairedDevices()     const { return getImpl().getPairedDevices(); }

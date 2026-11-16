@@ -463,12 +463,26 @@ bool BtSdkAdapterImpl::isOperationInProgress(const std::string& mac) const {
     return m_operationsInProgress.count(mac) > 0;
 }
 
+bool BtSdkAdapterImpl::stopScanBeforeOperation(bool pairing, const std::shared_ptr<bluetooth::Device>& device,
+                                               const std::string& handleStr) {
+    if (!m_scanning) return true;
+    if (pairing && m_authBridge && AuthBridge::isHidType(m_authBridge->resolveDeviceType(device, handleStr))) return true;
+    LOGINFO("BtSdkAdapterImpl::stopScanBeforeOperation: stopping the scan before %s handle=%s",
+            pairing ? "pairing" : "connecting", handleStr.c_str());
+    return stopScan();
+}
+
 bool BtSdkAdapterImpl::pairDevice(const std::string& handleStr) {
     LOGINFO("BtSdkAdapterImpl::pairDevice: entry handle=%s", handleStr.c_str());
     // findDevice() does not hold m_devicesMutex across the blocking SDK call: device events fire while it runs.
     const std::shared_ptr<bluetooth::Device> device = findDevice(handleStr);
     if (!device) {
         LOGERR("BtSdkAdapterImpl::pairDevice: exit with error: device handle was not found");
+        return false;
+    }
+    // Before beginDeviceOperation so a failure here has no held changes to release.
+    if (!stopScanBeforeOperation(true, device, handleStr)) {
+        LOGERR("BtSdkAdapterImpl::pairDevice: exit with error: the scan could not be stopped");
         return false;
     }
     // Hold this device's status changes so the PAIRING_CHANGE reaches the client after the pair response.
@@ -540,6 +554,10 @@ bool BtSdkAdapterImpl::connectDevice(const std::string& handleStr, const std::st
     const std::shared_ptr<bluetooth::Device> device = findDevice(handleStr);
     if (!device) {
         LOGERR("BtSdkAdapterImpl::connectDevice: exit with error: device handle was not found");
+        return false;
+    }
+    if (!stopScanBeforeOperation(false, device, handleStr)) {
+        LOGERR("BtSdkAdapterImpl::connectDevice: exit with error: the scan could not be stopped");
         return false;
     }
     // The device's own type decides, not the client's deviceType, which defaults to SMARTPHONE when omitted.

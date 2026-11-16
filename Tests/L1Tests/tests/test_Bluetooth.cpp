@@ -277,6 +277,27 @@ TEST_F(BluetoothTest, startScanWrapper_MissingParameters_Failure)
     EXPECT_TRUE(response.find("\"success\":false") != string::npos);
 }
 
+TEST_F(BluetoothTest, startScanWrapper_WhileScanning_DoesNotRestartScan)
+{
+    EXPECT_CALL(*p_btSdkMock, startScan(::testing::_)).WillOnce(::testing::Return(true));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("startScan"), _T("{\"timeout\":5}"), response));
+
+    EXPECT_CALL(*p_btSdkMock, isScanning()).WillOnce(::testing::Return(true));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("startScan"), _T("{\"timeout\":5}"), response));
+    EXPECT_TRUE(response.find("\"success\":true") != string::npos);
+}
+
+// The backend stopped the scan itself (e.g. before a connect), so the plugin's record of it is stale.
+TEST_F(BluetoothTest, startScanWrapper_BackendStoppedScan_StartsAgain)
+{
+    EXPECT_CALL(*p_btSdkMock, startScan(::testing::_)).Times(2).WillRepeatedly(::testing::Return(true));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("startScan"), _T("{\"timeout\":5}"), response));
+
+    EXPECT_CALL(*p_btSdkMock, isScanning()).WillOnce(::testing::Return(false));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("startScan"), _T("{\"timeout\":5}"), response));
+    EXPECT_TRUE(response.find("\"success\":true") != string::npos);
+}
+
 TEST_F(BluetoothTest, stopScanWrapper_Success)
 {
     EXPECT_CALL(*p_btSdkMock, startScan(::testing::_)).WillOnce(::testing::Return(true));

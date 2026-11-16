@@ -116,6 +116,7 @@ public:
     void onAutoConnected(const std::string& handleStr) const;
 
     static bool isAudioOutputType(const std::string& deviceType);
+    static bool isHidType(const std::string& deviceType);
 
     // LE gamepad or classic Joystick/Gamepad class of device, excluding RDK remote controls.
     static bool isGamepad(const std::string& mac, const bluetooth::DeviceProperties& props);

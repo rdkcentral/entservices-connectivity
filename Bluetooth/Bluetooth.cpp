@@ -608,8 +608,13 @@ namespace WPEFramework
         {
             Core::SafeSyncType<Core::CriticalSection> lock(m_discoveryLock);
             if (m_discoveryRunning) {
-                LOGWARN("Discovery is in progress..!");
-                return STATUS_AVAILABLE;
+                // The backend may have stopped the scan itself, e.g. before a connect (as BTMgr does).
+                if (m_btAdapter.isScanning()) {
+                    LOGWARN("Discovery is in progress..!");
+                    return STATUS_AVAILABLE;
+                }
+                stopDiscoveryTimer();
+                m_discoveryRunning = false;
             }
 
             if (!m_btAdapter.startScan(discProfile)) {

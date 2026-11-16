@@ -72,6 +72,7 @@ public:
 
     bool startScan(const std::string& profile) override;
     bool stopScan() override;
+    bool isScanning() const override { return m_scanning.load(); }
 
     std::vector<BtDeviceInfo> getDiscoveredDevices() const override;
     std::vector<BtDeviceInfo> getPairedDevices()     const override;
@@ -150,6 +151,10 @@ private:
     // Like BTMgr's btrMgr_StartAudioStreamingOut, keeps at most one audio output device connected: disconnects every
     // connected audio output device other than targetHandle. False if one of them cannot be disconnected.
     bool disconnectOtherAudioOutputDevices(const std::string& targetHandle);
+    // Stops a running scan before a connect, or a pair of a device that is not HID, as BTMgr does
+    // (btrMgr_PreCheckDiscoveryStatus): a connect or pair made during a scan is slow and can time out.
+    // False if the scan could not be stopped, in which case the operation is not attempted.
+    bool stopScanBeforeOperation(bool pairing, const std::shared_ptr<bluetooth::Device>& device, const std::string& handleStr);
 
     // Discovery name gate (see DiscoveryNameGate): unpaired devices BlueZ has not named yet are held back
     // from clients, and re-read by a worker thread until they are named or their wait runs out.

@@ -61,6 +61,7 @@ public:
 
     bool startScan(const std::string& profile) override;
     bool stopScan() override;
+    bool isScanning() const override;
 
     std::vector<IBtAdapter::BtDeviceInfo> getDiscoveredDevices() const override;
     std::vector<IBtAdapter::BtDeviceInfo> getPairedDevices() const override;
