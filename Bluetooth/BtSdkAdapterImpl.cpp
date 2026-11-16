@@ -234,6 +234,7 @@ void BtSdkAdapterImpl::deinit() {
         std::lock_guard<std::mutex> lock(m_standbyHeldMutex);
         m_standbyHeld.clear();
     }
+    clearDiscoveredSnapshots();
     std::lock_guard<std::mutex> lock(m_devicesMutex);
     m_devicesByHandle.clear();
     LOGINFO("BtSdkAdapterImpl::deinit: exit successfully");
@@ -319,6 +320,7 @@ bool BtSdkAdapterImpl::startScan(const std::string& profile) {
     
     // Each legacy scan starts from an empty discovered list.
     clearHeldDevices();
+    clearDiscoveredSnapshots();
     pruneDiscoveredDevices();
 
     // Set before the scan starts so early discovery events are judged against the new mode.
@@ -355,7 +357,6 @@ bool BtSdkAdapterImpl::stopScan() {
 IBtAdapter::BtDeviceInfo BtSdkAdapterImpl::deviceToInfo(
     std::shared_ptr<bluetooth::Device> device) const
 {
-    LOGINFO("BtSdkAdapterImpl::deviceToInfo: entry");
     BtDeviceInfo info;
     std::string mac;
     device->address(mac);
@@ -378,7 +379,6 @@ IBtAdapter::BtDeviceInfo BtSdkAdapterImpl::deviceToInfo(
     }
     // BTMgr only ever reports BTRMGR_DEVICE_POWER_ACTIVE (1) for a connected device, never LOW or STANDBY.
     info.powerStatus = info.connected ? 1 : 0;
-    LOGINFO("BtSdkAdapterImpl::deviceToInfo: exit handle=%s mac=%s", info.handleStr.c_str(), info.mac.c_str());
     return info;
 }
 
@@ -390,15 +390,39 @@ std::vector<IBtAdapter::BtDeviceInfo> BtSdkAdapterImpl::getDiscoveredDevices() c
         LOGERR("BtSdkAdapterImpl::getDiscoveredDevices: exit with error: adapter is unavailable");
         return result;
     }
+    // Devices not seen yet are read at once; old snapshots are refreshed a few per call so that one poll never
+    // has to read every device, which is what made a poll take seconds while many devices were around.
+    constexpr auto kSnapshotMaxAge = std::chrono::seconds(5);
+    constexpr size_t kMaxRefreshesPerCall = 3;
+    const auto now = std::chrono::steady_clock::now();
+    size_t refreshes = 0;
     for (auto& d : m_adapter->getDevices(bluetooth::DeviceState::Discovered)) {
         std::string mac;
         d->address(mac);
-        // Clients poll this while scanning; the checks that read the device over D-Bus come last.
         if (isHeld(mac) || isSuppressed(mac)) continue;
-        if (isFilteredFromDiscovery(d)) continue;
-        BtDeviceInfo info = deviceToInfo(d);
-        if (!DeviceRegistry::isValidHandle(info.handleStr)) continue;
-        result.push_back(std::move(info));
+
+        DiscoveredSnapshot snapshot;
+        bool known = false;
+        {
+            std::lock_guard<std::mutex> lock(m_snapshotMutex);
+            const auto it = m_discoveredSnapshots.find(mac);
+            if (it != m_discoveredSnapshots.end()) {
+                snapshot = it->second;
+                known = true;
+            }
+        }
+        const bool old = known && (now - snapshot.at) > kSnapshotMaxAge;
+        if (!known || (old && refreshes < kMaxRefreshesPerCall)) {
+            if (known) ++refreshes;
+            snapshot = DiscoveredSnapshot();
+            snapshot.filtered = isFilteredFromDiscovery(d);
+            if (!snapshot.filtered) snapshot.info = deviceToInfo(d);
+            snapshot.at = now;
+            std::lock_guard<std::mutex> lock(m_snapshotMutex);
+            m_discoveredSnapshots[mac] = snapshot;
+        }
+        if (snapshot.filtered || !DeviceRegistry::isValidHandle(snapshot.info.handleStr)) continue;
+        result.push_back(std::move(snapshot.info));
     }
     LOGINFO("BtSdkAdapterImpl::getDiscoveredDevices: exit count=%zu", result.size());
     return result;
@@ -1059,6 +1083,10 @@ void BtSdkAdapterImpl::onAdapterEvent(bluetooth::AdapterEvent event,
             std::lock_guard<std::mutex> lock(m_standbyHeldMutex);
             if (m_standbyHeld.erase(mac) > 0) filtered = true;
         }
+        {
+            std::lock_guard<std::mutex> lock(m_snapshotMutex);
+            m_discoveredSnapshots.erase(mac);
+        }
         m_registry.unregisterDevice(mac);
         const std::string handle = DeviceRegistry::deriveHandle(mac);
         if (DeviceRegistry::isValidHandle(handle)) {
@@ -1288,6 +1316,11 @@ bool BtSdkAdapterImpl::isSuppressed(const std::string& mac) const {
     return m_suppressedMacs.find(mac) != m_suppressedMacs.end();
 }
 
+void BtSdkAdapterImpl::clearDiscoveredSnapshots() {
+    std::lock_guard<std::mutex> lock(m_snapshotMutex);
+    m_discoveredSnapshots.clear();
+}
+
 void BtSdkAdapterImpl::clearHeldDevices() {
     std::lock_guard<std::mutex> lock(m_pendingMutex);
     m_pending.clear();
@@ -1324,6 +1357,7 @@ void BtSdkAdapterImpl::pendingWorker() {
         for (auto& entry : snapshot) {
             // With no scan running BlueZ learns nothing new; only the waits that expire by themselves matter.
             if (!scanning && !entry.second.timed) continue;
+            if (now < entry.second.nextPoll) continue;
             const auto heldMs = static_cast<int>(
                 std::chrono::duration_cast<std::chrono::milliseconds>(now - entry.second.since).count());
             DiscoveryNameGate::Kind kind = DiscoveryNameGate::Kind::Other;
@@ -1343,6 +1377,8 @@ void BtSdkAdapterImpl::pendingWorker() {
                     m_pending.erase(it);
                 } else {
                     it->second.timed = p.timed;
+                    it->second.nextPoll = now + std::chrono::milliseconds(
+                        p.timed ? DiscoveryNameGate::kPollIntervalMs : DiscoveryNameGate::kOtherPollIntervalMs);
                 }
             }
         }

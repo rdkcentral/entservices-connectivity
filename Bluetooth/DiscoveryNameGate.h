@@ -58,6 +58,11 @@ public:
     // How often the plugin re-reads a held device's properties, in place of btrCore's name-change event.
     static constexpr int kPollIntervalMs = 500;
 
+    // How often a held device with no wait of its own (neither audio nor controller) is re-read: it is only
+    // reported once BlueZ names it, which may never happen, and every read is a D-Bus call shared with the
+    // clients' requests, so it is read less often than the devices that are about to be released anyway.
+    static constexpr int kOtherPollIntervalMs = 2000;
+
     // btrCore's BTCORE_DEFAULT_CONTROLLER_NAME.
     static constexpr const char* kDefaultControllerName = "Game Controller";
 

@@ -364,8 +364,8 @@ TEST_F(BluetoothSdkAdapterTest, startScan_NotInitialised_Fails)
 }
 
 // Clients poll the discovered list while scanning and every property read is a D-Bus call, so the filter and the
-// device info share reads instead of repeating them.
-TEST_F(BluetoothSdkAdapterTest, getDiscoveredDevices_ReadsPropertiesOncePerStep)
+// device info share reads, and later polls are served from the snapshot taken by the first.
+TEST_F(BluetoothSdkAdapterTest, getDiscoveredDevices_ReadsPropertiesOnceAndServesLaterPollsFromSnapshot)
 {
     auto device = makeDevice("AA:BB:CC:DD:EE:01", kHeadphonesClass);
     bluetooth::DeviceProperties props;
@@ -378,13 +378,17 @@ TEST_F(BluetoothSdkAdapterTest, getDiscoveredDevices_ReadsPropertiesOncePerStep)
     const std::vector<std::shared_ptr<bluetooth::Device>> discovered{device};
     ON_CALL(*adapter, getDevices(bluetooth::DeviceState::Discovered)).WillByDefault(::testing::Return(discovered));
 
+    // One read for the scan filter and one for the device info, for the first poll only.
     EXPECT_CALL(*device, getAllProperties(_)).Times(2);
     EXPECT_CALL(*device, name(_)).Times(0);
 
-    const auto result = sdkAdapter->getDiscoveredDevices();
+    const auto first  = sdkAdapter->getDiscoveredDevices();
+    const auto second = sdkAdapter->getDiscoveredDevices();
 
-    ASSERT_EQ(1u, result.size());
-    EXPECT_EQ(std::string("Test Headphones"), result[0].name);
+    ASSERT_EQ(1u, first.size());
+    EXPECT_EQ(std::string("Test Headphones"), first[0].name);
+    ASSERT_EQ(1u, second.size());
+    EXPECT_EQ(first[0].handleStr, second[0].handleStr);
 }
 
 TEST_F(BluetoothSdkAdapterTest, stopScan_Success)

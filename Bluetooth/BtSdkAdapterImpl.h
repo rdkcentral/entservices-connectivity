@@ -162,6 +162,7 @@ private:
         bluetooth::AdapterEventData        event;
         std::chrono::steady_clock::time_point since;
         bool                               timed{false};   // has a wait that expires by itself (audio, controller)
+        std::chrono::steady_clock::time_point nextPoll{};  // not read again before this; unset means due now
     };
     // Reads the device's properties; true if it can be reported now.
     bool isReadyToReport(const std::shared_ptr<bluetooth::Device>& device, const std::string& mac,
@@ -233,6 +234,19 @@ private:
     // MACs whose DeviceDisappeared event must not be forwarded (never announced, or pruned by us).
     mutable std::mutex m_suppressedMutex;
     std::unordered_set<std::string> m_suppressedMacs;
+
+    // What getDiscoveredDevices() last worked out for each unpaired device: whether the scan filter hides it and,
+    // if not, its info. Clients poll the list continuously and reading a device is a D-Bus call, so polls are
+    // served from here; an entry is read again once it is old (a few per call), and dropped when the device
+    // disappears or a scan starts (which also changes the filter).
+    struct DiscoveredSnapshot {
+        bool                                  filtered{false};
+        BtDeviceInfo                          info;
+        std::chrono::steady_clock::time_point at;
+    };
+    mutable std::mutex m_snapshotMutex;
+    mutable std::unordered_map<std::string, DiscoveredSnapshot> m_discoveredSnapshots;
+    void clearDiscoveredSnapshots();
 
     // Mode of the most recent startScan(); retained after stopScan() so the discovered list stays consistent.
     std::atomic<ScanFilterPolicy::Mode> m_scanMode{ScanFilterPolicy::Mode::Default};

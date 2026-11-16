@@ -688,7 +688,7 @@ namespace WPEFramework {
 
         Core::hresult BluetoothDeviceManager::getPairedDeviceInfo(const std::string& deviceID, BluetoothDeviceInfo& deviceInfo)
         {
-            LOGINFO("deviceID=%s", deviceID.c_str());
+            // Not logged: called for every device on each list request, which clients poll.
             // The critical section is recursive; setters retain their outer lock for atomic updates.
             Core::SafeSyncType<Core::CriticalSection> lock(_adminLock);
             auto it = _pairedDeviceCache.find(deviceID);
@@ -697,8 +697,6 @@ namespace WPEFramework {
             if (bFound) {
                 deviceInfo = it->second;
             }
-
-            LOGINFO("bFound=%d", bFound);
 
             return bFound ? Core::ERROR_NONE : Core::ERROR_NOT_EXIST;
         }
@@ -740,11 +738,9 @@ namespace WPEFramework {
 
         Core::hresult BluetoothDeviceManager::getAutoConnect(const std::string& deviceID, AutoConnectStatus& status)
         {
-            LOGINFO("deviceID=%s\n", deviceID.c_str());
-
+            // The entry is not logged: this is called for every device on each list request, which clients poll.
 #ifdef BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION
             if (!_isMigrated.load()) {
-                LOGINFO("migration not complete, returning disabled for deviceID=%s", deviceID.c_str());
                 status = AUTO_CONNECT_STATUS_DISABLED;
                 return Core::ERROR_NONE;
             }
@@ -936,7 +932,7 @@ namespace WPEFramework {
 
         Core::hresult BluetoothDeviceManager::getLastConnectTimeUtc(const std::string& deviceID, std::string& lastConnectTimeUtc)
         {
-            LOGINFO("deviceID=%s\n", deviceID.c_str());
+            // Not logged: called for every device on each list request, which clients poll.
             BluetoothDeviceInfo deviceInfo;
 
             _adminLock.Lock();
