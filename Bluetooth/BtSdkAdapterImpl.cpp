@@ -1200,7 +1200,7 @@ void BtSdkAdapterImpl::registerDeviceEvents(std::shared_ptr<bluetooth::Device> d
     }
 
     device->registerForEvents(
-        [this, gate = m_callbackGate, mac](bluetooth::DeviceEvent ev, std::shared_ptr<bluetooth::Device> dev) {
+        [this, gate = m_callbackGate, std::move(mac)](bluetooth::DeviceEvent ev, std::shared_ptr<bluetooth::Device> dev) {
             if (!gate) return;
             CallbackGate::Entry entry(*gate);
             if (!entry) return;

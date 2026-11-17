@@ -376,7 +376,7 @@ TEST_F(BluetoothSdkAdapterTest, getDiscoveredDevices_ReadsPropertiesOnceAndServe
     ON_CALL(*device, state()).WillByDefault(::testing::Return(bluetooth::DeviceState::Discovered));
     initWithDevices({device}, {});
     const std::vector<std::shared_ptr<bluetooth::Device>> discovered{device};
-    ON_CALL(*adapter, getDevices(bluetooth::DeviceState::Discovered)).WillByDefault(::testing::Return(discovered));
+    ON_CALL(*adapter, getDevices(bluetooth::DeviceState::Discovered)).WillByDefault(::testing::Return(std::move(discovered)));
 
     // One read for the scan filter and one for the device info, for the first poll only.
     EXPECT_CALL(*device, getAllProperties(_)).Times(2);
@@ -587,7 +587,7 @@ TEST_F(BluetoothSdkAdapterTest, pairDevice_SdkFailure_ReturnsFalseWithoutRequest
     BtEventCallbacks callbacks;
     callbacks.onRequestFailed = [&](const std::string&, const std::string&, const std::string&, const std::string&,
                                     uint32_t, uint16_t, bool, bool, bool) { ++requestFailed; };
-    initWithDevices({device}, {}, callbacks);
+    initWithDevices({std::move(device)}, {}, callbacks);
 
     EXPECT_CALL(*device, pair(true, _)).WillOnce(::testing::Return(kSdkFailure));
     EXPECT_CALL(*device, pair(false, _)).Times(0);
@@ -606,7 +606,7 @@ TEST_F(BluetoothSdkAdapterTest, connectDevice_SdkFailure_ReturnsFalseWithoutRequ
     BtEventCallbacks callbacks;
     callbacks.onRequestFailed = [&](const std::string&, const std::string&, const std::string&, const std::string&,
                                     uint32_t, uint16_t, bool, bool, bool) { ++requestFailed; };
-    initWithDevices({device}, {}, callbacks);
+    initWithDevices({std::move(device)}, {}, callbacks);
 
     EXPECT_CALL(*device, connect(true, _)).WillOnce(::testing::Return(kSdkFailure));
     EXPECT_CALL(*device, connect(false, _)).Times(0);
@@ -652,7 +652,7 @@ TEST_F(BluetoothSdkAdapterTest, connectDevice_WhileScanning_DoesNotReportDiscove
         std::lock_guard<std::mutex> lock(mutex);
         statuses.push_back(newStatus);
     };
-    initWithDevices({device}, {}, callbacks);
+    initWithDevices({std::move(device)}, {}, callbacks);
     ASSERT_TRUE(static_cast<bool>(adapterCallback));
 
     EXPECT_CALL(*adapter, startScan(_)).WillOnce(::testing::Return(Status{}));
@@ -689,7 +689,7 @@ TEST_F(BluetoothSdkAdapterTest, stopScan_ClientStop_StillReportsDiscoveryComplet
     callbacks.onStatusChanged = [&](const std::string&, const std::string& newStatus, const std::string&,
                                     const std::string&, const std::string&, uint32_t, uint16_t, bool, bool, bool,
                                     bool, bool) { statuses.push_back(newStatus); };
-    ASSERT_EQ(std::string(""), sdkAdapter->init(nullptr, BtEventCallbacks(callbacks), BtAuthCallbacks()));
+    ASSERT_EQ(std::string(""), sdkAdapter->init(nullptr, BtEventCallbacks(std::move(callbacks)), BtAuthCallbacks()));
     ASSERT_TRUE(static_cast<bool>(adapterCallback));
 
     EXPECT_CALL(*adapter, startScan(_)).WillOnce(::testing::Return(Status{}));
@@ -779,7 +779,7 @@ TEST_F(BluetoothSdkAdapterTest, pairDevice_BlueZConnectsWhilePairing_ReportsOnly
         std::lock_guard<std::mutex> lock(mutex);
         log.push_back(newStatus + ":" + (paired ? "paired" : "unpaired") + ":" + (connected ? "connected" : "disconnected"));
     };
-    initWithDevices({device}, {}, callbacks);
+    initWithDevices({std::move(device)}, {}, callbacks);
 
     EXPECT_CALL(*device, pair(true, _))
         .WillOnce(::testing::Invoke([&](bool, uint8_t) {
@@ -809,7 +809,7 @@ TEST_F(BluetoothSdkAdapterTest, connectDevice_AlreadyConnectedByBlueZ_StillAckno
         std::lock_guard<std::mutex> lock(mutex);
         log.push_back(newStatus + ":" + (connected ? "connected" : "disconnected"));
     };
-    initWithDevices({device}, {}, callbacks);
+    initWithDevices({std::move(device)}, {}, callbacks);
 
     // The SDK returns success without raising an event for a device that is already connected. Not paired by the
     // plugin, so its link is not cycled.
@@ -844,7 +844,7 @@ TEST_F(BluetoothSdkAdapterTest, connectDevice_AudioDeviceConnectedWhilePairing_C
         std::lock_guard<std::mutex> lock(mutex);
         log.push_back(newStatus + ":" + (paired ? "paired" : "unpaired") + ":" + (connected ? "connected" : "disconnected"));
     };
-    initWithDevices({device}, {}, callbacks);
+    initWithDevices({std::move(device)}, {}, callbacks);
 
     // The mock device reports Connected throughout, as it is when BlueZ connects it while pairing.
     EXPECT_CALL(*device, pair(true, _)).WillOnce(::testing::Return(Status{}));
