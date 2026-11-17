@@ -211,7 +211,7 @@ EventBridge::OperationId EventBridge::beginDeviceOperation(const std::shared_ptr
 }
 
 void EventBridge::completeDeviceOperation(OperationId id, bluetooth::DeviceEvent event,
-                                          std::shared_ptr<bluetooth::Device> device, /opbool succeeded) {
+                                          std::shared_ptr<bluetooth::Device> device, bool succeeded) {
     if (!device || id == 0) return;
     std::string mac;
     device->address(mac);
