@@ -252,36 +252,39 @@ void EventBridge::releaseDeviceOperation(const std::string& mac, OperationId id,
     }
     LOGINFO("EventBridge::releaseDeviceOperation: entry id=%llu event=%d mac=%s succeeded=%d seen=%d held=%zu",
             static_cast<unsigned long long>(id), static_cast<int>(event), mac.c_str(), succeeded, seen, held.size());
-    // <pca> debug
-    // TESTING: observing client behavior when PAIRING_CHANGE is sent before CONNECTION_CHANGE after a successful pair.
-    // BlueZ may connect the device while pairing, so the SDK raises Connected before Paired. For a successful pair
-    // the Paired change is emitted first (the legacy stack reported pairing completion first); the old behavior
-    // is kept below, commented out.
+    // BlueZ may connect the device while pairing (e.g. headphones), so the SDK raises Connected around Paired. The
+    // legacy stack reported only the pairing then, and the client connects the device itself afterwards. A
+    // CONNECTION_CHANGE for a just-paired device is taken by the client for an auto-connect it did not ask for, and
+    // it disconnects the device (autoconnect is off for a new pairing), which breaks the connect it starts next.
+    // So after a successful pair only the pairing is reported, as not connected; the client's connect that follows
+    // is acknowledged as usual (the SDK raises no event for a device that is already connected, see below).
     const bool pairSucceeded = succeeded && event == bluetooth::DeviceEvent::Paired;
-    bool pairEmittedFirst = false;
     if (pairSucceeded) {
-        if (!seen) {
-            // The SDK raised no Paired change; acknowledge the pair ahead of any held Connected.
-            LOGINFO("EventBridge::releaseDeviceOperation: SDK reported no event for event=%d mac=%s, emitting it",
-                    static_cast<int>(event), mac.c_str());
-            emitDeviceEvent(event, device);
-            pairEmittedFirst = true;
-        }
-        std::stable_partition(held.begin(), held.end(),
-                              [](const HeldEvent& h) { return h.event == bluetooth::DeviceEvent::Paired; });
+        held.erase(std::remove_if(held.begin(), held.end(),
+                                  [](const HeldEvent& h) {
+                                      return h.event == bluetooth::DeviceEvent::Connected
+                                          || h.event == bluetooth::DeviceEvent::Disconnected;
+                                  }),
+                   held.end());
     }
-    for (auto& h : held) emitDeviceEvent(h.event, std::move(h.device));
-    // Old behavior: held changes are emitted in the order the SDK raised them, e.g. Connected then Paired while pairing.
-    // for (auto& h : held) emitDeviceEvent(h.event, std::move(h.device));
-    // </pca>
-    
+    for (auto& h : held) {
+        if (pairSucceeded && h.event == bluetooth::DeviceEvent::Paired) {
+            emitDeviceStatusChanged("PAIRING_CHANGE", std::move(h.device), true, false);
+        } else {
+            emitDeviceEvent(h.event, std::move(h.device));
+        }
+    }
+
     // A successful request must always be acknowledged, as the legacy stack did. The SDK raises nothing when
     // there was no state change, e.g. connecting a device BlueZ already connected while pairing it.
-    // if (succeeded && !seen) {   // Old condition, before the pair-first emit above.
-    if (succeeded && !seen && !pairEmittedFirst) {
+    if (succeeded && !seen) {
         LOGINFO("EventBridge::releaseDeviceOperation: SDK reported no event for event=%d mac=%s, emitting it",
                 static_cast<int>(event), mac.c_str());
-        emitDeviceEvent(event, std::move(device));
+        if (pairSucceeded) {
+            emitDeviceStatusChanged("PAIRING_CHANGE", std::move(device), true, false);
+        } else {
+            emitDeviceEvent(event, std::move(device));
+        }
     }
 }
 
