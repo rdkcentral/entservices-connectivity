@@ -1200,7 +1200,7 @@ void BtSdkAdapterImpl::registerDeviceEvents(std::shared_ptr<bluetooth::Device> d
     }
 
     device->registerForEvents(
-        [this, gate = m_callbackGate, std::move(mac)](bluetooth::DeviceEvent ev, std::shared_ptr<bluetooth::Device> dev) {
+        [this, gate = m_callbackGate, mac](bluetooth::DeviceEvent ev, std::shared_ptr<bluetooth::Device> dev) {
             if (!gate) return;
             CallbackGate::Entry entry(*gate);
             if (!entry) return;
@@ -1212,7 +1212,7 @@ void BtSdkAdapterImpl::registerDeviceEvents(std::shared_ptr<bluetooth::Device> d
             }
             if (ev == bluetooth::DeviceEvent::Disconnected || ev == bluetooth::DeviceEvent::Unpaired) {
                 std::lock_guard<std::mutex> lock(m_connectedDuringPairMutex);
-                m_connectedDuringPair.erase(mac);
+                m_connectedDuringPair.erase(std::move(mac));
             }
             if (m_eventBridge) m_eventBridge->onDeviceEvent(ev, std::move(dev));
         });
