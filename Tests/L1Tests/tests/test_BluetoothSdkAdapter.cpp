@@ -633,6 +633,78 @@ TEST_F(BluetoothSdkAdapterTest, connectDevice_WhileScanning_StopsScanFirst)
     EXPECT_FALSE(sdkAdapter->isScanning());
 }
 
+// BTMgr's stop before a connect posts no DISCOVERY_COMPLETE, so the client still sees its scan as running; one sent
+// now makes it clear its list of found devices and report that no device was found. The completion is sent when the
+// client ends the scan itself.
+TEST_F(BluetoothSdkAdapterTest, connectDevice_WhileScanning_DoesNotReportDiscoveryCompletedUntilClientStops)
+{
+    auto device = makeDevice("AA:BB:CC:DD:EE:01", kLoudspeakerClass);
+    using AdapterCallback = std::function<void(bluetooth::AdapterEvent, bluetooth::AdapterEventData)>;
+    AdapterCallback adapterCallback;
+    ON_CALL(*adapter, registerForEvents(_)).WillByDefault(::testing::SaveArg<0>(&adapterCallback));
+
+    std::mutex mutex;
+    std::vector<std::string> statuses;
+    BtEventCallbacks callbacks;
+    callbacks.onStatusChanged = [&](const std::string&, const std::string& newStatus, const std::string&,
+                                    const std::string&, const std::string&, uint32_t, uint16_t, bool, bool, bool,
+                                    bool, bool) {
+        std::lock_guard<std::mutex> lock(mutex);
+        statuses.push_back(newStatus);
+    };
+    initWithDevices({device}, {}, callbacks);
+    ASSERT_TRUE(static_cast<bool>(adapterCallback));
+
+    EXPECT_CALL(*adapter, startScan(_)).WillOnce(::testing::Return(Status{}));
+    ASSERT_TRUE(sdkAdapter->startScan("HEADPHONES"));
+
+    // BlueZ reports Discovering=false for the stop made before the connect.
+    EXPECT_CALL(*adapter, stopScan())
+        .WillOnce(::testing::Invoke([&]() {
+            adapterCallback(bluetooth::AdapterEvent::DiscoveryStopped, {adapter, nullptr});
+            return Status{};
+        }))
+        .WillOnce(::testing::Return(Status{}));
+    EXPECT_TRUE(sdkAdapter->connectDevice(handleOf("AA:BB:CC:DD:EE:01"), "LOUDSPEAKER"));
+    std::this_thread::sleep_for(std::chrono::milliseconds(400));
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        EXPECT_EQ(std::vector<std::string>{"CONNECTION_CHANGE"}, statuses);
+    }
+
+    EXPECT_TRUE(sdkAdapter->stopScan());
+    std::lock_guard<std::mutex> lock(mutex);
+    const std::vector<std::string> expected{"CONNECTION_CHANGE", "DISCOVERY_COMPLETED"};
+    EXPECT_EQ(expected, statuses);
+}
+
+TEST_F(BluetoothSdkAdapterTest, stopScan_ClientStop_StillReportsDiscoveryCompleted)
+{
+    using AdapterCallback = std::function<void(bluetooth::AdapterEvent, bluetooth::AdapterEventData)>;
+    AdapterCallback adapterCallback;
+    ON_CALL(*adapter, registerForEvents(_)).WillByDefault(::testing::SaveArg<0>(&adapterCallback));
+
+    std::vector<std::string> statuses;
+    BtEventCallbacks callbacks;
+    callbacks.onStatusChanged = [&](const std::string&, const std::string& newStatus, const std::string&,
+                                    const std::string&, const std::string&, uint32_t, uint16_t, bool, bool, bool,
+                                    bool, bool) { statuses.push_back(newStatus); };
+    ASSERT_EQ(std::string(""), sdkAdapter->init(nullptr, BtEventCallbacks(callbacks), BtAuthCallbacks()));
+    ASSERT_TRUE(static_cast<bool>(adapterCallback));
+
+    EXPECT_CALL(*adapter, startScan(_)).WillOnce(::testing::Return(Status{}));
+    ASSERT_TRUE(sdkAdapter->startScan("HEADPHONES"));
+    EXPECT_CALL(*adapter, stopScan()).WillOnce(::testing::Invoke([&]() {
+        adapterCallback(bluetooth::AdapterEvent::DiscoveryStopped, {adapter, nullptr});
+        return Status{};
+    }));
+
+    EXPECT_TRUE(sdkAdapter->stopScan());
+
+    // Reported once, by BlueZ's event, not again by the plugin.
+    EXPECT_EQ(std::vector<std::string>{"DISCOVERY_COMPLETED"}, statuses);
+}
+
 TEST_F(BluetoothSdkAdapterTest, connectDevice_ScanCannotBeStopped_DoesNotConnect)
 {
     auto device = makeDevice("AA:BB:CC:DD:EE:01", kLoudspeakerClass);

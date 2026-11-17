@@ -151,9 +151,11 @@ private:
     // Like BTMgr's btrMgr_StartAudioStreamingOut, keeps at most one audio output device connected: disconnects every
     // connected audio output device other than targetHandle. False if one of them cannot be disconnected.
     bool disconnectOtherAudioOutputDevices(const std::string& targetHandle);
+    // stopScan(); a silent stop leaves the client's view of the scan alone (see stopScanBeforeOperation).
+    bool stopScanImpl(bool silent);
     // Stops a running scan before a connect, or a pair of a device that is not HID, as BTMgr does
     // (btrMgr_PreCheckDiscoveryStatus): a connect or pair made during a scan is slow and can time out.
-    // False if the scan could not be stopped, in which case the operation is not attempted.
+    // The stop is silent, as BTMgr's. False if the scan could not be stopped, in which case the operation is not attempted.
     bool stopScanBeforeOperation(bool pairing, const std::shared_ptr<bluetooth::Device>& device, const std::string& handleStr);
 
     // Discovery name gate (see DiscoveryNameGate): unpaired devices BlueZ has not named yet are held back
@@ -251,6 +253,11 @@ private:
     // Mode of the most recent startScan(); retained after stopScan() so the discovered list stays consistent.
     std::atomic<ScanFilterPolicy::Mode> m_scanMode{ScanFilterPolicy::Mode::Default};
     std::atomic<bool> m_scanning{false};
+    // The plugin stopped the scan itself before a connect or pair (stopScanBeforeOperation). m_silentScanStop
+    // swallows the DiscoveryStopped event BlueZ raises for it; m_completionOwed makes the client's own stop report
+    // DISCOVERY_COMPLETED, which the client is still waiting for.
+    std::atomic<bool> m_silentScanStop{false};
+    std::atomic<bool> m_completionOwed{false};
 
     mutable std::mutex                       m_pendingMutex;
     std::condition_variable                  m_pendingCv;

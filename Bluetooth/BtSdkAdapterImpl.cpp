@@ -215,6 +215,8 @@ void BtSdkAdapterImpl::deinit() {
     stopAutoConnectWorker();
     stopPendingWorker();
     m_scanning = false;
+    m_silentScanStop = false;
+    m_completionOwed = false;
     m_scanMode = ScanFilterPolicy::Mode::Default;
     // The bridge's worker also uses SDK devices; stop it before they are released.
     if (m_eventBridge) m_eventBridge->stop();
@@ -323,6 +325,10 @@ bool BtSdkAdapterImpl::startScan(const std::string& profile) {
     clearDiscoveredSnapshots();
     pruneDiscoveredDevices();
 
+    // A new scan makes any completion still owed for the previous one obsolete.
+    m_silentScanStop = false;
+    m_completionOwed = false;
+
     // Set before the scan starts so early discovery events are judged against the new mode.
     m_scanMode = mode;
     Status status = m_adapter->startScan(buildScanFilter(mode));
@@ -336,6 +342,10 @@ bool BtSdkAdapterImpl::startScan(const std::string& profile) {
     return true;
 }
 bool BtSdkAdapterImpl::stopScan() {
+    return stopScanImpl(/*silent=*/false);
+}
+
+bool BtSdkAdapterImpl::stopScanImpl(bool silent) {
     LOGINFO("BtSdkAdapterImpl::stopScan: entry");
     if (!m_adapter) {
         LOGERR("BtSdkAdapterImpl::stopScan: exit with error: adapter is unavailable");
@@ -348,6 +358,17 @@ bool BtSdkAdapterImpl::stopScan() {
         return false;
     }
     m_scanning = false;
+    if (silent) {
+        LOGINFO("BtSdkAdapterImpl::stopScan: exit successfully (silent)");
+        return true;
+    }
+    // The client's own stop (or its scan timeout) ends a scan this plugin stopped earlier without telling it. BlueZ
+    // is no longer discovering, so it raises nothing; report the completion here, as BTMgr's public stop does.
+    m_silentScanStop = false;
+    if (m_completionOwed.exchange(false) && m_eventBridge) {
+        LOGINFO("BtSdkAdapterImpl::stopScan: reporting the completion of the scan stopped earlier");
+        m_eventBridge->onAdapterEvent(bluetooth::AdapterEvent::DiscoveryStopped, {m_adapter, nullptr});
+    }
     LOGINFO("BtSdkAdapterImpl::stopScan: exit successfully");
     return true;
 }
@@ -496,7 +517,17 @@ bool BtSdkAdapterImpl::stopScanBeforeOperation(bool pairing, const std::shared_p
     if (pairing && m_authBridge && AuthBridge::isHidType(m_authBridge->resolveDeviceType(device, handleStr))) return true;
     LOGINFO("BtSdkAdapterImpl::stopScanBeforeOperation: stopping the scan before %s handle=%s",
             pairing ? "pairing" : "connecting", handleStr.c_str());
-    return stopScan();
+    // BTMgr stops the scan silently here (btrMgr_StopDeviceDiscovery uses the internal stop, which posts no
+    // DISCOVERY_COMPLETE): the client still sees its scan as running and ends it itself. A DISCOVERY_COMPLETED now
+    // would make it take the scan for finished, clear its list of found devices and report that none was found.
+    // The BlueZ event for this stop is swallowed (it can arrive later), and the completion is owed to the client.
+    m_silentScanStop = true;
+    if (!stopScanImpl(/*silent=*/true)) {
+        m_silentScanStop = false;
+        return false;
+    }
+    m_completionOwed = true;
+    return true;
 }
 
 bool BtSdkAdapterImpl::pairDevice(const std::string& handleStr) {
@@ -1038,6 +1069,10 @@ void BtSdkAdapterImpl::onAdapterEvent(bluetooth::AdapterEvent event,
     LOGINFO("BtSdkAdapterImpl::onAdapterEvent: entry event=%d hasDevice=%d", static_cast<int>(event), data.device != nullptr);
     if (m_shuttingDown) {
         LOGINFO("BtSdkAdapterImpl::onAdapterEvent: exit event dropped, shutting down");
+        return;
+    }
+    if (event == bluetooth::AdapterEvent::DiscoveryStopped && m_silentScanStop.exchange(false)) {
+        LOGINFO("BtSdkAdapterImpl::onAdapterEvent: exit discovery stop not reported, the plugin stopped the scan itself");
         return;
     }
     bool filtered = false;
