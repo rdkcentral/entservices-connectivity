@@ -237,6 +237,10 @@ private:
     mutable std::mutex m_suppressedMutex;
     std::unordered_set<std::string> m_suppressedMacs;
 
+    // MACs BlueZ connected while the plugin paired them and that have not been connected by the client since.
+    std::mutex m_connectedDuringPairMutex;
+    std::unordered_set<std::string> m_connectedDuringPair;
+
     // What getDiscoveredDevices() last worked out for each unpaired device: whether the scan filter hides it and,
     // if not, its info. Clients poll the list continuously and reading a device is a D-Bus call, so polls are
     // served from here; an entry is read again once it is old (a few per call), and dropped when the device

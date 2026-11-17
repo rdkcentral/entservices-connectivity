@@ -267,6 +267,13 @@ void EventBridge::releaseDeviceOperation(const std::string& mac, OperationId id,
                                   }),
                    held.end());
     }
+    // A connect may cycle the link (see BtSdkAdapterImpl::connectDevice), which raises a Disconnected before the
+    // Connected. The client only wants the outcome: a Disconnected would be taken for the user disconnecting.
+    if (succeeded && event == bluetooth::DeviceEvent::Connected) {
+        held.erase(std::remove_if(held.begin(), held.end(),
+                                  [](const HeldEvent& h) { return h.event == bluetooth::DeviceEvent::Disconnected; }),
+                   held.end());
+    }
     for (auto& h : held) {
         if (pairSucceeded && h.event == bluetooth::DeviceEvent::Paired) {
             emitDeviceStatusChanged("PAIRING_CHANGE", std::move(h.device), true, false);

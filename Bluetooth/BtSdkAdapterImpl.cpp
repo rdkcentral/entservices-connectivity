@@ -237,6 +237,10 @@ void BtSdkAdapterImpl::deinit() {
         m_standbyHeld.clear();
     }
     clearDiscoveredSnapshots();
+    {
+        std::lock_guard<std::mutex> lock(m_connectedDuringPairMutex);
+        m_connectedDuringPair.clear();
+    }
     std::lock_guard<std::mutex> lock(m_devicesMutex);
     m_devicesByHandle.clear();
     LOGINFO("BtSdkAdapterImpl::deinit: exit successfully");
@@ -554,6 +558,14 @@ bool BtSdkAdapterImpl::pairDevice(const std::string& handleStr) {
         LOGERR("BtSdkAdapterImpl::pairDevice: exit with error: %s", status.get_message().c_str());
         return false;
     }
+    // BlueZ may have connected the device while pairing, without its audio profile (no sink appears); the connect the
+    // client makes next must then really connect it (see connectDevice).
+    if (device->state() == bluetooth::DeviceState::Connected) {
+        std::string mac;
+        device->address(mac);
+        std::lock_guard<std::mutex> lock(m_connectedDuringPairMutex);
+        m_connectedDuringPair.insert(std::move(mac));
+    }
     sendTelemetry("BTPairSucc_split", telemetryDeviceInfo(device));
     LOGINFO("BtSdkAdapterImpl::pairDevice: exit successfully");
     return true;
@@ -625,9 +637,30 @@ bool BtSdkAdapterImpl::connectDevice(const std::string& handleStr, const std::st
         LOGERR("BtSdkAdapterImpl::connectDevice: exit with error: another audio output device could not be disconnected");
         return false;
     }
+    // A device BlueZ connected while pairing it is connected without its audio profile, and the SDK's connect()
+    // returns at once for a connected device, so nothing would ever bring the profile up and there would be no audio
+    // although the client sees it connected. BTMgr's connect brings it up, so the link is cycled instead.
+    bool reconnect = false;
+    {
+        std::string mac;
+        device->address(mac);
+        std::lock_guard<std::mutex> lock(m_connectedDuringPairMutex);
+        reconnect = m_connectedDuringPair.erase(mac) > 0;
+    }
+    reconnect = reconnect && device->state() == bluetooth::DeviceState::Connected && m_authBridge &&
+                AuthBridge::isAudioOutputType(m_authBridge->resolveDeviceType(device, handleStr));
+
     // Hold this device's status changes so the CONNECTION_CHANGE reaches the client after the connect response.
     const EventBridge::OperationId operationId = m_eventBridge ? m_eventBridge->beginDeviceOperation(device) : 0;
     OperationScope operation(*this, device);
+    if (reconnect) {
+        LOGINFO("BtSdkAdapterImpl::connectDevice: reconnecting handle=%s, it was connected while pairing", handleStr.c_str());
+        const Status disconnected = device->disconnect(true);
+        if (!disconnected) {
+            LOGWARN("BtSdkAdapterImpl::connectDevice: could not disconnect before reconnecting: %s",
+                    disconnected.get_message().c_str());
+        }
+    }
     Status status = device->connect(true);
     // A device BlueZ connected while pairing is already connected, so no new SDK event arrives.
     // Called before the error check: a failed request must release its held changes too.
@@ -1176,6 +1209,10 @@ void BtSdkAdapterImpl::registerDeviceEvents(std::shared_ptr<bluetooth::Device> d
             if (m_audioBridge) {
                 if (ev == bluetooth::DeviceEvent::Connected) m_audioBridge->onDeviceConnected(dev);
                 if (ev == bluetooth::DeviceEvent::Disconnected) m_audioBridge->onDeviceDisconnected(dev);
+            }
+            if (ev == bluetooth::DeviceEvent::Disconnected || ev == bluetooth::DeviceEvent::Unpaired) {
+                std::lock_guard<std::mutex> lock(m_connectedDuringPairMutex);
+                m_connectedDuringPair.erase(mac);
             }
             if (m_eventBridge) m_eventBridge->onDeviceEvent(ev, std::move(dev));
         });

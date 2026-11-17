@@ -811,7 +811,9 @@ TEST_F(BluetoothSdkAdapterTest, connectDevice_AlreadyConnectedByBlueZ_StillAckno
     };
     initWithDevices({device}, {}, callbacks);
 
-    // The SDK returns success without raising an event for a device that is already connected.
+    // The SDK returns success without raising an event for a device that is already connected. Not paired by the
+    // plugin, so its link is not cycled.
+    EXPECT_CALL(*device, disconnect(_, _)).Times(0);
     EXPECT_CALL(*device, connect(true, _)).WillOnce(::testing::Return(Status{}));
 
     EXPECT_TRUE(sdkAdapter->connectDevice(handleOf("AA:BB:CC:DD:EE:01"), "LOUDSPEAKER"));
@@ -820,6 +822,65 @@ TEST_F(BluetoothSdkAdapterTest, connectDevice_AlreadyConnectedByBlueZ_StillAckno
     std::lock_guard<std::mutex> lock(mutex);
     const std::vector<std::string> expected{"CONNECTION_CHANGE:connected"};
     EXPECT_EQ(expected, log);
+}
+
+// BlueZ connects headphones while pairing them without their audio profile, and the SDK's connect() returns at once for
+// a connected device, so the client's connect after the pair has to cycle the link to bring the profile up. The client
+// must only see the outcome: one CONNECTION_CHANGE connected, no disconnect.
+TEST_F(BluetoothSdkAdapterTest, connectDevice_AudioDeviceConnectedWhilePairing_CyclesLinkAndReportsOnlyConnected)
+{
+    auto device = makeDevice("AA:BB:CC:DD:EE:01", kLoudspeakerClass);
+    std::weak_ptr<bluetooth::Device> deviceWeak = device;
+    using DeviceCallback = std::function<void(bluetooth::DeviceEvent, std::shared_ptr<bluetooth::Device>)>;
+    DeviceCallback deviceCallback;
+    ON_CALL(*device, registerForEvents(_)).WillByDefault(::testing::SaveArg<0>(&deviceCallback));
+
+    std::mutex mutex;
+    std::vector<std::string> log;
+    BtEventCallbacks callbacks;
+    callbacks.onStatusChanged = [&](const std::string&, const std::string& newStatus, const std::string&,
+                                    const std::string&, const std::string&, uint32_t, uint16_t, bool paired,
+                                    bool connected, bool, bool, bool) {
+        std::lock_guard<std::mutex> lock(mutex);
+        log.push_back(newStatus + ":" + (paired ? "paired" : "unpaired") + ":" + (connected ? "connected" : "disconnected"));
+    };
+    initWithDevices({device}, {}, callbacks);
+
+    // The mock device reports Connected throughout, as it is when BlueZ connects it while pairing.
+    EXPECT_CALL(*device, pair(true, _)).WillOnce(::testing::Return(Status{}));
+    EXPECT_TRUE(sdkAdapter->pairDevice(handleOf("AA:BB:CC:DD:EE:01")));
+
+    ::testing::InSequence order;
+    EXPECT_CALL(*device, disconnect(true, _))
+        .WillOnce(::testing::Invoke([&](bool, uint8_t) {
+            deviceCallback(bluetooth::DeviceEvent::Disconnected, deviceWeak.lock());
+            return Status{};
+        }));
+    EXPECT_CALL(*device, connect(true, _))
+        .WillOnce(::testing::Invoke([&](bool, uint8_t) {
+            deviceCallback(bluetooth::DeviceEvent::Connected, deviceWeak.lock());
+            return Status{};
+        }));
+    EXPECT_TRUE(sdkAdapter->connectDevice(handleOf("AA:BB:CC:DD:EE:01"), "LOUDSPEAKER"));
+    std::this_thread::sleep_for(std::chrono::milliseconds(600));
+
+    std::lock_guard<std::mutex> lock(mutex);
+    const std::vector<std::string> expected{"PAIRING_CHANGE:paired:disconnected", "CONNECTION_CHANGE:paired:connected"};
+    EXPECT_EQ(expected, log);
+}
+
+// Only the connect that follows a pair is cycled; a later connect of the same device is an ordinary one.
+TEST_F(BluetoothSdkAdapterTest, connectDevice_SecondConnectAfterPair_DoesNotCycleLink)
+{
+    auto device = makeDevice("AA:BB:CC:DD:EE:01", kLoudspeakerClass);
+    initWithDevices({device}, {});
+    EXPECT_CALL(*device, pair(true, _)).WillOnce(::testing::Return(Status{}));
+    ASSERT_TRUE(sdkAdapter->pairDevice(handleOf("AA:BB:CC:DD:EE:01")));
+
+    EXPECT_CALL(*device, disconnect(true, _)).Times(1).WillRepeatedly(::testing::Return(Status{}));
+    EXPECT_CALL(*device, connect(true, _)).Times(2).WillRepeatedly(::testing::Return(Status{}));
+    EXPECT_TRUE(sdkAdapter->connectDevice(handleOf("AA:BB:CC:DD:EE:01"), "LOUDSPEAKER"));
+    EXPECT_TRUE(sdkAdapter->connectDevice(handleOf("AA:BB:CC:DD:EE:01"), "LOUDSPEAKER"));
 }
 
 TEST_F(BluetoothSdkAdapterTest, pairAndConnect_Success_UseTheSynchronousCalls)
