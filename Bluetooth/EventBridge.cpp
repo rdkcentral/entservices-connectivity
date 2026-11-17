@@ -189,7 +189,6 @@ void EventBridge::worker() {
         if (m_taskCv.wait_until(lock, due, [this] { return m_stopping; })) return;
         std::function<void()> run = std::move(m_tasks.front().run);
         m_tasks.pop_front();
-        LOGINFO("EventBridge::worker: running task (%zu still queued)", m_tasks.size());
         // Run unlocked: building a notification makes D-Bus calls and the plugin callback may take its own
         // locks, and the SDK event thread must stay free to enqueue meanwhile.
         lock.unlock();
@@ -299,8 +298,6 @@ void EventBridge::onDeviceEvent(bluetooth::DeviceEvent event, std::shared_ptr<bl
     if (!device) return;
     std::string mac;
     device->address(mac);
-    LOGINFO("EventBridge::onDeviceEvent: entry event=%d mac=%s device=%p", static_cast<int>(event), mac.c_str(),
-            static_cast<void*>(device.get()));
     {
         std::lock_guard<std::mutex> lock(m_opsMutex);
         auto it = m_ops.find(mac);
@@ -315,8 +312,6 @@ void EventBridge::onDeviceEvent(bluetooth::DeviceEvent event, std::shared_ptr<bl
             return;
         }
     }
-    LOGINFO("EventBridge::onDeviceEvent: event=%d mac=%s no operation in progress, queueing for delivery",
-            static_cast<int>(event), mac.c_str());
     // Unsolicited changes (e.g. the device dropping the link) are due now, but still go through the queue so they
     // stay behind any pending release of earlier, held changes.
     enqueue(std::chrono::steady_clock::now(),
@@ -352,8 +347,6 @@ void EventBridge::emitDeviceEvent(bluetooth::DeviceEvent event, std::shared_ptr<
 void EventBridge::emitDeviceStatusChanged(const std::string& newStatus,
                                           std::shared_ptr<bluetooth::Device> device,
                                           bool paired, bool connected) {
-    LOGINFO("EventBridge::emitDeviceStatusChanged: entry newStatus=%s paired=%d connected=%d",
-            newStatus.c_str(), paired, connected);
     if (!m_callbacks.onStatusChanged) {
         LOGWARN("EventBridge::emitDeviceStatusChanged: exit, no onStatusChanged callback");
         return;
@@ -380,8 +373,6 @@ void EventBridge::emitDeviceStatusChanged(const std::string& newStatus,
                                 deviceId, name, deviceType, rawType, bleType,
                                 paired, connected, false,
                                 hasAutoConnect, autoConnect);
-    LOGINFO("EventBridge::emitDeviceStatusChanged: exit notified newStatus=%s deviceId=%s",
-            newStatus.c_str(), deviceId.c_str());
 }
 
 } // namespace Plugin
