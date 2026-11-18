@@ -63,12 +63,12 @@ if(SRC_FILES)
          message ("Require ${MOCKACCESSOR_LIBRARIES} library")
     endif (MOCKACCESSOR_LIBRARIES)
 
+
     target_include_directories(
         ${MODULE_NAME} PRIVATE ./
         ${CMAKE_SOURCE_DIR}/../entservices-helpers/helpers
         ../../../entservices-testframework/Tests/mocks
         ../../../entservices-testframework/Tests/mocks/thunder
-        ../../../entservices-testframework/Tests/mocks/devicesettings
         ../../../entservices-testframework/Tests/mocks/MockPlugin
         ../../../entservices-testframework/Tests/L2Tests/L2TestsPlugin
         ${CMAKE_INSTALL_PREFIX}/include
