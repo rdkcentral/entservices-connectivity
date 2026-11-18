@@ -2,7 +2,7 @@
 
 **Audience:** QA / test engineers validating the `org.rdk.Bluetooth` Thunder plugin.
 **Goal:** Explain *what* is being tested, *why*, and *how to approach it*. This is a guide, not a full list of test cases; detailed cases live in the existing test plans linked below.
-**Baseline for all comparisons:** the existing implementation on `rdk_develop_branch` (BTMgr-based plugin).
+**Baseline for all comparisons:** the existing implementation in the **nightly develop branch build** (BTMgr-based plugin), not an older build. Both backends of the build under test are compared against it.
 
 ---
 
@@ -11,7 +11,7 @@
 - The Bluetooth plugin used to talk only to **BTMgr** (`BTRMGR_*` C API over IARM). It now ships with a second backend that talks directly to **bluetooth-sdk** (`librdk_bluetooth`, which talks to BlueZ over D-Bus). BTMgr is being retired.
 - Both backends live in **one plugin binary**. Which one runs is decided **at runtime** (see [§3.2](#32-how-the-backend-is-chosen)).
 - **Nothing about the client-facing contract changes.** Same callsign, same JSON-RPC methods, same notifications, same parameters and response shapes, same device IDs. A client (IUI, apps, scripts) must not be able to tell which backend is running — apart from the short list of **known gaps** in [§5](#5-known-differences-and-gaps-expected-not-new-bugs).
-- QA's job is **regression**: run the same scenarios you would run against the `rdk_develop_branch` BTMgr plugin, against **both** backends of this build, and confirm the results match the baseline.
+- QA's job is **regression**: run the same scenarios you would run against the BTMgr plugin in the nightly develop branch build, against **both** backends of this build, and confirm the results match the baseline.
 - The SDK backend has to *re-create* a lot of behavior that BTMgr performed silently inside its daemon (scan filtering, auto-accepting connections, startup reconnect, gamepad standby handling, …). These are the highest-risk areas; [§4](#4-what-the-sdk-backend-must-reproduce-and-where-bugs-are-most-likely) lists them and [§6](#6-test-plan) targets them.
 
 ### Scope assumption
@@ -63,7 +63,7 @@ flowchart TD
 
 Key points:
 
-- **`Bluetooth.cpp` is the same for both backends.** It implements every JSON-RPC method and notification and only calls the backend-neutral interface `IBtAdapter` ([IBtAdapter.h](../Bluetooth/IBtAdapter.h)) through the `BtAdapter` wrapper ([BtAdapter.cpp](../Bluetooth/BtAdapter.cpp)). The API surface is identical to `rdk_develop_branch` (same methods and notification names).
+- **`Bluetooth.cpp` is the same for both backends.** It implements every JSON-RPC method and notification and only calls the backend-neutral interface `IBtAdapter` ([IBtAdapter.h](../Bluetooth/IBtAdapter.h)) through the `BtAdapter` wrapper ([BtAdapter.cpp](../Bluetooth/BtAdapter.cpp)). The API surface is identical to the nightly develop branch build (same methods and notification names).
 - `BtMgrAdapterImpl` ([BtMgrAdapterImpl.cpp](../Bluetooth/BtMgrAdapterImpl.cpp)) is the old BTRMGR call sites moved out of `Bluetooth.cpp` with no intended logic change. It is the **reference behavior**.
 - `BtSdkAdapterImpl` ([BtSdkAdapterImpl.cpp](../Bluetooth/BtSdkAdapterImpl.cpp)) is the new code, with helpers: `EventBridge`, `AuthBridge`, `ScanFilterPolicy`, `DiscoveryNameGate`, `DeviceRegistry`, `DeviceTypeClassifier`.
 - **Device IDs are identical across backends.** `deviceID` is derived from the MAC (strip colons, parse as hex), the same formula BTMgr used. So pairing metadata stored in PersistentStore stays valid regardless of backend.
@@ -122,19 +122,22 @@ The "same from the client's perspective" requirement is the contract. The table 
 
 ## 5. Known differences and gaps (expected, not new bugs)
 
-These are **documented gaps in the SDK backend** as of this build. They are *not* parity with BTMgr; record them as "known gap – confirmed" rather than raising new defects, unless the behavior is different from what is listed here. Re-check with the dev team whether any item has since been closed.
+These differences were reviewed with the SDK team on 2026-11-09 ([bluetooth_sdk_gap_report.md](./bluetooth_sdk_gap_report.md)). Almost all were **accepted** (stream-in only, or handled by the plugin); the one **open** item is `getName`, for which the SDK team will add a getter. Record each as "known gap – confirmed" rather than raising a new defect, unless the behavior is different from what is listed here. Re-check `getName` after an SDK update.
 
 | Area | BTMgr backend | SDK backend (current) | Notes |
 |---|---|---|---|
-| `getName` | Works | Returns failure (`unsupported`) | SDK has `Adapter::setName` but no getter; the SDK team will add one. Covered by `Bluetooth_Sdk_L2Test.BluetoothGetNameUnsupported` |
+| `getName` | Works | Returns failure (`unsupported`) | **Open.** SDK has `Adapter::setName` but no getter; the SDK team will add a generic one and the plugin then wires it in. Covered by `Bluetooth_Sdk_L2Test.BluetoothGetNameUnsupported` |
 | `setName` | Works (name cut to 63 bytes) | Works (BlueZ `Alias`, name cut to 63 bytes) | Not a gap. Covered by `Bluetooth_Sdk_L2Test.BluetoothSetName_*` |
-| `isDiscoverable`, `setDiscoverable` | Works | Returns failure (`unsupported`) | Accepted difference: only audio-in needs it. Covered by `Bluetooth_Sdk_L2Test.BluetoothDiscoverableUnsupportedAndScan` |
-| `sendAudioPlaybackCommand` playback commands (`PLAY`, `PAUSE`, ...), `getAudioInfo` (track info), `setAudioStream` with `AUXILIARY` | Works | Returns failure / empty | Stream-in features, not provided by the SDK; `PRIMARY` succeeds. Covered by `BluetoothSdkAdapterTest.setAudioStream_AcceptsOnlyPrimary` and `setAudioControlCommand_OtherCommandsAndDevices_Fail` |
+| `isDiscoverable`, `setDiscoverable` | Works | Returns failure (`unsupported`) | **Accepted:** only audio-in needs it, and LE advertising covers the current devices. Covered by `Bluetooth_Sdk_L2Test.BluetoothDiscoverableUnsupportedAndScan` |
+| `sendAudioPlaybackCommand` playback commands (`PLAY`, `PAUSE`, ...), `getAudioInfo` (track info), `setAudioStream` with `AUXILIARY` | Works | Returns failure / empty | **Accepted:** stream-in features, not provided by the SDK (it does not use the media player); the SDK stream is fixed to `PRIMARY`, which succeeds. `AUXILIARY` can be added if a platform needs it. Covered by `BluetoothSdkAdapterTest.setAudioStream_AcceptsOnlyPrimary` and `setAudioControlCommand_OtherCommandsAndDevices_Fail` |
 | Volume and mute (`getDeviceVolumeMuteInfo`, `setDeviceVolumeMuteInfo`, `VOLUME_UP`, `VOLUME_DOWN`, `AUDIO_MUTE`, `AUDIO_UNMUTE`) and `onDeviceMediaStatus` | Works | Works (SDK audio API, persisted volume, restored on connect) | Not a gap. Covered by `BluetoothSdkAdapterTest.setDeviceVolumeMute_*`, `getDeviceVolumeMute_*`, `setAudioControlCommand_*`, `audioEvent_*` and `deviceConnects_*`
-| Playback events (`onPlaybackChange`, `onPlaybackProgress`, `onPlaybackNewTrack`, `onPlaybackRequest`) | Emitted | Not emitted | Stream-in features |
+| Playback events (`onPlaybackChange`, `onPlaybackProgress`, `onPlaybackNewTrack`, `onPlaybackRequest`) | Emitted | Not emitted | **Accepted:** stream-in features |
+| Audio from a phone/tablet into the box (stream-in) | `BTRMGR_StartAudioStreamingIn`, only where `--enable-streaming-in` is set | Not available: the SDK path uses a plain connect for every device type and the A2DP sink is not enabled | **Accepted:** revisit if stream-in is ever enabled on a product |
+| Which connected audio output device `getConnectedDevices` lists | Only the one that is streaming | Every connected device, but the plugin keeps one connected audio output device (see row 7a), so it is the same device | Plugin-side solution; a device that connects from its own side is not covered yet |
+| Failure of pair/connect (`onRequestFailed`) | Failure events → `onRequestFailed` plus a failed response | `success:false` response only | **Closed:** the plugin only uses the synchronous `pair`/`connect`, whose `Status` reports every failure; see row 7 of §4 |
 | `activeState` (in `getConnectedDevices`) | `"1"` for every connected device | `"1"` for every connected device | Not a gap. Covered by `Bluetooth_Sdk_L2Test.GetConnectedDevices_ReportsActiveStateOne` |
 | `rssi` / `signalStrength` (in `getDeviceInfo`) | Paired device: `0` / `0`. Not paired: raw RSSI (`INT_MIN` if unknown) and level 4/3/2/1 at -60/-70/-90 | Same | Not a gap. See `SignalLevel.h` and `Bluetooth_Sdk_L2Test.GetDeviceInfo_*` |
-| Gamepad connection handling | BTMgr special cases (gamepad RFC, last-disconnected logic; unpaired gamepad rejected) | Those special cases are **not** mirrored; an unpaired gamepad follows the normal client-escalation flow | Documented in [AuthBridge.h](../Bluetooth/AuthBridge.h) |
+| Gamepad connection handling | BTMgr special cases (gamepad RFC, last-disconnected hold-off for specific models; unpaired gamepad rejected) | Those special cases are **not** mirrored yet (plugin-side work, nothing needed from the SDK); an unpaired gamepad follows the normal client-escalation flow | Documented in [AuthBridge.h](../Bluetooth/AuthBridge.h) |
 | Scan after a connect/pair stopped it | A paused background scan is resumed after a hold-off timer | Not resumed; the client's own scan end (`stopScan`/timeout) still sends `DISCOVERY_COMPLETED` | Accepted for now; the client restarts a scan if it wants one |
 | Startup reconnect | Internal to BTMgr (no plugin involvement) | Plugin-driven; if the client accepts the `onConnectionRequest`, the plugin leaves the connect to the client | By design; same end user result expected |
 
@@ -150,9 +153,11 @@ Also remember the baseline itself has known quirks that **both** backends must p
 
 For each scenario:
 
-1. **Baseline (A):** run on `rdk_develop_branch` BTMgr plugin (or use the recorded results if available).
+1. **Baseline (A):** run the BTMgr plugin from the **nightly develop branch build**. Recorded results may be reused only if they came from the most recent nightly develop build; if a newer nightly exists, re-run A.
 2. **BTMgr backend of this build (B1):** must match A. This verifies the refactor did not change the legacy path.
 3. **SDK backend of this build (B2):** must match A, except for the known gaps in [§5](#5-known-differences-and-gaps-expected-not-new-bugs).
+
+Both B runs are compared with the nightly develop build, so that both implementations are shown to align with the legacy behavior as it is in the nightly develop build. Use the same unit, test devices, client build and scenarios for A, B1 and B2, and build B from this branch merged with (or rebased on) the develop commit the nightly was built from, so a difference is not just a develop change that B is missing. Refresh A and the merge whenever a newer nightly is available.
 
 Compare *client-visible* outcomes: JSON-RPC response (success flag and payload fields), the notifications received (name, parameters, **order** and relative timing), and observable device behavior (connected/disconnected, audio routed). Internal log differences are not failures.
 
@@ -203,8 +208,8 @@ The primary test cases already exist in [bluetooth_pre_migration_regression_test
 | §4 Connection management | `connect`/`disconnect` | Yes | Yes | |
 | §5 AutoConnect guard | Guard-driven divergence | Yes | Yes | Identical on both backends; **not** a defect |
 | §6 Device info, audio & playback | `getDeviceInfo`, `getAudioInfo`, `setAudioStream`, playback commands, `respondToEvent` | Yes | **Partly** | Volume and mute must pass; playback commands, `getAudioInfo` and `setAudioStream` with `AUXILIARY` are known gaps on SDK; `getDeviceInfo` and `respondToEvent` must pass |
-| §7 Volume & mute | `get/setDeviceVolumeMuteInfo` | Yes | **Known gap** | Record as known gap on SDK |
-| §8 Adapter control | `enable`/`disable`/discoverable/name | Yes | **Partly** | `enable`/`disable` and `setName` must pass; `getName`/discoverable are known gaps on SDK |
+| §7 Volume & mute | `get/setDeviceVolumeMuteInfo` | Yes | Yes | Must match on both backends (see §5: not a gap) |
+| §8 Adapter control | `enable`/`disable`/discoverable/name | Yes | **Partly** | `enable`/`disable` and `setName` must pass; `getName` (open, SDK getter planned) and discoverable (accepted) are known gaps on SDK |
 | §9 Gamepad / HID classification | Pair/connect HID and gamepad | Yes | Yes | Type string must be `HUMAN INTERFACE DEVICE` on both |
 | §10 Power management guard | `onPowerModeChanged` pre-migration | Yes | Yes | Gamepad standby and reconnect still run (see §6.6) |
 | §11 Persistence non-interference | No store/AS-file writes | Yes | Yes | |
@@ -261,6 +266,7 @@ Include in each report: backend (and how you verified it), build/flags, device m
 ### 6.9 Exit criteria
 
 - [ ] Backend identity verified at the start of every run ([§6.2](#62-confirm-which-backend-is-active)).
+- [ ] Baseline A taken from the nightly develop build (or recorded results are from the most recent nightly), and both B1 and B2 compared against it.
 - [ ] Pre-migration regression plan executed on **both** backends; results recorded as A/B1/B2.
 - [ ] SUP-01 … SUP-15 executed on both backends (SUP-01/02 as applicable to the image type).
 - [ ] Every B2 difference is either a §5 known gap or a filed defect.
@@ -286,5 +292,5 @@ Include in each report: backend (and how you verified it), build/flags, device m
 ### Open items for the dev team to confirm before QA starts
 
 1. The supported procedure for switching a unit between BTMgr and SDK (which services to stop/start besides toggling `BLUETOOTH_SDK_ENABLED` and restarting the plugin).
-2. Whether the §5 gaps (`getName`, discoverable, playback commands and events, track info) are accepted for this release or are blockers.
+2. Confirm that the accepted gaps in §5 (discoverable, playback commands and events, track info, `AUXILIARY` stream, phone-to-box audio) still hold for this release, and when the SDK `getName` getter is due.
 3. Which flag configuration (`BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION`) the build under test uses.

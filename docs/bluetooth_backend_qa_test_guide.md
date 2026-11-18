@@ -2,7 +2,7 @@
 
 **Audience:** QA / test engineers
 **Purpose:** Explain *what* you are testing, *why*, and *how to approach it*. This is a **manual** test effort on a real device. Detailed test cases live in the existing test plan linked in [§5](#5-test-plan); this guide tells you how to use it and what to add.
-**Baseline:** the existing Bluetooth behavior on `rdk_develop_branch`.
+**Baseline:** the existing Bluetooth behavior of the **nightly develop branch build**, i.e. the legacy implementation as it is in the nightly develop build, not an older build.
 
 A developer-oriented companion with implementation detail is available in [bluetooth_backend_developer_test_guide.md](./bluetooth_backend_developer_test_guide.md). You do not need it to run this plan.
 
@@ -39,20 +39,21 @@ Internal log differences are **not** failures. Only differences a client or a us
 
 ## 3. Known differences (expected — do not file as new bugs)
 
-The SDK stack currently has these documented gaps. Confirm that they behave as described, and record them as **"known gap – confirmed."** Check with the dev team whether any have since been fixed.
+These differences were reviewed with the SDK team (see [bluetooth_sdk_gap_report.md](./bluetooth_sdk_gap_report.md)). Almost all were accepted: they only matter for audio-in (stream-in) or are handled by the plugin, so they are **by design**. The one open item is `getName`, which the SDK team will add. Confirm that each behaves as described, and record it as **"known difference – confirmed"**. Anything that behaves differently from what is described here **is** a defect.
 
 | Feature | BTMgr stack | SDK stack (today) |
 |---|---|---|
-| Get the box's Bluetooth name (`getName`) | Works | Fails (reported as unsupported) until the SDK adds a getter (planned) |
+| Get the box's Bluetooth name (`getName`) | Works | Fails (reported as unsupported) until the SDK adds a getter. **Open:** the SDK team will add it, and the plugin then wires it in; re-check this after an SDK update |
 | Set the box's Bluetooth name (`setName`) | Works (names longer than 63 bytes are cut) | Works the same; as `getName` is unsupported on this stack, confirm the new name with `bluetoothctl show` (the `Alias` line) |
-| Discoverable mode (`isDiscoverable`, `setDiscoverable`) | Works | Fails (reported as unsupported); not planned, only audio-in needs it |
-| Failed pair or connect | Response `success:false` **and** an `onRequestFailed` notification | Response `success:false` only; **no** `onRequestFailed` (accepted difference) |
-| Connecting an audio output device while another one is connected | The other one is disconnected first, then the new one connects | Same (the plugin does it). Smartphones and tablets are not audio output devices and are left connected. A device that connects *from its own side* is not handled yet |
-| Playback and track control (`sendAudioPlaybackCommand` with `PLAY`, `PAUSE`, `STOP`, `SKIP_NEXT` and the like), track info (`getAudioInfo`), `setAudioStream` with `AUXILIARY` | Works | Fails / returns nothing (stream-in features; the SDK has no media player, and its one stream is `PRIMARY`). `setAudioStream` with `PRIMARY` succeeds |
-| Playback notifications (`onPlaybackChange`, `onPlaybackProgress`, `onPlaybackNewTrack`, `onPlaybackRequest`) | Sent | Not sent (stream-in features) |
+| Discoverable mode (`isDiscoverable`, `setDiscoverable`) | Works | Fails (reported as unsupported). **Accepted:** only audio-in needs it, and LE advertising covers the current devices |
+| Failed pair or connect | Response `success:false` **and** an `onRequestFailed` notification | Response `success:false` only; **no** `onRequestFailed` (accepted: the plugin uses the synchronous pair/connect calls, so the response is the failure signal) |
+| Connecting an audio output device while another one is connected | The other one is disconnected first, then the new one connects | Same (the plugin does it). Smartphones and tablets are not audio output devices and are left connected. A device that connects *from its own side* is not handled yet. With this rule only one audio output device is connected at a time, so `getConnectedDevices` lists the one that is streaming, as on BTMgr |
+| Playback and track control (`sendAudioPlaybackCommand` with `PLAY`, `PAUSE`, `STOP`, `SKIP_NEXT` and the like), track info (`getAudioInfo`), `setAudioStream` with `AUXILIARY` | Works | Fails / returns nothing (stream-in features, **accepted**: the SDK does not use a media player, and its one stream is `PRIMARY`; `AUXILIARY` can be added later if a platform needs it). `setAudioStream` with `PRIMARY` succeeds |
+| Playback notifications (`onPlaybackChange`, `onPlaybackProgress`, `onPlaybackNewTrack`, `onPlaybackRequest`) | Sent | Not sent (stream-in features, accepted) |
+| Audio from a phone or tablet into the box (stream-in, only on builds where BTMgr has it enabled) | Works | Not available: a plain connect is used and the phone-to-box audio path is not enabled |
 | A scan running when you connect (or pair, except HID) a device | The scan is stopped quietly first; a background scan is resumed afterwards | The scan is stopped quietly first (the client's list is not cleared and `DISCOVERY_COMPLETED` is sent only when the client ends the scan); it is **not** resumed afterwards |
 | Pairing headphones/speakers | Pairing is reported (`PAIRING_CHANGE`); the client then connects | Same notifications (`PAIRING_CHANGE` with `connected:false`, then `CONNECTION_CHANGE` after the connect response). The connect right after a pair takes a few seconds longer (the link is cycled to bring up audio), and between pair and connect the device may already be listed as connected |
-| Incoming connection from an **unpaired gamepad** | Handled by BTMgr's gamepad-specific rules | Treated like any other device (client is asked) |
+| Incoming connection from an **unpaired gamepad**, and BTMgr's gamepad special cases (the hold-off after certain gamepad models disconnect, the HID gamepad RFC gate) | Handled by BTMgr's gamepad-specific rules (an unpaired gamepad is rejected) | Not mirrored yet (plugin-side work): treated like any other device, so the client is asked |
 
 Not differences (a mismatch here **is** a defect): volume and mute work the same on both stacks (`getDeviceVolumeMuteInfo` and `setDeviceVolumeMuteInfo` use 0 to 255, `VOLUME_UP`, `VOLUME_DOWN`, `AUDIO_MUTE` and `AUDIO_UNMUTE` work, the last volume and mute are kept and the volume is restored when the speaker reconnects, and `onDeviceMediaStatus` is sent after every change including those made with the speaker's own buttons); `activeState` in `getConnectedDevices` is `"1"` for every connected device, and `getDeviceInfo` reports `rssi` and `signalStrength` exactly as the baseline does. For a **paired** device both are `"0"` on every stack. For a device that is **not paired** (for example found by a scan), `rssi` is the raw value and `signalStrength` is 1 to 4 (4 at -60 or stronger, 3 at -70, 2 at -90, otherwise 1); when no RSSI is known the baseline shows `-2147483648` and `1`.
 
@@ -114,9 +115,11 @@ Run each scenario three ways and compare:
 
 | Run | What it is | Expectation |
 |---|---|---|
-| **A** | Baseline: `rdk_develop_branch` | Reference results (use recorded results if you already have them) |
+| **A** | Baseline: the **nightly develop branch build** | Reference results. Recorded results may be reused only if they came from the most recent nightly develop build; otherwise re-run A |
 | **B1** | This build, **BTMgr** selected | Must match A |
 | **B2** | This build, **SDK** selected | Must match A, except for the known differences in [§3](#3-known-differences-expected--do-not-file-as-new-bugs) |
+
+Both B runs are compared with the nightly develop build, so that **both** implementations (BTMgr and SDK) are shown to align with the legacy behavior as it is in the nightly develop build. Run A, B1 and B2 on the same unit, with the same test devices, the same client build and the same scenarios. Build B from this branch brought up to date with the develop commit the nightly was built from, so a difference is not just a develop change that B is missing. Whenever a newer nightly is available, refresh A (and check that B still contains its changes) before you sign off.
 
 A simple result table per case works well: `Case | A | B1 | B2 | Match? | Known difference? | Notes`.
 
@@ -131,9 +134,9 @@ Use [bluetooth_pre_migration_regression_test_plan.md](./bluetooth_pre_migration_
 | 3. Pairing & unpairing | Pair/unpair | Run | Run | Watch notification order |
 | 4. Connection management | Connect/disconnect | Run | Run | |
 | 5. AutoConnect guard | Expected "divergence" for auto-connect | Run | Run | Same on both; not a bug |
-| 6. Device info, audio & playback | Device info, audio, playback commands, responding to requests | Run | **Partly** | Volume and mute (`getDeviceVolumeMuteInfo`, `setDeviceVolumeMuteInfo`, the volume and mute commands, `onDeviceMediaStatus`) must pass on both stacks. Playback commands, `getAudioInfo` and `setAudioStream` with `AUXILIARY` are known differences on SDK. `getDeviceInfo` (including `rssi` and `signalStrength`) and responding to requests must pass |
-| 7. Volume & mute | Volume/mute | Run | **Known difference** | Record as "known gap – confirmed" |
-| 8. Adapter control | Enable/disable, discoverable, name | Run | **Partly** | `enable`/`disable` and `setName` must pass; `getName` and discoverable are known differences on SDK |
+| 6. Device info, audio & playback | Device info, audio, playback commands, responding to requests | Run | **Partly** | Volume and mute (`getDeviceVolumeMuteInfo`, `setDeviceVolumeMuteInfo`, the volume and mute commands, `onDeviceMediaStatus`) must pass on both stacks. Playback commands, `getAudioInfo` and `setAudioStream` with `AUXILIARY` are accepted known differences on SDK. `getDeviceInfo` (including `rssi` and `signalStrength`) and responding to requests must pass |
+| 7. Volume & mute | Volume/mute | Run | Run | Must match on both stacks (volume and mute are **not** a difference; see [§3](#3-known-differences-expected--do-not-file-as-new-bugs)) |
+| 8. Adapter control | Enable/disable, discoverable, name | Run | **Partly** | `enable`/`disable` and `setName` must pass; `getName` (open, SDK getter planned) and discoverable (accepted) are known differences on SDK |
 | 9. Gamepad / HID | Pairing and connecting HID/gamepads | Run | Run | Device type must read `HUMAN INTERFACE DEVICE` on both |
 | 10. Power management | Behavior on power state changes | Run | Run | Also see Part 2 (gamepads and reconnect) |
 | 11. No unwanted saved data | Nothing written to stored device data | Run | Run | |
@@ -186,6 +189,7 @@ These focus on behavior that BTMgr performed on its own and the SDK stack had to
 ## 7. Sign-off checklist
 
 - [ ] Active stack confirmed at the start of every run ([§4.3](#43-selecting-and-confirming-the-stack)).
+- [ ] Baseline A was taken from the nightly develop build (or its recorded results are from the most recent nightly), and B1 and B2 were both compared with it.
 - [ ] Existing regression plan completed on **both** stacks, results recorded as A / B1 / B2.
 - [ ] SUP-01 to SUP-15 completed on both stacks (SUP-01 and SUP-02 as applicable to the image).
 - [ ] Every B2 difference is either a known difference or a filed defect.
@@ -199,4 +203,4 @@ These focus on behavior that BTMgr performed on its own and the SDK stack had to
 1. What is the approved procedure for switching a unit between BTMgr and SDK?
 2. Are the known differences in [§3](#3-known-differences-expected--do-not-file-as-new-bugs) accepted for this release, or are any of them blockers?
 3. Which build options is the build under test using?
-4. Which baseline results (run A) already exist, so they need not be repeated?
+4. Which baseline results (run A) already exist, which nightly build they came from, and whether a newer nightly exists, so they need not be repeated?
