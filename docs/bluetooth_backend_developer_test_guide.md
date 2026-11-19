@@ -12,13 +12,14 @@
 - Both backends live in **one plugin binary**. Which one runs is decided **at runtime** (see [§3.2](#32-how-the-backend-is-chosen)).
 - **Nothing about the client-facing contract changes.** Same callsign, same JSON-RPC methods, same notifications, same parameters and response shapes, same device IDs. A client (IUI, apps, scripts) must not be able to tell which backend is running — apart from the short list of **known gaps** in [§5](#5-known-differences-and-gaps-expected-not-new-bugs).
 - QA's job is **regression**: run the same scenarios you would run against the BTMgr plugin in the nightly develop branch build, against **both** backends of this build, and confirm the results match the baseline.
-- The SDK backend has to *re-create* a lot of behavior that BTMgr performed silently inside its daemon (scan filtering, auto-accepting connections, startup reconnect, gamepad standby handling, …). These are the highest-risk areas; [§4](#4-what-the-sdk-backend-must-reproduce-and-where-bugs-are-most-likely) lists them and [§6](#6-test-plan) targets them.
+- The SDK backend has to *re-create* a lot of behavior that BTMgr performed silently inside its daemon (scan filtering, auto-accepting connections, startup reconnect, …). These are the highest-risk areas; [§4](#4-what-the-sdk-backend-must-reproduce-and-where-bugs-are-most-likely) lists them and [§6](#6-test-plan) targets them.
 
 ### Scope assumption
 
 Testing is limited to **BTMgr → SDK migration regression**, including the paired-device persistence migration and rollback (`performMigration` / `clearMigration`), which is run against both backends separately (§6.6a). Out of scope for this document:
 
 - New or non-migration functionality.
+- **Gamepads.** The SDK team does all gamepad testing (pairing, connection rules, naming, standby handling and the gamepad-specific differences from BTMgr). See [bluetooth_sdk_gamepad_gap.md](./bluetooth_sdk_gamepad_gap.md).
 
 The core regression (§6.5–6.6) runs with `performMigration` **never called** (the default state), as the [pre-migration regression plan](./bluetooth_pre_migration_regression_test_plan.md) assumes. The migration/rollback plan (§6.6a) changes that state, so run it afterwards or on a separate unit.
 
@@ -31,7 +32,7 @@ The core regression (§6.5–6.6) runs with `performMigration` **never called** 
 | | BTMgr backend (legacy) | SDK backend (new) |
 |---|---|---|
 | Talks to | BTMgr daemon via `BTRMGR_*` C API + IARM; BTMgr drives BTCore → BlueZ | bluetooth-sdk C++ API (`Manager` / `Adapter` / `Device`) → BlueZ over D-Bus |
-| Who owns "smart" behavior (scan filtering, auto-accept, reconnect, gamepad power handling) | BTMgr/BTCore daemon | **The plugin** (it must re-implement it) |
+| Who owns "smart" behavior (scan filtering, auto-accept, reconnect) | BTMgr/BTCore daemon | **The plugin** (it must re-implement it) |
 | Events come from | BTRMGR event callback | SDK adapter/device event callbacks |
 | Status | Being retired | Target architecture |
 
@@ -107,16 +108,16 @@ The "same from the client's perspective" requirement is the contract. The table 
 | 1 | **Device IDs** | `deviceID` from MAC | Same formula (`DeviceRegistry`) | Same MAC → same `deviceID` on both backends |
 | 2 | **Device type string** (`deviceType` in lists/events) | BTMgr's mapping; several classes are collapsed (portable/car/hi-fi audio → `LOUDSPEAKER`; all HID subtypes incl. gamepad → `HUMAN INTERFACE DEVICE`) | `DeviceTypeClassifier` from Class of Device / BLE appearance / UUIDs | Strings must match exactly; they also drive connection and auto-accept policy |
 | 3 | **Scan results by profile** | btrCore drops devices that don't match the profile; RDK remote controls are hidden when an explicit profile is requested | `ScanFilterPolicy` mirrors the filters | Per-profile scans return the same device classes; RCUs only appear in a default/no-profile scan |
-| 4 | **Device naming at discovery** | btrCore waits for a real name: speakers shown after a short wait (may show MAC as name), HID gamepads wait up to ~7 s then show `Game Controller`, others not reported until named | `DiscoveryNameGate` (waits up to ~7 s; devices with no wait of their own are re-read every 2 s, so a late name can show up to ~2 s after BlueZ has it; `getDiscoveredDevices` serves a per-device snapshot, so a name or type can lag by up to ~5 s) | Names shown in `onDiscoveredDevice` / `getDiscoveredDevices` match; no nameless/MAC-named phones etc. |
+| 4 | **Device naming at discovery** | btrCore waits for a real name: speakers shown after a short wait (may show MAC as name), others not reported until named | `DiscoveryNameGate` (waits up to ~7 s; devices with no wait of their own are re-read every 2 s, so a late name can show up to ~2 s after BlueZ has it; `getDiscoveredDevices` serves a per-device snapshot, so a name or type can lag by up to ~5 s) | Names shown in `onDiscoveredDevice` / `getDiscoveredDevices` match; no nameless/MAC-named phones etc. |
 | 5 | **Discovery lifecycle events** | `DISCOVERY_STARTED` / `DISCOVERY_COMPLETED` etc. | `EventBridge` maps SDK discovery started/stopped; plugin timer still stops scan on timeout. A scan the plugin stops itself before a connect or pair (row 6a) is stopped **silently**: no `DISCOVERY_COMPLETED` is sent then, and it is sent once when the client later ends the scan (`stopScan` or the scan timeout) | `onStatusChanged` values and counts; scan timeout behavior; `DISCOVERY_COMPLETED` exactly once per scan, never when a connect or pair stops the scan |
 | 6 | **Pair / connect / disconnect / unpair status events and ordering** | Response, then notification | SDK raises events while the call is still blocking, so `EventBridge` **holds** them ~250 ms so the notification arrives *after* the response | Notification always follows the JSON-RPC response; no missing `PAIRING_CHANGE` / `CONNECTION_CHANGE`. See row 6b for what a pair reports |
 | 6a | **Scan stopped before connect / pair** | `btrMgr_ConnectToDevice` and `BTRMGR_PairDevice` call `btrMgr_PreCheckDiscoveryStatus`, which stops a running scan (pair skips this for HID devices) with the internal stop, so no `DISCOVERY_COMPLETE` is posted; the client still sees its scan as running. A background scan is resumed afterwards | `connectDevice` stops a running scan first, and `pairDevice` does so for non-HID devices, both silently (see row 5). If the scan cannot be stopped the request fails without being attempted. A scan is **not** resumed afterwards | Start a scan, connect (or pair) a found device: it completes quickly, the client's found-devices list is not cleared (no "device not found" message), no `DISCOVERY_COMPLETED` until the client stops the scan, and a later `startScan` works |
 | 6b | **Pair of a device BlueZ connects while pairing** (headphones) | Pair reports the pairing only; the client connects the device itself afterwards | After a successful pair only `PAIRING_CHANGE` (`paired:true`, `connected:false`) is sent; the `Connected`/`Disconnected` events BlueZ raised during the pair are dropped. The client's next connect of that device (audio output devices, first connect after the pair only) disconnects and reconnects it, because the SDK's `connect()` returns at once for an already-connected device and would leave the audio profile down; the connect then sends one `CONNECTION_CHANGE connected:true` (held `Disconnected` events of a successful connect are dropped), and takes a few seconds longer | Add Device flow (scan, select, connect): the client ends up `CONNECTED` and audio plays, with no `disconnect` request from the client after the connect. Between the pair and the connect, `getPairedDevices`/`getConnectedDevices` may already list the device as connected |
 | 7 | **Failure reporting** | BTMgr failure events → `onRequestFailed`, plus a failed response | SDK has no failure events; the plugin calls only synchronous `pair`/`connect` and reports a failure as `success:false`. **No `onRequestFailed`** (accepted difference) | A failed pair/connect returns `success:false` on both backends; `onRequestFailed` arrives on BTMgr only |
 | 7a | **One connected audio output device** | BTMgr disconnects any other connected speaker/headset when a new audio output device is connected (`btrMgr_StartAudioStreamingOut`) | `connectDevice` does the same before connecting (smartphones/tablets do not count; externally connected devices are not covered) | Connect a second audio device: the first is disconnected, its `CONNECTION_CHANGE` precedes the connect response, and `getConnectedDevices` lists one audio device |
-| 8 | **Incoming pairing / connection requests** | BTMgr auto-accepts most types; asks the client (`onPairingRequest`, `onConnectionRequest`) for phones/tablets/LE etc. with type-specific answer timeouts (audio ~200 ms, classic gamepad ~2 s, LE gamepad ~20 s) | `AuthBridge` re-implements the policy and timeouts; unanswered requests are rejected | Same events raised for the same device types; `respondToEvent` accepted/rejected is honored; timeouts behave the same |
+| 8 | **Incoming pairing / connection requests** | BTMgr auto-accepts most types; asks the client (`onPairingRequest`, `onConnectionRequest`) for phones/tablets/LE etc. with type-specific answer timeouts (audio ~200 ms) | `AuthBridge` re-implements the policy and timeouts; unanswered requests are rejected | Same events raised for the same device types; `respondToEvent` accepted/rejected is honored; timeouts behave the same |
 | 9 | **Startup / power-on reconnect of the last audio device** | BTMgr does it by itself at boot and on power ON | Plugin runs a reconnect pass (`startAutoConnect`): asks the client via `onConnectionRequest` for the most recently used audio device, retries after ~40 s, honors client rejection | Boot and ON-transition reconnect gives the same end result; see pre-migration plan §13 |
-| 10 | **Gamepad handling on power state change** | BTMgr: entering STANDBY / LIGHT_SLEEP disconnects non-remote HID devices and suppresses their discovery/reconnect; returning to ON restores them. RCUs are never touched (they wake the box) | `setGamepadStandbyMode` | Gamepads disconnect in standby, do not reconnect until ON, RCU still works |
+| 10 | **Gamepad handling on power state change** | Not tested here: gamepad testing is done by the SDK team | | |
 | 11 | **Adapter power / enable / disable** | BTRMGR adapter calls | SDK `Adapter` power calls + `PoweredOn/Off` events | `enable`/`disable` and resulting `onStatusChanged` |
 | 12 | **Persistence** (`autoconnect`, `lastConnectTimeUtc`) and **migration/rollback** | `BluetoothDeviceManager` | Same class; only the BTMgr lookups inside it use the adapter | No PersistentStore or AS-file writes before `performMigration` (pre-migration plan §11); migration and rollback results identical (§6.6a) |
 
@@ -139,7 +140,6 @@ These differences were reviewed with the SDK team on 2026-11-09 ([bluetooth_sdk_
 | Failure of pair/connect (`onRequestFailed`) | Failure events → `onRequestFailed` plus a failed response | `success:false` response only | **Closed:** the plugin only uses the synchronous `pair`/`connect`, whose `Status` reports every failure; see row 7 of §4 |
 | `activeState` (in `getConnectedDevices`) | `"1"` for every connected device | `"1"` for every connected device | Not a gap. Covered by `Bluetooth_Sdk_L2Test.GetConnectedDevices_ReportsActiveStateOne` |
 | `rssi` / `signalStrength` (in `getDeviceInfo`) | Paired device: `0` / `0`. Not paired: raw RSSI (`INT_MIN` if unknown) and level 4/3/2/1 at -60/-70/-90 | Same | Not a gap. See `SignalLevel.h` and `Bluetooth_Sdk_L2Test.GetDeviceInfo_*` |
-| Gamepad connection handling | BTMgr special cases (gamepad RFC, last-disconnected hold-off for specific models; unpaired gamepad rejected) | Those special cases are **not** mirrored yet (plugin-side work, nothing needed from the SDK); an unpaired gamepad follows the normal client-escalation flow | Documented in [AuthBridge.h](../Bluetooth/AuthBridge.h) |
 | Scan after a connect/pair stopped it | A paused background scan is resumed after a hold-off timer | Not resumed; the client's own scan end (`stopScan`/timeout) still sends `DISCOVERY_COMPLETED` | Accepted for now; the client restarts a scan if it wants one |
 | Startup reconnect | Internal to BTMgr (no plugin involvement) | Plugin-driven; if the client accepts the `onConnectionRequest`, the plugin leaves the connect to the client | By design; same end user result expected |
 
@@ -183,7 +183,7 @@ Do this at the start of **every** run and after every reboot/plugin restart.
 - For the core regression, `performMigration` never called (verify as in pre-migration plan "Prerequisites", P3). The migration/rollback plan lists its own prerequisites.
 - A JSON-RPC client (curl against `http://127.0.0.1:9998/jsonrpc`) **and** a way to subscribe to notifications (to observe events and order), since many parity points are event-related.
 - Device matrix (as many as available; see [§6.4](#64-device-matrix)):
-  at least one headphone/speaker, one RDK remote control, one non-remote HID (keyboard), one gamepad (classic and/or LE), one phone/tablet (for incoming pairing/connection tests), one LE device.
+  at least one headphone/speaker, one RDK remote control, one non-remote HID (keyboard), one phone/tablet (for incoming pairing/connection tests), one LE device.
 
 ### 6.4 Device matrix
 
@@ -194,7 +194,6 @@ Device class drives type classification, scan filtering, auth policy, power-stat
 | Headphones / speaker / soundbar | `LOUDSPEAKER`/`HEADPHONES` type strings, startup reconnect, ~200 ms connection-request window, audio features |
 | RDK remote control | Excluded from profile scans, auto-accepted, never touched on standby |
 | Keyboard / non-remote HID | `HUMAN INTERFACE DEVICE`, auto-accept, standby disconnect |
-| Gamepad (classic and LE) | Name gating (`Game Controller`), 2 s / 20 s auth windows, standby handling |
 | Smartphone / tablet | Incoming pairing/connection escalate to client |
 | LE tag/tile | `LE TILE` type, LE scan profile |
 
@@ -212,8 +211,8 @@ The primary test cases already exist in [bluetooth_pre_migration_regression_test
 | §6 Device info, audio & playback | `getDeviceInfo`, `getAudioInfo`, `setAudioStream`, playback commands, `respondToEvent` | Yes | **Partly** | Volume and mute must pass; playback commands, `getAudioInfo` and `setAudioStream` with `AUXILIARY` are known gaps on SDK; `getDeviceInfo` and `respondToEvent` must pass |
 | §7 Volume & mute | `get/setDeviceVolumeMuteInfo` | Yes | Yes | Must match on both backends (see §5: not a gap) |
 | §8 Adapter control | `enable`/`disable`/discoverable/name | Yes | **Partly** | `enable`/`disable` and `setName` must pass; `getName` (open, SDK getter planned) and discoverable (accepted) are known gaps on SDK |
-| §9 Gamepad / HID classification | Pair/connect HID and gamepad | Yes | Yes | Type string must be `HUMAN INTERFACE DEVICE` on both |
-| §10 Power management guard | `onPowerModeChanged` pre-migration | Yes | Yes | Gamepad standby and reconnect still run (see §6.6) |
+| §9 HID classification | Pair/connect HID devices (keyboard, remote) | Yes | Yes | Type string must be `HUMAN INTERFACE DEVICE` on both |
+| §10 Power management guard | `onPowerModeChanged` pre-migration | Yes | Yes | Reconnect still runs (see §6.6) |
 | §11 Persistence non-interference | No store/AS-file writes | Yes | Yes | |
 | §12 Lifecycle / reboot | Activate/deactivate, reboot | Yes | Yes | |
 | §13 Startup reconnect | SDK-driven reconnect | Observe | **Yes (SDK only)** | On BTMgr, only check the end result (last audio device reconnects at boot and on power ON) |
@@ -229,13 +228,13 @@ The existing plan checks *what the API does*; the following checks target the *b
 | SUP-01 | **Backend selection** | `BLUETOOTH_SDK_ENABLED` true / false / absent / invalid value → expected backend per [§3.2](#32-how-the-backend-is-chosen). With the SDK deliberately unavailable (adapter missing or stub SDK) on a dual image, the plugin falls back to BTMgr and still activates. On an SDK-only image the plugin fails to activate with a clear error |
 | SUP-02 | **Switching backends on one unit** | Pair devices under BTMgr, switch to SDK (and back), reactivate: paired devices still listed, same `deviceID`s, `lastConnectTimeUtc`/`autoconnect` data in PersistentStore unaffected |
 | SUP-03 | **`deviceID` stability** | Same device → identical `deviceID` on both backends, and identical to the baseline |
-| SUP-04 | **Device type strings** | For every device in the matrix, compare `deviceType` in `getDiscoveredDevices`, `getPairedDevices`, `getConnectedDevices`, `getDeviceInfo` and notifications. Pay attention to collapsed types (soundbar/portable/car audio → `LOUDSPEAKER`; keyboard/remote/gamepad → `HUMAN INTERFACE DEVICE`) |
+| SUP-04 | **Device type strings** | For every device in the matrix, compare `deviceType` in `getDiscoveredDevices`, `getPairedDevices`, `getConnectedDevices`, `getDeviceInfo` and notifications. Pay attention to collapsed types (soundbar/portable/car audio → `LOUDSPEAKER`; keyboard/remote → `HUMAN INTERFACE DEVICE`) |
 | SUP-05 | **Scan profiles** | Run `startScan` with each supported profile (default/none, audio output, smartphone/tablet, HID, audio+HID, LE). Compare the sets of devices found. RCUs must appear only with no/unrecognized profile. Stop and timeout behavior (`timeout` values incl. ≤0) |
-| SUP-06 | **Discovery name behavior** | Power up devices that advertise without a name (speaker, gamepad, phone). Compare names shown, delay before they appear (SDK waits up to ~7 s), and that gamepads show as `Game Controller` when unnamed |
+| SUP-06 | **Discovery name behavior** | Power up devices that advertise without a name (speaker, phone). Compare names shown and the delay before they appear (SDK waits up to ~7 s) |
 | SUP-07 | **Notification order and content** | For `pair`, `unpair`, `connect`, `disconnect`, `enable`, `disable`: record the response and the notifications (`onStatusChanged` with `newStatus`, `paired`, `connected`, …). The notification must come **after** the response; none missing. Discovery: `DISCOVERY_STARTED`/`DISCOVERY_COMPLETED`, `onDiscoveredDevice` (FOUND/LOST/updates), `onDeviceFound`, `onDeviceLost` |
 | SUP-08 | **Failure paths** | Pair/connect with a device that is off, out of range, or rejects; pair an already-paired device; connect an unpaired device; unknown `deviceID`. Compare the success flag on both backends. `onRequestFailed` is expected on the BTMgr backend only |
-| SUP-09 | **Incoming requests (device initiates)** | Pair/connect from a phone/tablet: `onPairingRequest`/`onConnectionRequest` raised, `respondToEvent` accept and reject honored, no answer → rejected after the type's window. Repeat for headphones (client asked, short ~200 ms answer window), RCU/keyboard (auto-accepted when paired), classic gamepad (~2 s window), LE gamepad (~20 s window). Compare against baseline A rather than assuming the values |
-| SUP-10 | **Gamepad standby/wake** | With a gamepad and an RCU connected, move the box to STANDBY and LIGHT_SLEEP: gamepad disconnects and does not reconnect or show up in discovery; RCU stays connected. Return to ON: gamepad can reconnect and is reported. DEEP_SLEEP and OFF should not by themselves change the gamepad mode |
+| SUP-09 | **Incoming requests (device initiates)** | Pair/connect from a phone/tablet: `onPairingRequest`/`onConnectionRequest` raised, `respondToEvent` accept and reject honored, no answer → rejected after the type's window. Repeat for headphones (client asked, short ~200 ms answer window), RCU/keyboard (auto-accepted when paired). Compare against baseline A rather than assuming the values |
+| SUP-10 | **Gamepad standby/wake** | Not run here: gamepad testing is done by the SDK team |
 | SUP-11 | **Power-on reconnect (user view)** | With an audio device that was used last, reboot and also ON-transition from standby: the same device reconnects automatically on both backends within a comparable time; if another audio output device is already connected, nothing extra is connected |
 | SUP-12 | **Adapter enable/disable cycling** | Repeat `disable`/`enable` several times while devices are paired; lists and notifications stay consistent; powered-off adapter doesn't produce stale connected devices |
 | SUP-13 | **Plugin lifecycle under load** | Activate/deactivate 10+ times with and without a scan running or an auth request pending; no hang, crash or leaked threads; reboot stability |
@@ -274,7 +273,7 @@ Include in each report: backend (and how you verified it), build/flags, device m
 - [ ] Backend identity verified at the start of every run ([§6.2](#62-confirm-which-backend-is-active)).
 - [ ] Baseline A taken from the nightly develop build (or recorded results are from the most recent nightly), and both B1 and B2 compared against it.
 - [ ] Pre-migration regression plan executed on **both** backends; results recorded as A/B1/B2.
-- [ ] SUP-01 … SUP-15 executed on both backends (SUP-01/02 as applicable to the image type).
+- [ ] SUP-01 … SUP-15 executed on both backends, except SUP-10 (SDK team) (SUP-01/02 as applicable to the image type).
 - [ ] Every B2 difference is either a §5 known gap or a filed defect.
 - [ ] No PersistentStore or AS-file writes during the core regression; `performMigration` never called until the migration/rollback plan.
 - [ ] Migration/rollback plan (§6.6a) executed on A, B1 and B2 with matching results; unit restored to the clean state.
