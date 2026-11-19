@@ -21,7 +21,8 @@ Your job is **regression testing**: show that the SDK-based Bluetooth behaves li
 ### Out of scope
 
 - New features and anything not related to the BTMgr → SDK change.
-- The paired-device *persistence migration* feature (`performMigration` / `clearMigration`). **Never call these during this testing.** If they are called by accident, restore the starting state as described in the existing test plan before continuing.
+
+> The paired-device *persistence migration and rollback* feature (`performMigration` / `clearMigration`) **is in scope**, as a separate step: see [Part 3](#54-part-3--persistence-migration-and-rollback). **Parts 1 and 2 must be run with `performMigration` never called**, so do Part 3 last (or on its own unit). If these APIs are called by accident during Parts 1 or 2, restore the starting state as described in the pre-migration plan.
 
 ---
 
@@ -41,19 +42,19 @@ Internal log differences are **not** failures. Only differences a client or a us
 
 These differences were reviewed with the SDK team (see [bluetooth_sdk_gap_report.md](./bluetooth_sdk_gap_report.md)). Almost all were accepted: they only matter for audio-in (stream-in) or are handled by the plugin, so they are **by design**. The one open item is `getName`, which the SDK team will add. Confirm that each behaves as described, and record it as **"known difference – confirmed"**. Anything that behaves differently from what is described here **is** a defect.
 
-| Feature | BTMgr stack | SDK stack (today) |
-|---|---|---|
-| Get the box's Bluetooth name (`getName`) | Works | Fails (reported as unsupported) until the SDK adds a getter. **Open:** the SDK team will add it, and the plugin then wires it in; re-check this after an SDK update |
-| Set the box's Bluetooth name (`setName`) | Works (names longer than 63 bytes are cut) | Works the same; as `getName` is unsupported on this stack, confirm the new name with `bluetoothctl show` (the `Alias` line) |
-| Discoverable mode (`isDiscoverable`, `setDiscoverable`) | Works | Fails (reported as unsupported). **Accepted:** only audio-in needs it, and LE advertising covers the current devices |
-| Failed pair or connect | Response `success:false` **and** an `onRequestFailed` notification | Response `success:false` only; **no** `onRequestFailed` (accepted: the plugin uses the synchronous pair/connect calls, so the response is the failure signal) |
-| Connecting an audio output device while another one is connected | The other one is disconnected first, then the new one connects | Same (the plugin does it). Smartphones and tablets are not audio output devices and are left connected. A device that connects *from its own side* is not handled yet. With this rule only one audio output device is connected at a time, so `getConnectedDevices` lists the one that is streaming, as on BTMgr |
-| Playback and track control (`sendAudioPlaybackCommand` with `PLAY`, `PAUSE`, `STOP`, `SKIP_NEXT` and the like), track info (`getAudioInfo`), `setAudioStream` with `AUXILIARY` | Works | Fails / returns nothing (stream-in features, **accepted**: the SDK does not use a media player, and its one stream is `PRIMARY`; `AUXILIARY` can be added later if a platform needs it). `setAudioStream` with `PRIMARY` succeeds |
-| Playback notifications (`onPlaybackChange`, `onPlaybackProgress`, `onPlaybackNewTrack`, `onPlaybackRequest`) | Sent | Not sent (stream-in features, accepted) |
-| Audio from a phone or tablet into the box (stream-in, only on builds where BTMgr has it enabled) | Works | Not available: a plain connect is used and the phone-to-box audio path is not enabled |
-| A scan running when you connect (or pair, except HID) a device | The scan is stopped quietly first; a background scan is resumed afterwards | The scan is stopped quietly first (the client's list is not cleared and `DISCOVERY_COMPLETED` is sent only when the client ends the scan); it is **not** resumed afterwards |
-| Pairing headphones/speakers | Pairing is reported (`PAIRING_CHANGE`); the client then connects | Same notifications (`PAIRING_CHANGE` with `connected:false`, then `CONNECTION_CHANGE` after the connect response). The connect right after a pair takes a few seconds longer (the link is cycled to bring up audio), and between pair and connect the device may already be listed as connected |
-| Incoming connection from an **unpaired gamepad**, and BTMgr's gamepad special cases (the hold-off after certain gamepad models disconnect, the HID gamepad RFC gate) | Handled by BTMgr's gamepad-specific rules (an unpaired gamepad is rejected) | Not mirrored yet (plugin-side work): treated like any other device, so the client is asked |
+| Feature | BTMgr stack | SDK stack (today) | Why |
+|---|---|---|---|
+| Get the box's Bluetooth name (`getName`) | Works | Fails (reported as unsupported) until the SDK adds a getter. **Open:** the SDK team will add it, and the plugin then wires it in; re-check this after an SDK update | The SDK has no adapter-name getter (it only has a setter), so the plugin has nothing to call. The SDK team will add one. |
+| Set the box's Bluetooth name (`setName`) | Works (names longer than 63 bytes are cut) | Works the same; as `getName` is unsupported on this stack, confirm the new name with `bluetoothctl show` (the `Alias` line) | Works: the SDK has a name setter. Listed because the read-back (`getName`) is missing, so check with `bluetoothctl show`. |
+| Discoverable mode (`isDiscoverable`, `setDiscoverable`) | Works | Fails (reported as unsupported). **Accepted:** only audio-in needs it, and LE advertising covers the current devices | The SDK has no adapter discoverable API. Only audio-in (stream-in) needs it, and LE advertising covers the current devices. |
+| Failed pair or connect | Response `success:false` **and** an `onRequestFailed` notification | Response `success:false` only; **no** `onRequestFailed` (accepted: the plugin uses the synchronous pair/connect calls, so the response is the failure signal) | The plugin uses the SDK's blocking pair/connect, which return the failure directly, and the SDK sends no failure events. BTMgr is asynchronous, so it needs the event. |
+| Connecting an audio output device while another one is connected | The other one is disconnected first, then the new one connects | Same (the plugin does it). Smartphones and tablets are not audio output devices and are left connected. A device that connects *from its own side* is not handled yet. With this rule only one audio output device is connected at a time, so `getConnectedDevices` lists the one that is streaming, as on BTMgr | Works: BTMgr disconnects other speakers before connecting a new one and the SDK does not, so the plugin does it. A device connecting from its own side is not covered yet. |
+| Playback and track control (`sendAudioPlaybackCommand` with `PLAY`, `PAUSE`, `STOP`, `SKIP_NEXT` and the like), track info (`getAudioInfo`), `setAudioStream` with `AUXILIARY` | Works | Fails / returns nothing (stream-in features, **accepted**: the SDK does not use a media player, and its one stream is `PRIMARY`; `AUXILIARY` can be added later if a platform needs it). `setAudioStream` with `PRIMARY` succeeds | These use the AVRCP media player, which the SDK will not use (needed for stream-in only). The SDK has only one stream, `PRIMARY`. |
+| Playback notifications (`onPlaybackChange`, `onPlaybackProgress`, `onPlaybackNewTrack`, `onPlaybackRequest`) | Sent | Not sent (stream-in features, accepted) | They come from the media player and A2DP transport state, which the SDK does not provide (stream-in only). |
+| Audio from a phone or tablet into the box (stream-in, only on builds where BTMgr has it enabled) | Works | Not available: a plain connect is used and the phone-to-box audio path is not enabled | Needs A2DP sink, which is not enabled (no `a2dp_sink` role in WirePlumber). The SDK connect is plain, and it covers speakers and headphones only. |
+| A scan running when you connect (or pair, except HID) a device | The scan is stopped quietly first; a background scan is resumed afterwards | The scan is stopped quietly first (the client's list is not cleared and `DISCOVERY_COMPLETED` is sent only when the client ends the scan); it is **not** resumed afterwards | The SDK scan is owned by the client. The plugin only stops it so the connect can proceed and does not restart it (plugin behavior, not an SDK limit). |
+| Pairing headphones/speakers | Pairing is reported (`PAIRING_CHANGE`); the client then connects | Same notifications (`PAIRING_CHANGE` with `connected:false`, then `CONNECTION_CHANGE` after the connect response). The connect right after a pair takes a few seconds longer (the link is cycled to bring up audio), and between pair and connect the device may already be listed as connected | BlueZ connects the device during pairing without its audio profile, so the plugin disconnects and reconnects once to bring up audio. This is why the connect is slower. |
+| Incoming connection from an **unpaired gamepad**, and BTMgr's gamepad special cases (the hold-off after certain gamepad models disconnect, the HID gamepad RFC gate) | Handled by BTMgr's gamepad-specific rules (an unpaired gamepad is rejected) | Not mirrored yet (plugin-side work): treated like any other device, so the client is asked | The SDK has no gamepad rules, and the plugin has not ported BTMgr's yet (plugin-side work, nothing needed from the SDK). |
 
 Not differences (a mismatch here **is** a defect): volume and mute work the same on both stacks (`getDeviceVolumeMuteInfo` and `setDeviceVolumeMuteInfo` use 0 to 255, `VOLUME_UP`, `VOLUME_DOWN`, `AUDIO_MUTE` and `AUDIO_UNMUTE` work, the last volume and mute are kept and the volume is restored when the speaker reconnects, and `onDeviceMediaStatus` is sent after every change including those made with the speaker's own buttons); `activeState` in `getConnectedDevices` is `"1"` for every connected device, and `getDeviceInfo` reports `rssi` and `signalStrength` exactly as the baseline does. For a **paired** device both are `"0"` on every stack. For a device that is **not paired** (for example found by a scan), `rssi` is the raw value and `signalStrength` is 1 to 4 (4 at -60 or stronger, 3 at -70, 2 at -90, otherwise 1); when no RSSI is known the baseline shows `-2147483648` and `1`.
 
@@ -73,7 +74,7 @@ Everything else is expected to behave exactly like the baseline.
 - A device image that contains **both** stacks and a **real** Bluetooth SDK (not the placeholder/stub SDK).
 - Shell access to the device and its logs.
 - A way to call the Bluetooth API (curl to `http://127.0.0.1:9998/jsonrpc`) **and** a way to watch notifications as they arrive. Many checks are about notifications and their order.
-- Confirm with dev which build options are in use (the existing test plan assumes the persistence-migration option is **on**) and that `performMigration` has never been called on the unit.
+- Confirm with dev which build options are in use (the existing test plans assume the persistence-migration option is **on**). For Parts 1 and 2, confirm that `performMigration` has never been called on the unit. Part 3 also needs the old and new firmware images (see its plan).
 
 ### 4.2 Test devices
 
@@ -167,6 +168,12 @@ These focus on behavior that BTMgr performed on its own and the SDK stack had to
 | SUP-14 | **Overlapping actions** | Start two actions at once (for example `connect` while scanning: the scan is stopped first, see SUP-05), and connect from the client right after a startup reconnect request. No hangs, and no "In Progress" error where the baseline has none |
 | SUP-15 | **Soak** | Run for several hours with periodic scan / pair / connect / disconnect cycles. Watch for memory growth, high CPU, or repeated errors in logs |
 
+### 5.4 Part 3 — Persistence migration and rollback
+
+Run every case in [paired_device_migration_manual_test_plan.md](./paired_device_migration_manual_test_plan.md) on **A, B1 and B2**, the same way as the other parts (same unit, devices and client; confirm the stack as in [§4.3](#43-selecting-and-confirming-the-stack)). Results must match A; no known differences from [§3](#3-known-differences-expected--do-not-file-as-new-bugs) apply. Each run stays on one stack: do not test migration or rollback across a BTMgr ↔ SDK switch.
+
+Run it **after Parts 1 and 2** (or on a separate unit): it changes PersistentStore and the AS file, and Parts 1 and 2 need `performMigration` to have never been called. Restore the clean starting state afterwards, as described in that plan.
+
 ---
 
 ## 6. Judging results
@@ -192,8 +199,9 @@ These focus on behavior that BTMgr performed on its own and the SDK stack had to
 - [ ] Baseline A was taken from the nightly develop build (or its recorded results are from the most recent nightly), and B1 and B2 were both compared with it.
 - [ ] Existing regression plan completed on **both** stacks, results recorded as A / B1 / B2.
 - [ ] SUP-01 to SUP-15 completed on both stacks (SUP-01 and SUP-02 as applicable to the image).
+- [ ] Migration and rollback plan (Part 3) completed on A, B1 and B2 with matching results, and the unit restored to its clean starting state. During Parts 1 and 2, no saved device data was written and `performMigration` was never called.
 - [ ] Every B2 difference is either a known difference or a filed defect.
-- [ ] No saved device data was written by the testing, and `performMigration` was never called.
+- [ ] During Parts 1 and 2, no saved device data was written and `performMigration` was never called. After Part 3, the unit was restored to its clean starting state.
 - [ ] No crashes, hangs or unexpected errors on either stack.
 
 ---

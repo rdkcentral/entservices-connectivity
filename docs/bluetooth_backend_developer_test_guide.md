@@ -16,10 +16,11 @@
 
 ### Scope assumption
 
-Testing is limited to **BTMgr → SDK migration regression**. Out of scope for this document:
+Testing is limited to **BTMgr → SDK migration regression**, including the paired-device persistence migration and rollback (`performMigration` / `clearMigration`), which is run against both backends separately (§6.6a). Out of scope for this document:
 
 - New or non-migration functionality.
-- The *persistence* migration APIs (`performMigration` / `clearMigration`) and their rollback behavior. Tests here run with `performMigration` **never called** (the default state), which is exactly what the existing [pre-migration regression plan](./bluetooth_pre_migration_regression_test_plan.md) assumes. If you need to test those APIs, use [paired_device_migration_manual_test_plan.md](./paired_device_migration_manual_test_plan.md).
+
+The core regression (§6.5–6.6) runs with `performMigration` **never called** (the default state), as the [pre-migration regression plan](./bluetooth_pre_migration_regression_test_plan.md) assumes. The migration/rollback plan (§6.6a) changes that state, so run it afterwards or on a separate unit.
 
 > If "ignore non-migration" was meant differently, check with the dev team before starting; the rest of this guide assumes the interpretation above.
 
@@ -92,6 +93,7 @@ Build/product variants you may encounter:
 ### 3.3 Optional features that interact with backend choice
 
 - `BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION` (compile-time) controls the guarded behaviors described in the pre-migration plan (e.g. `setAutoConnect` rejected, `getAutoConnect` always false until `performMigration`). It is orthogonal to the backend: the same guards apply to both. Confirm the build flag state before testing, since the pre-migration plan assumes it is **ON**.
+- The migration/rollback logic itself (`performMigration`, `clearMigration`, `migrationVersion` handling, AS-file sync) lives in `BluetoothDeviceManager` and is shared by both backends. It reaches the backend only through `IBtAdapter` (`queryPairedDevices`, `getDeviceProperties`) for enrichment, device IDs, `deviceType` and `isGamePad`. Hence the risk for the SDK backend is in the *data it supplies* (device IDs, type strings, gamepad classification, paired-device list), not in the migration state machine. The migration log lines use the word `adapter` where the nightly develop baseline uses `BTRMGR`.
 - The plugin always uses the SDK audio API; SDK volume, mute and their notifications use it (see [§5](#5-known-differences-and-gaps-expected-not-new-bugs)).
 
 ---
@@ -116,7 +118,7 @@ The "same from the client's perspective" requirement is the contract. The table 
 | 9 | **Startup / power-on reconnect of the last audio device** | BTMgr does it by itself at boot and on power ON | Plugin runs a reconnect pass (`startAutoConnect`): asks the client via `onConnectionRequest` for the most recently used audio device, retries after ~40 s, honors client rejection | Boot and ON-transition reconnect gives the same end result; see pre-migration plan §13 |
 | 10 | **Gamepad handling on power state change** | BTMgr: entering STANDBY / LIGHT_SLEEP disconnects non-remote HID devices and suppresses their discovery/reconnect; returning to ON restores them. RCUs are never touched (they wake the box) | `setGamepadStandbyMode` | Gamepads disconnect in standby, do not reconnect until ON, RCU still works |
 | 11 | **Adapter power / enable / disable** | BTRMGR adapter calls | SDK `Adapter` power calls + `PoweredOn/Off` events | `enable`/`disable` and resulting `onStatusChanged` |
-| 12 | **Persistence** (`autoconnect`, `lastConnectTimeUtc`) | `BluetoothDeviceManager` | Same class; only the BTMgr lookups inside it use the adapter | No PersistentStore or AS-file writes before `performMigration` (pre-migration plan §11) |
+| 12 | **Persistence** (`autoconnect`, `lastConnectTimeUtc`) and **migration/rollback** | `BluetoothDeviceManager` | Same class; only the BTMgr lookups inside it use the adapter | No PersistentStore or AS-file writes before `performMigration` (pre-migration plan §11); migration and rollback results identical (§6.6a) |
 
 ---
 
@@ -178,7 +180,7 @@ Do this at the start of **every** run and after every reboot/plugin restart.
 
 - Dual-backend image with a real SDK (not the stub), reachable device shell and logs.
 - Know the build flags (`BLUETOOTH_ENABLE_PERSISTENCE_MIGRATION` ON per the pre-migration plan).
-- `performMigration` never called (verify as in pre-migration plan "Prerequisites", P3).
+- For the core regression, `performMigration` never called (verify as in pre-migration plan "Prerequisites", P3). The migration/rollback plan lists its own prerequisites.
 - A JSON-RPC client (curl against `http://127.0.0.1:9998/jsonrpc`) **and** a way to subscribe to notifications (to observe events and order), since many parity points are event-related.
 - Device matrix (as many as available; see [§6.4](#64-device-matrix)):
   at least one headphone/speaker, one RDK remote control, one non-remote HID (keyboard), one gamepad (classic and/or LE), one phone/tablet (for incoming pairing/connection tests), one LE device.
@@ -240,6 +242,10 @@ The existing plan checks *what the API does*; the following checks target the *b
 | SUP-14 | **Concurrency** | Issue `connect` and `startScan` (or two device operations) close together, and a client `connect` immediately after a startup reconnect request; no deadlock, no "In Progress" error for an accepted flow |
 | SUP-15 | **Soak** | Several hours with periodic scan/pair/connect/disconnect cycles; monitor memory and CPU of the plugin process and look for D-Bus/IARM errors |
 
+### 6.6a Persistence migration and rollback
+
+Run every case in [paired_device_migration_manual_test_plan.md](./paired_device_migration_manual_test_plan.md) on A, B1 and B2 (each run on one backend only; no migration or rollback across a backend switch). It is the same procedure as for the other plans; see that plan for the cases, expected results and the log-wording difference (`adapter` vs `BTRMGR`). Why it matters for the SDK backend: see the last bullet of [§3.3](#33-optional-features-that-interact-with-backend-choice). Run it **after** the core regression (§6.5–6.6), or on a separate unit, then restore the clean state.
+
 ### 6.7 Automated tests to run alongside manual testing
 
 These are developer-level suites; QA should confirm they pass in CI for the build under test and use them as evidence.
@@ -259,7 +265,7 @@ File a defect (tag with backend: `BTMgr` / `SDK` / `Both`) when:
 - B2 differs from A in a way that §5 lists but **worse** than described (e.g. crash instead of a failure response) → defect.
 - Plugin fails to activate, silently selects the wrong backend, or both stacks fight over the adapter.
 
-Do **not** file: results listed in §5; the documented guard-driven results of the pre-migration plan (§5 there); pre-existing quirks present in baseline A.
+Do **not** file: results listed in §5; the documented guard-driven results of the pre-migration plan (§5 there); pre-existing quirks present in baseline A. §5 gaps do not apply to the migration/rollback plan.
 
 Include in each report: backend (and how you verified it), build/flags, device model/class, JSON-RPC request/response, notification trace, plugin log excerpt with timestamps.
 
@@ -270,7 +276,8 @@ Include in each report: backend (and how you verified it), build/flags, device m
 - [ ] Pre-migration regression plan executed on **both** backends; results recorded as A/B1/B2.
 - [ ] SUP-01 … SUP-15 executed on both backends (SUP-01/02 as applicable to the image type).
 - [ ] Every B2 difference is either a §5 known gap or a filed defect.
-- [ ] No PersistentStore or AS-file writes during the pass; `performMigration` never called.
+- [ ] No PersistentStore or AS-file writes during the core regression; `performMigration` never called until the migration/rollback plan.
+- [ ] Migration/rollback plan (§6.6a) executed on A, B1 and B2 with matching results; unit restored to the clean state.
 - [ ] No crashes, hangs or unexpected error logs on either backend.
 - [ ] L1/L2 suites green for the build under test.
 
@@ -281,7 +288,7 @@ Include in each report: backend (and how you verified it), build/flags, device m
 | Document | Use |
 |---|---|
 | [bluetooth_pre_migration_regression_test_plan.md](./bluetooth_pre_migration_regression_test_plan.md) | Core regression cases (run per backend) |
-| [paired_device_migration_manual_test_plan.md](./paired_device_migration_manual_test_plan.md) | Persistence migration/rollback (out of scope here) |
+| [paired_device_migration_manual_test_plan.md](./paired_device_migration_manual_test_plan.md) | Persistence migration/rollback (§6.6a) |
 | [bluetooth-l1-tests.md](./bluetooth-l1-tests.md) | L1/L2 automated test overview |
 | [Bluetooth/README.md](../Bluetooth/README.md) | API methods, responses, events |
 | [openspec/changes/btmgr-to-sdk-refactor/](../openspec/changes/btmgr-to-sdk-refactor/) | Design intent and dispatch/event/auth tables |

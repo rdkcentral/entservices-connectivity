@@ -15,7 +15,7 @@ The migration/rollback feature (`performMigration` / `clearMigration`) is **clie
 - No new persistence (`PersistentStore` `deviceInfo`/`migrationVersion`, or the AS filesystem file) is ever written.
 - No new runtime behavior (e.g. power-mode-triggered disconnects) activates.
 
-**Out of scope:** The mechanics of `performMigration`/`clearMigration` themselves (import correctness, rollback, reboot persistence, etc.) are covered by [paired_device_migration_manual_test_plan.md](./paired_device_migration_manual_test_plan.md). This plan assumes `performMigration` is **never** invoked at any point.
+**Out of scope:** The mechanics of `performMigration`/`clearMigration` themselves (import correctness, rollback, reboot persistence, etc.) are covered by [paired_device_migration_manual_test_plan.md](./paired_device_migration_manual_test_plan.md), which is also run on the baseline, the BTMgr backend and the SDK backend (see [bluetooth_backend_qa_test_guide.md](./bluetooth_backend_qa_test_guide.md), Part 3). This plan assumes `performMigration` is **never** invoked at any point, so run it before that plan, or restore the clean state first.
 
 ---
 

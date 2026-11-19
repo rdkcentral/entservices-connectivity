@@ -5,6 +5,7 @@
 **AS Persistent File:** `/opt/persistent/sky/sky-asperipherals-bluetoothdevices.json`  
 **PersistentStore Location:** namespace `Bluetooth`, key `deviceInfo`  
 **PersistentStore Migration Version Key:** namespace `Bluetooth`, key `migrationVersion`
+**Backends covered:** run on the baseline (A), the BTMgr-based implementation (B1) and the SDK-based implementation (B2), as described in [bluetooth_backend_qa_test_guide.md](./bluetooth_backend_qa_test_guide.md) (§4.3 for selecting and confirming the stack, §5.1 for A/B1/B2)
 
 ---
 
@@ -12,12 +13,22 @@
 
 Migration is **client-triggered**, not automatic. The plugin does **not** auto-migrate at init. The IUI/AS client is responsible for calling the appropriate API on first boot. Since no client (IUI/AS) currently calls these APIs, the tester simulates client behaviour directly via curl.
 
+### Running This Plan on Each Implementation
+
+Run every test case on A, B1 and B2 and record `A | B1 | B2 | Match? | Notes`. All results (responses, PersistentStore contents, AS file contents, log markers, behaviour after reboot) must be **identical** across the three runs. No known differences apply to this plan. Each run stays on one implementation: do not switch between BTMgr and SDK during a run or carry migration state into the next run. Between runs, restore the starting state (AS file fixture restored, both PS keys deleted, reboot). Confirm the active stack at the start of each run and after every reboot, since a failed SDK start silently falls back to BTMgr.
+
+Points to watch (the migration logic is shared, but some of the data comes from the active implementation):
+
+- **Log wording:** this build logs `adapter` where the baseline logs `BTRMGR`; both are listed where they appear and each is correct for its own build.
+- **`isGamePad` and `deviceType`:** must be the same for the same device on all three runs (see `TC-RB-04`).
+- **Gamepads:** on the SDK implementation an unpaired gamepad's connection request goes to the client like any other device's, so pair gamepads from the client side (`pair`/`connect`).
+
 ### Code-alignment check (source of truth)
 
 This plan was reviewed against the current implementation in `Bluetooth/BluetoothDeviceManager.cpp` and the runtime checks are as follows:
 
 - `performMigration()` reads `migrationVersion` from PersistentStore first. If it is already present and equals `1`, it short-circuits with `migration already completed (migrationVersion=1 present), no sync needed` and sets `_isMigrated=true` without re-importing the AS file.
-- `performMigration()` only imports the AS file when `migrationVersion` is absent or not equal to `1`; the import is followed by BTRMGR enrichment, then `deviceInfo` is written to PersistentStore, then `migrationVersion` is written last.
+- `performMigration()` only imports the AS file when `migrationVersion` is absent or not equal to `1`; the import is followed by backend enrichment (a query of the paired devices known to the active backend, BTMgr's `BTRMGR_*` API or the bluetooth-sdk), then `deviceInfo` is written to PersistentStore, then `migrationVersion` is written last.
 - `clearMigration()` deletes both `deviceInfo` and `migrationVersion`, clears the in-memory `_pairedDeviceCache`, and sets `_isMigrated=false`.
 - `init()` re-derives migration state from `migrationVersion` at startup; if the marker is absent, any stale `deviceInfo` is ignored and the cache is loaded read-only from the AS file (nothing is written to PersistentStore or the AS file) until a successful migration replaces it.
 - `setAutoConnect()`, `addDevice()`, `removeDevice()`, `setLastConnectTimeUtc()`, and `setLastVolumeSetting()` all skip persistence writes while `_isMigrated` is false; the AS filesystem sync is also gated by `_isMigrated`.
@@ -53,7 +64,8 @@ The implementation emits these runtime markers and the test plan should treat th
 - `migration not complete, returning disabled for deviceID=<ID>`
 - `migration not complete, skipping persistence write for deviceID=<ID>`
 - `Filesystem persistence sync succeeded: Persistence payload updated from cache, cache_size=N`
-- `imported cache is empty, skipping BTRMGR enrichment`
+- `imported cache is empty, skipping adapter enrichment` (baseline A: `imported cache is empty, skipping BTRMGR enrichment`)
+- `No adapter handle for addr=<MAC>, importing with MAC as key` (baseline A: `No BTRMGR handle for addr=<MAC>, importing with MAC as key`)
 
 A missing filesystem-sync success message is also a valid negative check for the pre-migration or rollback scenarios, because the implementation only calls `writeFilesystemPersistenceFromCache()` when `_isMigrated` is true.
 
@@ -598,14 +610,14 @@ ls -la /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json
 
 ### TC-RB-04: HID devices excluded from filesystem sync — except gamepads
 
-**Note:** BTRMGR reports both ordinary Human Interface Devices (e.g., keyboards, remotes) and gamepads using the same device-type string, `"HUMAN INTERFACE DEVICE"`. The plugin disambiguates gamepads via a dedicated `isGamePad` flag (set when BTRMGR reports device type `BTRMGR_DEVICE_TYPE_HID_GAMEPAD`) and excludes only **non-gamepad** HID devices from the AS filesystem file.
+**Note:** Both backends report ordinary Human Interface Devices (e.g., keyboards, remotes) and gamepads using the same device-type string, `"HUMAN INTERFACE DEVICE"`. The plugin disambiguates gamepads via a dedicated `isGamePad` flag and excludes only **non-gamepad** HID devices from the AS filesystem file. On BTMgr the flag is set when BTRMGR reports device type `BTRMGR_DEVICE_TYPE_HID_GAMEPAD`; on the SDK backend it is set by the gamepad classification in `AuthBridge`. **This is a high-risk case for the SDK backend:** the same gamepad and keyboard must produce the same `isGamePad` values, and therefore the same AS file content, on A, B1 and B2.
 
 **Steps:**
 1. Call `performMigration`.
 2. Pair a non-gamepad Human Interface Device (e.g., BT keyboard/remote identified as "HUMAN INTERFACE DEVICE", `isGamePad=false`).
 3. Verify it appears in PersistentStore `deviceInfo` with `"isGamePad": false`.
 4. Verify it does **NOT** appear in the filesystem file.
-5. Pair a Bluetooth gamepad (also reported by BTRMGR as type "HUMAN INTERFACE DEVICE", but classified `isGamePad=true`).
+5. Pair a Bluetooth gamepad (also reported as type "HUMAN INTERFACE DEVICE", but classified `isGamePad=true`). Use a classic and/or LE gamepad, whichever are available.
 6. Verify the gamepad appears in PersistentStore `deviceInfo` with `"isGamePad": true`.
 7. Verify the gamepad **DOES** appear in the filesystem file, unlike the non-gamepad HID device from steps 2–4.
 
@@ -707,7 +719,7 @@ curl --header "Content-Type: application/json" --request POST \
 
 **Expected Log Entries:**
 - `migration_attempted`
-- `imported cache is empty, skipping BTRMGR enrichment`
+- `imported cache is empty, skipping adapter enrichment` (baseline A: `... skipping BTRMGR enrichment`)
 - `initial migration succeeded`
 
 ---
@@ -751,7 +763,7 @@ curl --header "Content-Type: application/json" --request POST \
 **Expected Log Entries:**
 - `migration_attempted`
 - `filesystem persistence file does not exist: /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json` (logged by the persistence adapter when the file is not found; absent file is treated as empty — no error is returned)
-- `imported cache is empty, skipping BTRMGR enrichment`
+- `imported cache is empty, skipping adapter enrichment` (baseline A: `... skipping BTRMGR enrichment`)
 - `initial migration succeeded`
 
 ---
@@ -797,7 +809,7 @@ curl --header "Content-Type: application/json" --request POST \
 **Expected Log Entries:**
 - `migration_attempted`
 - `filesystem persistence file payload is not valid JSON, treating as default empty content` (invalid-JSON case) or `filesystem persistence file missing pairedDevices array, treating as default empty content` (missing-array case)
-- `imported cache is empty, skipping BTRMGR enrichment`
+- `imported cache is empty, skipping adapter enrichment` (baseline A: `... skipping BTRMGR enrichment`)
 - `initial migration succeeded`
 
 ---
@@ -806,7 +818,7 @@ curl --header "Content-Type: application/json" --request POST \
 
 > **State entering this section:** After TC-MIG-06, the AS file contains the missing-`pairedDevices`-array content and both PS keys are present (from TC-MIG-06's final `performMigration` call). TC-EDGE-01 includes a Setup block to restore the required state.
 
-### TC-EDGE-01: Device in AS file but no longer paired in BTRMGR — imported as a MAC-keyed entry
+### TC-EDGE-01: Device in AS file but no longer paired in the active backend — imported as a MAC-keyed entry
 
 **Precondition:** Both PS keys must be absent and the AS file must contain a device entry whose address is not in the platform's paired device list.
 
@@ -851,15 +863,15 @@ curl --header "Content-Type: application/json" --request POST \
 2. Read `deviceInfo` from PS.
 
 **Expected Results:**
-- Device with address `AA:BB:CC:DD:EE:FF` is **not** skipped. Because BTRMGR has no paired-device handle for that address, the device is imported into `deviceInfo` keyed by its MAC address (`AA:BB:CC:DD:EE:FF`) instead of a numeric BTRMGR device handle.
-- The mandatory BTRMGR enrichment step (backfill-only) does not remove or alter this MAC-keyed entry, since enrichment only touches entries whose key already matches a currently-paired BTRMGR handle.
-- Other valid (currently-paired) devices import normally, keyed by their BTRMGR device handle.
+- Device with address `AA:BB:CC:DD:EE:FF` is **not** skipped. Because the active backend (BTMgr or SDK) has no paired-device handle for that address, the device is imported into `deviceInfo` keyed by its MAC address (`AA:BB:CC:DD:EE:FF`) instead of a numeric device ID.
+- The mandatory enrichment step (backfill-only) does not remove or alter this MAC-keyed entry, since enrichment only touches entries whose key already matches a currently-paired device of the active backend.
+- Other valid (currently-paired) devices import normally, keyed by their numeric device ID (identical on both backends, derived from the MAC).
 - `performMigration` returns `{"success": true}`.
-- If the phantom device is later re-paired (so BTRMGR assigns it a handle), the next `addDevice` call evicts the MAC-keyed cache entry and replaces it with a handle-keyed entry for the same physical device.
+- If the phantom device is later re-paired (so the backend assigns it a device ID), the next `addDevice` call evicts the MAC-keyed cache entry and replaces it with a handle-keyed entry for the same physical device.
 
 **Expected Log Entries:**
 - `migration_attempted`
-- `No BTRMGR handle for addr=AA:BB:CC:DD:EE:FF, importing with MAC as key`
+- `No adapter handle for addr=AA:BB:CC:DD:EE:FF, importing with MAC as key` (baseline A: `No BTRMGR handle for addr=AA:BB:CC:DD:EE:FF, importing with MAC as key`)
 - `initial migration succeeded`
 
 **Expected Log Entries on later re-pairing (if exercised):**
@@ -967,6 +979,8 @@ curl --header "Content-Type: application/json" --request POST \
 
 ## Section 8: Firmware Rollback Scenario
 
+> **Backends:** Run `TC-ROLL-01` to `TC-ROLL-03` on B1 (BTMgr selected) and on B2 (SDK selected) of the "new" firmware, and compare with A. For B2, the migration, pairing and the AS file sync in the "new firmware" steps are performed with the SDK backend active, and the "old firmware" is the pre-migration image (AS-managed persistence, BTMgr only). The old firmware must read the AS file written by the SDK-backed plugin without any loss, so also compare the AS file content (entries, `autoConnectStatus`, which devices are present) between B1 and B2 after the same pairing steps.
+
 ### TC-ROLL-01: Rollback — downgrade firmware and verify AS reads correct data
 
 **Precondition:** Device running new firmware. `performMigration` has been called. Several devices paired.
@@ -1038,4 +1052,12 @@ This test simulates the "IUI LD Disabled" scenario from the design, where IUI ca
 **Expected Log Entries (step 9):**
 - `migration_attempted`
 - `initial migration succeeded`
+
+---
+
+## Section 9: Exit Criteria
+
+- [ ] Sections 1–8 executed on A, B1 and B2 with the same unit, devices and AS file fixture, and the active stack confirmed for each run.
+- [ ] Every B1 and B2 result matches A (apart from the `BTRMGR`/`adapter` log wording), including `TC-RB-04` `isGamePad` values and AS file content.
+- [ ] No crashes, hangs or unexpected errors; clean starting state restored at the end.
 
