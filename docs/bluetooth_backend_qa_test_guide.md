@@ -10,7 +10,7 @@ A developer-oriented companion with implementation detail is available in [bluet
 
 ## 1. What changed and what you are testing
 
-The Bluetooth service (`org.rdk.Bluetooth`) is being moved from the legacy **BTMgr** Bluetooth stack to the new **Bluetooth SDK** stack. Both are included in the same build, and a device setting decides which one is used.
+The Bluetooth service (`org.rdk.Bluetooth`) is being moved from the legacy **BTMgr** Bluetooth stack to the new **Bluetooth SDK** stack. Each is delivered as its own pre-built firmware (SDK-based or BTMgr-based), and you switch between them by loading the matching firmware.
 
 **The promise to clients (IUI, apps, scripts) is that nothing changes:** same API methods, same parameters, same responses, same notifications, same device IDs, same behavior with real devices.
 
@@ -41,7 +41,7 @@ Internal log differences are **not** failures. Only differences a client or a us
 
 ## 3. Known differences (expected — do not file as new bugs)
 
-These differences were reviewed with the SDK team (see [bluetooth_sdk_gap_report.md](./bluetooth_sdk_gap_report.md)). Almost all were accepted: they only matter for audio-in (stream-in) or are handled by the plugin, so they are **by design**. The one open item is `getName`, which the SDK team will add. Confirm that each behaves as described, and record it as **"known difference – confirmed"**. Anything that behaves differently from what is described here **is** a defect.
+These differences were reviewed with the SDK team (see [bluetooth_sdk_gap_report.md](./bluetooth_sdk_gap_report.md)). Almost all were accepted: they only matter for audio-in (stream-in) or are handled by the plugin, so they are **by design**. The one open item is `getName`, which the SDK team will add. Confirm that each behaves as described, and record it as **"known difference – confirmed"**. None of them is a blocker for this release. Anything that behaves differently from what is described here **is** a defect.
 
 | Feature | BTMgr stack | SDK stack (today) | Why |
 |---|---|---|---|
@@ -71,10 +71,10 @@ Everything else is expected to behave exactly like the baseline.
 
 ### 4.1 Test set-up
 
-- A device image that contains **both** stacks and a **real** Bluetooth SDK (not the placeholder/stub SDK).
+- Pre-built firmware for **both** implementations (BTMgr-based and SDK-based). The SDK-based firmware must contain a **real** Bluetooth SDK (not the placeholder/stub SDK).
 - Shell access to the device and its logs.
 - A way to call the Bluetooth API (curl to `http://127.0.0.1:9998/jsonrpc`) **and** a way to watch notifications as they arrive. Many checks are about notifications and their order.
-- Confirm with dev which build options are in use (the existing test plans assume the persistence-migration option is **on**). For Parts 1 and 2, confirm that `performMigration` has never been called on the unit. Part 3 also needs the old and new firmware images (see its plan).
+- The build options come with the pre-built firmware you load; you do not control them, so there is nothing to confirm. For Parts 1 and 2, confirm that `performMigration` has never been called on the unit. Part 3 also needs the old and new firmware images (see its plan).
 
 ### 4.2 Test devices
 
@@ -90,11 +90,9 @@ Class matters because each class is handled differently. Use at least one of eac
 
 ### 4.3 Selecting and confirming the stack
 
-- **Select SDK:** set `BLUETOOTH_SDK_ENABLED=true` in `/etc/device.properties`, then restart the Bluetooth service (deactivate/activate).
-- **Select BTMgr:** remove the setting (or set it to anything other than `true`), then restart the Bluetooth service.
-- Ask dev for the approved way to switch a unit (including whether other services must be stopped). Never run both stacks at the same time.
+- **Select SDK or BTMgr:** load the matching firmware (SDK-based or BTMgr-based), as you already do. Never run both stacks at the same time.
 
-> **Always confirm which stack is actually running.** If the SDK cannot start (for example, no adapter), the service silently falls back to BTMgr. A "SDK run" that is really BTMgr is a false pass.
+> **Always confirm which stack is actually running.** If the SDK cannot start (for example, no adapter) on firmware that also contains BTMgr, the service silently falls back to BTMgr. A "SDK run" that is really BTMgr is a false pass.
 >
 > In the Bluetooth service log:
 > - SDK running: you will see `BtSdkAdapterImpl::init: exit successfully`.
@@ -103,7 +101,7 @@ Class matters because each class is handled differently. Use at least one of eac
 >
 > Do this at the start of every run and after every reboot or service restart.
 
-> On an image built **without** BTMgr, the SDK is always used, and the Bluetooth service will fail to start if the SDK cannot start (there is no fallback).
+> On firmware built **without** BTMgr, the SDK is always used, and the Bluetooth service will fail to start if the SDK cannot start (there is no fallback).
 
 ---
 
@@ -115,11 +113,11 @@ Run each scenario three ways and compare:
 
 | Run | What it is | Expectation |
 |---|---|---|
-| **A** | Baseline: the **nightly develop branch build** | Reference results. Recorded results may be reused only if they came from the most recent nightly develop build; otherwise re-run A |
-| **B1** | This build, **BTMgr** selected | Must match A |
-| **B2** | This build, **SDK** selected | Must match A, except for the known differences in [§3](#3-known-differences-expected--do-not-file-as-new-bugs) |
+| **A** | Baseline: the **nightly develop branch build** | Reference results. No recorded baseline exists: load the latest nightly develop build and run the scenarios on it yourself |
+| **B1** | This build, **BTMgr-based** firmware | Must match A |
+| **B2** | This build, **SDK-based** firmware | Must match A, except for the known differences in [§3](#3-known-differences-expected--do-not-file-as-new-bugs) |
 
-Both B runs are compared with the nightly develop build, so that **both** implementations (BTMgr and SDK) are shown to align with the legacy behavior as it is in the nightly develop build. Run A, B1 and B2 on the same unit, with the same test devices, the same client build and the same scenarios. Build B from this branch brought up to date with the develop commit the nightly was built from, so a difference is not just a develop change that B is missing. Whenever a newer nightly is available, refresh A (and check that B still contains its changes) before you sign off.
+Both B runs are compared with the nightly develop build, so that **both** implementations (BTMgr and SDK) are shown to align with the legacy behavior as it is in the nightly develop build. Run A, B1 and B2 on the same unit, with the same test devices, the same client build and the same scenarios. Build B from this branch brought up to date with the develop commit the nightly was built from, so a difference is not just a develop change that B is missing. Whenever a newer nightly is available, re-run A (and check that B still contains its changes) before you sign off.
 
 A simple result table per case works well: `Case | A | B1 | B2 | Match? | Known difference? | Notes`.
 
@@ -151,8 +149,8 @@ These focus on behavior that BTMgr performed on its own and the SDK stack had to
 
 | ID | What to check | What to compare |
 |---|---|---|
-| SUP-01 | **Stack selection** | Setting `true` → SDK; setting absent, `false` or a nonsense value → BTMgr. If the SDK cannot start on a dual-stack image (for example, disconnect/disable the adapter or use a stub SDK), the service falls back to BTMgr and still starts. On an SDK-only image the service fails to start with a clear error |
-| SUP-02 | **Switching stacks on one unit** | Pair devices on BTMgr, switch to SDK (and back), restart the service: paired devices are still listed with the **same device IDs**, and previously saved details (last connect time, auto-connect) are unaffected |
+| SUP-01 | **Stack selection** | After loading each firmware, confirm from the log that the expected stack is running ([§4.3](#43-selecting-and-confirming-the-stack)). If the SDK cannot start (for example, disconnect/disable the adapter) on firmware that also contains BTMgr, the service falls back to BTMgr and still starts. On SDK-only firmware the service fails to start with a clear error |
+| SUP-02 | **Switching stacks on one unit** | Pair devices on the BTMgr-based firmware, load the SDK-based firmware (and back), restart the service: paired devices are still listed with the **same device IDs**, and previously saved details (last connect time, auto-connect) are unaffected |
 | SUP-03 | **Device IDs** | For each test device, the device ID is identical on both stacks and the baseline |
 | SUP-04 | **Device types** | For every device in the set, compare the `deviceType` text in all device lists, `getDeviceInfo` and notifications. Pay attention to grouped types: soundbar/portable/car/hi-fi audio all show as `LOUDSPEAKER`; keyboard and remote both show as `HUMAN INTERFACE DEVICE` |
 | SUP-05 | **Scan by profile** | Run `startScan` with each profile (no profile, audio output, smartphone/tablet, HID, audio+HID, LE). Compare which devices are found. RDK remotes should appear only when no profile (or an unrecognized profile) is given. Also try different `timeout` values, including 0 or less, and `stopScan`. During a scan, connect (or pair a non-HID device): the scan stops quietly, the found-devices list stays and no "device not found" message appears; check that `DISCOVERY_COMPLETED` arrives once, when the scan is ended, and that a new scan can be started |
@@ -195,19 +193,10 @@ Run it **after Parts 1 and 2** (or on a separate unit): it changes PersistentSto
 ## 7. Sign-off checklist
 
 - [ ] Active stack confirmed at the start of every run ([§4.3](#43-selecting-and-confirming-the-stack)).
-- [ ] Baseline A was taken from the nightly develop build (or its recorded results are from the most recent nightly), and B1 and B2 were both compared with it.
+- [ ] Baseline A was run on the latest nightly develop build, and B1 and B2 were both compared with it.
 - [ ] Existing regression plan completed on **both** stacks, results recorded as A / B1 / B2.
-- [ ] SUP-01 to SUP-15 completed on both stacks, except SUP-10 (SDK team) (SUP-01 and SUP-02 as applicable to the image).
+- [ ] SUP-01 to SUP-15 completed on both stacks, except SUP-10 (SDK team) (SUP-01 and SUP-02 as applicable to the firmware).
 - [ ] Migration and rollback plan (Part 3) completed on A, B1 and B2 with matching results, and the unit restored to its clean starting state. During Parts 1 and 2, no saved device data was written and `performMigration` was never called.
 - [ ] Every B2 difference is either a known difference or a filed defect.
 - [ ] During Parts 1 and 2, no saved device data was written and `performMigration` was never called. After Part 3, the unit was restored to its clean starting state.
 - [ ] No crashes, hangs or unexpected errors on either stack.
-
----
-
-## 8. Questions to settle with the dev team before starting
-
-1. What is the approved procedure for switching a unit between BTMgr and SDK?
-2. Are the known differences in [§3](#3-known-differences-expected--do-not-file-as-new-bugs) accepted for this release, or are any of them blockers?
-3. Which build options is the build under test using?
-4. Which baseline results (run A) already exist, which nightly build they came from, and whether a newer nightly exists, so they need not be repeated?
