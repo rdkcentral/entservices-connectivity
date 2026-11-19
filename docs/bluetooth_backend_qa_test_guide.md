@@ -1,0 +1,202 @@
+# Bluetooth: BTMgr vs. SDK Regression — QA Test Guide
+
+**Audience:** QA / test engineers
+**Purpose:** Explain *what* you are testing, *why*, and *how to approach it*. This is a **manual** test effort on a real device. Detailed test cases live in the existing test plan linked in [§5](#5-test-plan); this guide tells you how to use it and what to add.
+**Baseline:** the existing Bluetooth behavior of the **nightly develop branch build**, i.e. the legacy implementation as it is in the nightly develop build, not an older build.
+
+A developer-oriented companion with implementation detail is available in [bluetooth_backend_developer_test_guide.md](./bluetooth_backend_developer_test_guide.md). You do not need it to run this plan.
+
+---
+
+## 1. What changed and what you are testing
+
+The Bluetooth service (`org.rdk.Bluetooth`) is being moved from the legacy **BTMgr** Bluetooth stack to the new **Bluetooth SDK** stack. Each is delivered as its own pre-built firmware (SDK-based or BTMgr-based), and you switch between them by loading the matching firmware.
+
+**The promise to clients (IUI, apps, scripts) is that nothing changes:** same API methods, same parameters, same responses, same notifications, same device IDs, same behavior with real devices.
+
+Your job is **regression testing**: show that the SDK-based Bluetooth behaves like the existing BTMgr-based Bluetooth, from the outside. You do this by running the same scenarios on each of the two stacks and comparing the results to the baseline.
+
+> **Why this needs real testing:** BTMgr did a lot of things automatically that clients rely on (hiding certain devices during scans, deciding which incoming connections to accept, reconnecting the last speaker at boot, power-state handling). The SDK stack had to re-create all of that. Gaps show up as behavior differences, so those are the areas to look at hardest.
+
+### Out of scope
+
+- New features and anything not related to the BTMgr → SDK change.
+- **Gamepads.** The SDK team does all gamepad testing (pairing, connection rules, naming, sleep handling and the gamepad-specific differences from BTMgr). Do not test or file gamepad defects here; see [bluetooth_sdk_gamepad_gap.md](./bluetooth_sdk_gamepad_gap.md).
+
+> The paired-device *persistence migration and rollback* feature (`performMigration` / `clearMigration`) **is in scope**, as a separate step: see [Part 3](#54-part-3--persistence-migration-and-rollback). **Parts 1 and 2 must be run with `performMigration` never called**, so do Part 3 last (or on its own unit). If these APIs are called by accident during Parts 1 or 2, restore the starting state as described in the pre-migration plan.
+
+---
+
+## 2. What "the same" means
+
+For every scenario, compare these three things between the baseline and each stack:
+
+1. **The API response** — success/failure and the returned fields (device lists, device IDs, device types, names, etc.).
+2. **The notifications received** — which ones, with what values, **in what order**, and roughly when. In particular, a notification about an action (for example a pairing or connection change) must arrive **after** the response to that action.
+3. **What actually happens with the device** — it pairs, connects, disconnects, appears or does not appear in scans, reconnects after reboot, and so on.
+
+Internal log differences are **not** failures. Only differences a client or a user could notice are.
+
+---
+
+## 3. Known differences (expected — do not file as new bugs)
+
+These differences were reviewed with the SDK team (see [bluetooth_sdk_gap_report.md](./bluetooth_sdk_gap_report.md)). Almost all were accepted: they only matter for audio-in (stream-in) or are handled by the plugin, so they are **by design**. The one open item is `getName`, which the SDK team will add. Confirm that each behaves as described, and record it as **"known difference – confirmed"**. None of them is a blocker for this release. Anything that behaves differently from what is described here **is** a defect.
+
+| Feature | BTMgr stack | SDK stack (today) | Why |
+|---|---|---|---|
+| Get the box's Bluetooth name (`getName`) | Works | Fails (reported as unsupported) until the SDK adds a getter. **Open:** the SDK team will add it, and the plugin then wires it in; re-check this after an SDK update | The SDK has no adapter-name getter (it only has a setter), so the plugin has nothing to call. The SDK team will add one. |
+| Set the box's Bluetooth name (`setName`) | Works (names longer than 63 bytes are cut) | Works the same; as `getName` is unsupported on this stack, confirm the new name with `bluetoothctl show` (the `Alias` line) | Works: the SDK has a name setter. Listed because the read-back (`getName`) is missing, so check with `bluetoothctl show`. |
+| Discoverable mode (`isDiscoverable`, `setDiscoverable`) | Works | Fails (reported as unsupported). **Accepted:** only audio-in needs it, and LE advertising covers the current devices | The SDK has no adapter discoverable API. Only audio-in (stream-in) needs it, and LE advertising covers the current devices. |
+| Failed pair or connect | Response `success:false` **and** an `onRequestFailed` notification | Response `success:false` only; **no** `onRequestFailed` (accepted: the plugin uses the synchronous pair/connect calls, so the response is the failure signal) | The plugin uses the SDK's blocking pair/connect, which return the failure directly, and the SDK sends no failure events. BTMgr is asynchronous, so it needs the event. |
+| Connecting an audio output device while another one is connected | The other one is disconnected first, then the new one connects | Same (the plugin does it). Smartphones and tablets are not audio output devices and are left connected. A device that connects *from its own side* is not handled yet. With this rule only one audio output device is connected at a time, so `getConnectedDevices` lists the one that is streaming, as on BTMgr | Works: BTMgr disconnects other speakers before connecting a new one and the SDK does not, so the plugin does it. A device connecting from its own side is not covered yet. |
+| Playback and track control (`sendAudioPlaybackCommand` with `PLAY`, `PAUSE`, `STOP`, `SKIP_NEXT` and the like), track info (`getAudioInfo`), `setAudioStream` with `AUXILIARY` | Works | Fails / returns nothing (stream-in features, **accepted**: the SDK does not use a media player, and its one stream is `PRIMARY`; `AUXILIARY` can be added later if a platform needs it). `setAudioStream` with `PRIMARY` succeeds | These use the AVRCP media player, which the SDK will not use (needed for stream-in only). The SDK has only one stream, `PRIMARY`. |
+| Playback notifications (`onPlaybackChange`, `onPlaybackProgress`, `onPlaybackNewTrack`, `onPlaybackRequest`) | Sent | Not sent (stream-in features, accepted) | They come from the media player and A2DP transport state, which the SDK does not provide (stream-in only). |
+| Audio from a phone or tablet into the box (stream-in, only on builds where BTMgr has it enabled) | Works | Not available: a plain connect is used and the phone-to-box audio path is not enabled | Needs A2DP sink, which is not enabled (no `a2dp_sink` role in WirePlumber). The SDK connect is plain, and it covers speakers and headphones only. |
+| A scan running when you connect (or pair, except HID) a device | The scan is stopped quietly first; a background scan is resumed afterwards | The scan is stopped quietly first (the client's list is not cleared and `DISCOVERY_COMPLETED` is sent only when the client ends the scan); it is **not** resumed afterwards | The SDK scan is owned by the client. The plugin only stops it so the connect can proceed and does not restart it (plugin behavior, not an SDK limit). |
+| Pairing headphones/speakers | Pairing is reported (`PAIRING_CHANGE`); the client then connects | Same notifications (`PAIRING_CHANGE` with `connected:false`, then `CONNECTION_CHANGE` after the connect response). The connect right after a pair takes a few seconds longer (the link is cycled to bring up audio), and between pair and connect the device may already be listed as connected | BlueZ connects the device during pairing without its audio profile, so the plugin disconnects and reconnects once to bring up audio. This is why the connect is slower. |
+
+Not differences (a mismatch here **is** a defect): volume and mute work the same on both stacks (`getDeviceVolumeMuteInfo` and `setDeviceVolumeMuteInfo` use 0 to 255, `VOLUME_UP`, `VOLUME_DOWN`, `AUDIO_MUTE` and `AUDIO_UNMUTE` work, the last volume and mute are kept and the volume is restored when the speaker reconnects, and `onDeviceMediaStatus` is sent after every change including those made with the speaker's own buttons); `activeState` in `getConnectedDevices` is `"1"` for every connected device, and `getDeviceInfo` reports `rssi` and `signalStrength` exactly as the baseline does. For a **paired** device both are `"0"` on every stack. For a device that is **not paired** (for example found by a scan), `rssi` is the raw value and `signalStrength` is 1 to 4 (4 at -60 or stronger, 3 at -70, 2 at -90, otherwise 1); when no RSSI is known the baseline shows `-2147483648` and `1`.
+
+Also, **do not file** these either:
+
+- Anything that was already like that on the baseline (for example, the `RESTART` playback command failing).
+- The "expected divergence" behaviors in the existing test plan, such as `setAutoConnect` being rejected and `getAutoConnect` reporting `false` when migration was never performed. These are the same on both stacks and are by design.
+
+Everything else is expected to behave exactly like the baseline.
+
+---
+
+## 4. Before you start
+
+### 4.1 Test set-up
+
+- Pre-built firmware for **both** implementations (BTMgr-based and SDK-based). The SDK-based firmware must contain a **real** Bluetooth SDK (not the placeholder/stub SDK).
+- Shell access to the device and its logs.
+- A way to call the Bluetooth API (curl to `http://127.0.0.1:9998/jsonrpc`) **and** a way to watch notifications as they arrive. Many checks are about notifications and their order.
+- The build options come with the pre-built firmware you load; you do not control them, so there is nothing to confirm. For Parts 1 and 2, confirm that `performMigration` has never been called on the unit. Part 3 also needs the old and new firmware images (see its plan).
+
+### 4.2 Test devices
+
+Class matters because each class is handled differently. Use at least one of each if you can:
+
+| Device | Why it is in the set |
+|---|---|
+| Headphones or speaker (and soundbar if available) | Device type naming, automatic reconnect at boot, short connection-request window |
+| RDK remote control | Hidden from filtered scans, accepted automatically, must keep working while the box sleeps |
+| Keyboard or other non-remote HID device | Accepted automatically, disconnected when the box sleeps |
+| Smartphone or tablet | Starts pairing/connection itself; the client is asked |
+| Low-energy tag/tile | Device type and LE scan |
+
+### 4.3 Selecting and confirming the stack
+
+- **Select SDK or BTMgr:** load the matching firmware (SDK-based or BTMgr-based), as you already do. Never run both stacks at the same time.
+
+> **Always confirm which stack is actually running.** If the SDK cannot start (for example, no adapter) on firmware that also contains BTMgr, the service silently falls back to BTMgr. A "SDK run" that is really BTMgr is a false pass.
+>
+> In the Bluetooth service log:
+> - SDK running: you will see `BtSdkAdapterImpl::init: exit successfully`.
+> - SDK requested but not running: you will see `BtAdapter::init: sdkError:` followed by an error message. **Stop and report this**; it is not a valid SDK run.
+> - BTMgr running: no `BtSdkAdapterImpl` lines appear.
+>
+> Do this at the start of every run and after every reboot or service restart.
+
+> On firmware built **without** BTMgr, the SDK is always used, and the Bluetooth service will fail to start if the SDK cannot start (there is no fallback).
+
+---
+
+## 5. Test plan
+
+### 5.1 Approach
+
+Run each scenario three ways and compare:
+
+| Run | What it is | Expectation |
+|---|---|---|
+| **A** | Baseline: the **nightly develop branch build** | Reference results. No recorded baseline exists: load the latest nightly develop build and run the scenarios on it yourself |
+| **B1** | This build, **BTMgr-based** firmware | Must match A |
+| **B2** | This build, **SDK-based** firmware | Must match A, except for the known differences in [§3](#3-known-differences-expected--do-not-file-as-new-bugs) |
+
+Both B runs are compared with the nightly develop build, so that **both** implementations (BTMgr and SDK) are shown to align with the legacy behavior as it is in the nightly develop build. Run A, B1 and B2 on the same unit, with the same test devices, the same client build and the same scenarios. Build B from this branch brought up to date with the develop commit the nightly was built from, so a difference is not just a develop change that B is missing. Whenever a newer nightly is available, re-run A (and check that B still contains its changes) before you sign off.
+
+A simple result table per case works well: `Case | A | B1 | B2 | Match? | Known difference? | Notes`.
+
+### 5.2 Part 1 — Core regression: run the existing plan on each stack
+
+Use [bluetooth_pre_migration_regression_test_plan.md](./bluetooth_pre_migration_regression_test_plan.md) (cases `TC-PREREG-01` to `TC-PREREG-26`). It was written for exactly this situation: normal Bluetooth use with `performMigration` never called. **Run it on B1 and on B2**, and compare with A.
+
+| Plan section | Covers | B1 (BTMgr) | B2 (SDK) | Notes for this effort |
+|---|---|---|---|---|
+| 1. Baseline / initial state | Boot state | Run | Run | Add the stack check from [§4.3](#43-selecting-and-confirming-the-stack) |
+| 2. Discovery & scanning | Scan, stop, discovered list, scan notifications | Run | Run | Also repeat per scan profile (see Part 2) |
+| 3. Pairing & unpairing | Pair/unpair | Run | Run | Watch notification order |
+| 4. Connection management | Connect/disconnect | Run | Run | |
+| 5. AutoConnect guard | Expected "divergence" for auto-connect | Run | Run | Same on both; not a bug |
+| 6. Device info, audio & playback | Device info, audio, playback commands, responding to requests | Run | **Partly** | Volume and mute (`getDeviceVolumeMuteInfo`, `setDeviceVolumeMuteInfo`, the volume and mute commands, `onDeviceMediaStatus`) must pass on both stacks. Playback commands, `getAudioInfo` and `setAudioStream` with `AUXILIARY` are accepted known differences on SDK. `getDeviceInfo` (including `rssi` and `signalStrength`) and responding to requests must pass |
+| 7. Volume & mute | Volume/mute | Run | Run | Must match on both stacks (volume and mute are **not** a difference; see [§3](#3-known-differences-expected--do-not-file-as-new-bugs)) |
+| 8. Adapter control | Enable/disable, discoverable, name | Run | **Partly** | `enable`/`disable` and `setName` must pass; `getName` (open, SDK getter planned) and discoverable (accepted) are known differences on SDK |
+| 9. HID devices | Pairing and connecting HID devices (keyboard, remote; gamepads are covered by the SDK team) | Run | Run | Device type must read `HUMAN INTERFACE DEVICE` on both |
+| 10. Power management | Behavior on power state changes | Run | Run | Also see Part 2 (reconnect) |
+| 11. No unwanted saved data | Nothing written to stored device data | Run | Run | |
+| 12. Lifecycle / reboot | Restart service, reboot | Run | Run | |
+| 13. Startup reconnect | Reconnect of last audio device at boot | **Check result only** | **Run** | On BTMgr just confirm the last speaker reconnects at boot and on power-on |
+
+Apply the plan's exit checklist to each stack, reading "identical to a non-migration-capable build" as "identical to baseline A, apart from the known differences."
+
+### 5.3 Part 2 — Extra checks for the areas most likely to differ
+
+These focus on behavior that BTMgr performed on its own and the SDK stack had to reproduce. They are **not** covered by the existing plan. Run each on B1 and B2 and compare with A.
+
+| ID | What to check | What to compare |
+|---|---|---|
+| SUP-01 | **Stack selection** | After loading each firmware, confirm from the log that the expected stack is running ([§4.3](#43-selecting-and-confirming-the-stack)). If the SDK cannot start (for example, disconnect/disable the adapter) on firmware that also contains BTMgr, the service falls back to BTMgr and still starts. On SDK-only firmware the service fails to start with a clear error |
+| SUP-02 | **Switching stacks on one unit** | Pair devices on the BTMgr-based firmware, load the SDK-based firmware (and back), restart the service: paired devices are still listed with the **same device IDs**, and previously saved details (last connect time, auto-connect) are unaffected |
+| SUP-03 | **Device IDs** | For each test device, the device ID is identical on both stacks and the baseline |
+| SUP-04 | **Device types** | For every device in the set, compare the `deviceType` text in all device lists, `getDeviceInfo` and notifications. Pay attention to grouped types: soundbar/portable/car/hi-fi audio all show as `LOUDSPEAKER`; keyboard and remote both show as `HUMAN INTERFACE DEVICE` |
+| SUP-05 | **Scan by profile** | Run `startScan` with each profile (no profile, audio output, smartphone/tablet, HID, audio+HID, LE). Compare which devices are found. RDK remotes should appear only when no profile (or an unrecognized profile) is given. Also try different `timeout` values, including 0 or less, and `stopScan`. During a scan, connect (or pair a non-HID device): the scan stops quietly, the found-devices list stays and no "device not found" message appears; check that `DISCOVERY_COMPLETED` arrives once, when the scan is ended, and that a new scan can be started |
+| SUP-06 | **Names during discovery** | Use devices that advertise without a name (speaker, phone). Compare the name shown and how long the device takes to appear. Expect devices to take up to a few seconds to appear on SDK; a late name can take up to ~2 s (and a changed type up to ~5 s) to show in `getDiscoveredDevices` |
+| SUP-07 | **Notifications and their order** | For `pair`, `unpair`, `connect`, `disconnect`, `enable`, `disable`: record the response and every notification (`onStatusChanged` and its values, etc.). Notification must come **after** the response; nothing missing. For a pair of headphones, only `PAIRING_CHANGE` (not connected) is expected; the `CONNECTION_CHANGE` follows the client's own connect. For a scan stopped by a connect or pair, no `DISCOVERY_COMPLETED` is expected until the scan is ended. For scans: scan started/completed notifications, `onDiscoveredDevice`, `onDeviceFound`, `onDeviceLost` |
+| SUP-08 | **Failures** | Pair/connect a device that is off, out of range or rejects; pair an already-paired device; connect an unpaired device; use an unknown device ID. Compare the failure response on both stacks. `onRequestFailed` is expected on the BTMgr stack only; do not file its absence on the SDK stack |
+| SUP-09 | **Requests started by the device** | Pair/connect *from* a phone/tablet, headphones, remote/keyboard. Compare: which request notification the client gets (`onPairingRequest` / `onConnectionRequest`), whether accept and reject (via `respondToEvent`) are honored, and what happens when nobody answers (it should be rejected after a short, device-specific wait). Judge by baseline A, not by an assumed time |
+| SUP-10 | **Gamepads and sleep** | Not run here: gamepad testing is done by the SDK team |
+| SUP-11 | **Reconnect at power-on** | With a speaker/headphones that was the last one used, (a) reboot and (b) wake from standby. It reconnects by itself on both stacks, in comparable time. If an audio device is already connected, nothing extra connects. A client rejecting the connection request keeps it disconnected |
+| SUP-12 | **Enable/disable cycling** | Repeat `disable` / `enable` several times with devices paired. Lists and notifications stay consistent; no stale "connected" devices when the adapter is off |
+| SUP-13 | **Service restart under load** | Deactivate/activate the Bluetooth service 10+ times, including while a scan runs or a request is waiting for an answer. No hangs or crashes; works after each restart; also after reboot |
+| SUP-14 | **Overlapping actions** | Start two actions at once (for example `connect` while scanning: the scan is stopped first, see SUP-05), and connect from the client right after a startup reconnect request. No hangs, and no "In Progress" error where the baseline has none |
+| SUP-15 | **Soak** | Run for several hours with periodic scan / pair / connect / disconnect cycles. Watch for memory growth, high CPU, or repeated errors in logs |
+
+### 5.4 Part 3 — Persistence migration and rollback
+
+Run every case in [paired_device_migration_manual_test_plan.md](./paired_device_migration_manual_test_plan.md) on **A, B1 and B2**, the same way as the other parts (same unit, devices and client; confirm the stack as in [§4.3](#43-selecting-and-confirming-the-stack)). Results must match A; no known differences from [§3](#3-known-differences-expected--do-not-file-as-new-bugs) apply. Each run stays on one stack: do not test migration or rollback across a BTMgr ↔ SDK switch.
+
+Run it **after Parts 1 and 2** (or on a separate unit): it changes PersistentStore and the AS file, and Parts 1 and 2 need `performMigration` to have never been called. Restore the clean starting state afterwards, as described in that plan.
+
+---
+
+## 6. Judging results
+
+**A case passes** when B1 and B2 results match baseline A in the response, notifications (including order) and real device behavior, apart from the known differences in [§3](#3-known-differences-expected--do-not-file-as-new-bugs).
+
+**File a defect** when:
+
+- **B1 differs from A** — the existing path changed.
+- **B2 differs from A** and it is **not** a known difference — a gap in the SDK stack (examples: wrong device type text, a missing or out-of-order notification, a device shown or hidden in a scan when it shouldn't be, a connection accepted/rejected differently, a reconnect or sleep behavior that doesn't match).
+- A known difference is **worse than described** (for example, a crash instead of a failure response).
+- The Bluetooth service fails to start, selects a different stack than configured, or something else is fighting over the Bluetooth adapter.
+
+**In every defect, include:** which stack (BTMgr or SDK) and how you confirmed it, build information, the device and its class, the request and response, the notifications received (with times), and the relevant log excerpt.
+
+**Do not file:** known differences ([§3](#3-known-differences-expected--do-not-file-as-new-bugs)); behavior that was already that way on the baseline; the expected "guard" results in the existing plan.
+
+---
+
+## 7. Sign-off checklist
+
+- [ ] Active stack confirmed at the start of every run ([§4.3](#43-selecting-and-confirming-the-stack)).
+- [ ] Baseline A was run on the latest nightly develop build, and B1 and B2 were both compared with it.
+- [ ] Existing regression plan completed on **both** stacks, results recorded as A / B1 / B2.
+- [ ] SUP-01 to SUP-15 completed on both stacks, except SUP-10 (SDK team) (SUP-01 and SUP-02 as applicable to the firmware).
+- [ ] Migration and rollback plan (Part 3) completed on A, B1 and B2 with matching results, and the unit restored to its clean starting state. During Parts 1 and 2, no saved device data was written and `performMigration` was never called.
+- [ ] Every B2 difference is either a known difference or a filed defect.
+- [ ] During Parts 1 and 2, no saved device data was written and `performMigration` was never called. After Part 3, the unit was restored to its clean starting state.
+- [ ] No crashes, hangs or unexpected errors on either stack.
