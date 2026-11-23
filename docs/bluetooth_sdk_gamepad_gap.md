@@ -1,6 +1,6 @@
 # Gamepad logic in BTMgr that the SDK-based plugin does not have
 
-This note lists the gamepad rules that BTMgr applies and that the plugin does not yet apply on the SDK backend. It is meant for review with the SDK team. See also [bluetooth_sdk_gap_report.md](./bluetooth_sdk_gap_report.md) and the known-differences table in [bluetooth_backend_qa_test_guide.md](./bluetooth_backend_qa_test_guide.md).
+This note lists the gamepad rules that BTMgr applies and that the plugin does not apply on the SDK backend, and who owns each one. The SDK team has reviewed the list: the SDK handles most of it, the plugin handles the Stadia autoconnect case only, and the RFC gate is not needed for now (see the summary at the end). See also [bluetooth_sdk_gap_report.md](./bluetooth_sdk_gap_report.md) and the known-differences table in [bluetooth_backend_qa_test_guide.md](./bluetooth_backend_qa_test_guide.md).
 
 Sources: `btrMgr_ConnectionInAuthCb` and related code in `bluetooth_mgr/src/ifce/btrMgr.c`, `bluetooth/src/btrCore.c`, `bluetooth_mgr/include/btmgr.h`. The plugin side is `Bluetooth/AuthBridge.cpp` and `Bluetooth/AuthBridge.h`.
 
@@ -32,13 +32,14 @@ Sources: `btrMgr_ConnectionInAuthCb` and related code in `bluetooth_mgr/src/ifce
 - BTMgr reads `Device.DeviceInfo.X_RDKCENTRAL-COM_RFC.Feature.BTR.GamePad.Enable` once at startup. It is forced on for Raspberry Pi builds.
 - When it is off, BTMgr rejects incoming gamepad connections, hides gamepads from the discovered-devices list, and ignores status callbacks for gamepads.
 - The plugin has no RFC check.
-- **Owner: open.** The SDK team said this is business logic and may belong in the plugin; being confirmed with them.
+- **Not needed for now.** The SDK team confirmed the plugin does not need to do the RFC check.
 
 ## 4. Unsupported Xbox Gen4 gamepad filter
 
 - Applies only in builds with `BT_UNSUPPORTED_GAMEPAD_ENABLED` (tied to Bluetooth 5.2 or later, or privacy).
 - `BTRCore_IsUnsupportedGamepad` ignores Xbox Gen4 pads: vendor 0x045E, product 0x0B13, device ID 0x0509 or 0x0501.
 - The plugin has no equivalent.
+- **Owner: SDK** (agreed with the SDK team). Nothing to do in the plugin.
 
 ## 5. Other gamepad-specific BTMgr code (not analyzed)
 
@@ -53,10 +54,14 @@ Sources: `btrMgr_ConnectionInAuthCb` and related code in `bluetooth_mgr/src/ifce
 - Gamepads are never auto-accepted.
 - Client answer windows of 2 s (classic gamepad) and 20 s (LE gamepad).
 
-## Questions for the SDK team
+## Summary of decisions (agreed with the SDK team)
 
-1. Does the SDK, or BlueZ underneath it, already handle any of this? For example, an auto-reconnect right after a disconnect, rejecting unpaired HID devices, or the Xbox Gen4 case.
-2. Does the SDK expose a "last disconnected" signal or timestamp, or should the plugin track it from `Disconnected` events?
-3. Should the plugin add the rules above, or is any of them not wanted on the SDK stack?
-
-The gap report currently treats these rules as plugin-side work that needs nothing from the SDK beyond the existing `modalias` properties.
+| Item | Owner |
+|---|---|
+| 1. Reject unpaired HID connections | SDK |
+| 2. Hold-off after a disconnect (including `gEliteIncomCon`) | SDK |
+| 3. Gamepad RFC gate | Not needed for now |
+| 4. Unsupported Xbox Gen4 gamepad filter | SDK |
+| 5. PS4 special case | SDK |
+| 5. Last-paired LE gamepad unpair (`ghBTRMgrDevHdlLastPaired`) | SDK |
+| 5. Stadia special case | Plugin (autoconnect handling, see "Already mirrored in the plugin") |
