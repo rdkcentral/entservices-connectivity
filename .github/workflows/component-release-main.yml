@@ -13,7 +13,7 @@ on:
 
 jobs:
   release:
-    uses: rdkcentral/build_tools_workflows/.github/workflows/component-release-main.yml@develop
+    uses: rdkcentral/build_tools_workflows/.github/workflows/component-release-main.yml@f8ee5bca1759cf6c331c8b8d20fe967344319dda
     with:
       tag: ${{ inputs.tag }}
     secrets:

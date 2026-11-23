@@ -299,7 +299,8 @@ jobs:
         with:
           repository: rdkcentral/entservices-helpers
           path: entservices-helpers
-          ref: develop
+          # 1.0.7 routes logging through Thunder tracing, which breaks entservices-testframework 2.0.0 (L2TestsMock.cpp).
+          ref: 1.0.6
 
       - name: Build entservices-helpers
         run: >

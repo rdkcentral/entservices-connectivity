@@ -34,6 +34,8 @@
 
 #ifndef BLUETOOTH_PERSISTENT_FILE_PATH
 // Set at build time via -DBLUETOOTH_PERSISTENT_FILE_PATH=<path>
+// Intentionally unchanged: the /tmp default is a deliberate dev/test fallback that the L1/L2 tests rely on;
+// production builds set the path via CMake (docs name /opt/persistent/sky/sky-asperipherals-bluetoothdevices.json).
 #define BLUETOOTH_PERSISTENT_FILE_PATH "/tmp/paired_bluetooth_devices.json"
 #endif
 
@@ -128,6 +130,9 @@ Core::hresult BluetoothPersistenceAdapter::Parse(const std::string& payload, std
     // Missing, empty, or corrupted (invalid JSON) payloads are treated as the
     // default content {"pairedDevices":[]} rather than a fatal error, so migration
     // is not blocked by an absent or malformed filesystem persistence source.
+    // Intentionally unchanged: documented behaviour (manual test plan TC-MIG-06 and the L1 corrupted-payload
+    // test: a corrupt legacy file migrates as empty). openspec/specs/bluetooth-migration/spec.md describes
+    // aborting instead, so reconcile the two if the policy changes.
     JsonObject root;
     if (payload.empty() || !root.FromString(payload)) {
         if (!payload.empty()) {
@@ -146,11 +151,21 @@ Core::hresult BluetoothPersistenceAdapter::Parse(const std::string& payload, std
     
     for (uint16_t i = 0; i < pairedDevices.Length(); ++i) {
         
+        if (pairedDevices[i].Content() != WPEFramework::Core::JSON::Variant::type::OBJECT) {
+            LOGWARN("Skipping filesystem persistence entry %u: not a JSON object", static_cast<unsigned>(i));
+            continue;
+        }
+
         JsonObject entry = pairedDevices[i].Object();
         BluetoothDeviceInfo info;
 
         if (entry.HasLabel("deviceAddr")) {
             info.deviceAddr = entry["deviceAddr"].String();
+        }
+
+        if (info.deviceAddr.empty()) {
+            LOGWARN("Skipping filesystem persistence entry %u: missing or empty deviceAddr", static_cast<unsigned>(i));
+            continue;
         }
 
         if (entry.HasLabel("deviceType")) {
@@ -183,67 +198,15 @@ Core::hresult BluetoothPersistenceAdapter::Parse(const std::string& payload, std
     return Core::ERROR_NONE;
 }
 
-Core::hresult BluetoothPersistenceAdapter::Read(std::vector<BluetoothDeviceInfo>& devices) const
-{
-    if (access(_filesystemPersistencePath.c_str(), F_OK) != 0) {
-        if (errno == ENOENT) {
-            LOGINFO("filesystem persistence file does not exist: %s", _filesystemPersistencePath.c_str());
-            return Core::ERROR_NOT_EXIST;
-        }
-        LOGWARN("filesystem persistence file is not accessible: %s", _filesystemPersistencePath.c_str());
-        return Core::ERROR_GENERAL;
-    }
-
-    std::ifstream input(_filesystemPersistencePath, std::ios::in | std::ios::binary);
-    if (!input.is_open()) {
-        LOGWARN("filesystem persistence file is not readable: %s", _filesystemPersistencePath.c_str());
-        return Core::ERROR_GENERAL;
-    }
-
-    input.seekg(0, std::ios::end);
-    const std::streamoff fileSize = static_cast<std::streamoff>(input.tellg());
-    if (fileSize < 0) {
-        LOGWARN("filesystem persistence file size query failed: %s", _filesystemPersistencePath.c_str());
-        return Core::ERROR_GENERAL;
-    }
-    if (fileSize > kMaxFilesystemPersistencePayloadBytes) {
-        LOGWARN("filesystem persistence file too large (%lld bytes), skipping parse: %s",
-            static_cast<long long>(fileSize), _filesystemPersistencePath.c_str());
-        return Core::ERROR_GENERAL;
-    }
-    input.seekg(0, std::ios::beg);
-
-    std::stringstream buffer;
-    buffer << input.rdbuf();
-
-    if (input.bad()) {
-        LOGWARN("filesystem persistence file read failed: %s", _filesystemPersistencePath.c_str());
-        return Core::ERROR_GENERAL;
-    }
-
-    std::vector<BluetoothDeviceInfo> loaded;
-    const Core::hresult parseResult = Parse(buffer.str(), loaded);
-    if (Core::ERROR_NONE != parseResult) {
-        return parseResult;
-    }
-
-    devices = std::move(loaded);
-    return Core::ERROR_NONE;
-}
-
 Core::hresult BluetoothPersistenceAdapter::ReadRaw(std::string& content) const
 {
-    if (access(_filesystemPersistencePath.c_str(), F_OK) != 0) {
+    errno = 0;
+    std::ifstream input(_filesystemPersistencePath, std::ios::in | std::ios::binary);
+    if (!input.is_open()) {
         if (errno == ENOENT) {
             LOGINFO("filesystem persistence file does not exist: %s", _filesystemPersistencePath.c_str());
             return Core::ERROR_NOT_EXIST;
         }
-        LOGWARN("filesystem persistence file is not accessible: %s", _filesystemPersistencePath.c_str());
-        return Core::ERROR_GENERAL;
-    }
-
-    std::ifstream input(_filesystemPersistencePath, std::ios::in | std::ios::binary);
-    if (!input.is_open()) {
         LOGWARN("filesystem persistence file is not readable: %s", _filesystemPersistencePath.c_str());
         return Core::ERROR_GENERAL;
     }
@@ -362,7 +325,13 @@ Core::hresult BluetoothPersistenceAdapter::Write(const std::unordered_map<std::s
 
     const std::string tmpPath = _filesystemPersistencePath + ".tmp";
     {
-        const int fd = open(tmpPath.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        // Remove any stale/attacker-planted temp file, then create exclusively without following symlinks.
+        if ((::unlink(tmpPath.c_str()) != 0) && (errno != ENOENT)) {
+            LOGWARN("Failed to unlink stale filesystem persistence temp file: %s", tmpPath.c_str());
+        }
+        // Intentionally unchanged: mode 0644 is kept world-readable on purpose because the legacy AS reader
+        // of this file may run as a different user; tightening needs that confirmed first.
+        const int fd = open(tmpPath.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0644);
         if (fd < 0) {
             LOGERR("Failed to open filesystem persistence temp file for write: %s", tmpPath.c_str());
             return Core::ERROR_GENERAL;
@@ -392,9 +361,17 @@ Core::hresult BluetoothPersistenceAdapter::Write(const std::unordered_map<std::s
         }
 
         if (fsync(fd) != 0) {
-            LOGWARN("fsync failed for temp file: %s", tmpPath.c_str());
+            LOGERR("fsync failed for temp file: %s", tmpPath.c_str());
+            close(fd);
+            ::unlink(tmpPath.c_str());
+            return Core::ERROR_GENERAL;
         }
-        close(fd);
+        // close() is not retried after failure (fd state is unspecified), so no double-close.
+        if (close(fd) != 0) {
+            LOGERR("close failed for temp file: %s", tmpPath.c_str());
+            ::unlink(tmpPath.c_str());
+            return Core::ERROR_GENERAL;
+        }
     }
 
     if (std::rename(tmpPath.c_str(), _filesystemPersistencePath.c_str()) != 0) {
@@ -409,7 +386,7 @@ Core::hresult BluetoothPersistenceAdapter::Write(const std::unordered_map<std::s
     {
         const std::string::size_type slashPos = _filesystemPersistencePath.rfind('/');
         const std::string dirPath = (slashPos != std::string::npos) ? _filesystemPersistencePath.substr(0, slashPos) : std::string(".");
-        const int dirFd = open(dirPath.c_str(), O_RDONLY);
+        const int dirFd = open(dirPath.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
         if (dirFd < 0) {
             LOGWARN("Failed to open parent directory for fsync: %s", dirPath.c_str());
         } else {

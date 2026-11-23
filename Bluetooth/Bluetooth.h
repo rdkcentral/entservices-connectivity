@@ -19,17 +19,19 @@
 
 #pragma once
 
+#include <atomic>
+#include <cstdint>
+#include <mutex>
 #include <thread>
 #include <memory>
 
 #include "Module.h"
 #include <interfaces/IPowerManager.h>
 #include "PowerManagerInterface.h"
-#include "UtilsThreadRAII.h"
+#include "UtilsLogging.h"
 #include "BluetoothDeviceManager.h"
+#include "BtAdapter.h"
 #include <type_traits>
-
-#include "btmgr.h" //TODO: can we move it to the module? Required by notifyEventWrapper()
 
 namespace WPEFramework {
     namespace Plugin {
@@ -78,7 +80,7 @@ namespace WPEFramework {
             // time) so BTMgr calls never block Thunder's notification thread, rapid transitions
             // can't run concurrently or out of order, and the shared Core::IWorkerPool can't be
             // starved by a stuck BTMgr call. Deinitialize() destroys this before tearing down
-            // any other member, which joins the thread and guarantees no handler is in flight.
+            // any other member; its destructor waits for the thread to stop, which guarantees no handler is in flight.
             class EXTERNAL PowerModeEventQueue : public Core::Thread {
 
             public:
@@ -96,16 +98,20 @@ namespace WPEFramework {
 
                 ~PowerModeEventQueue() override
                 {
-                    // Unblocks a thread parked in _queue.Extract() so Stop()/~Thread() can join it.
+                    // Disable() unblocks a thread parked in _queue.Extract(); Wait() must complete here,
+                    // before _queue/_bluetooth are destroyed, since ~Core::Thread runs after the members.
                     Stop();
                     _queue.Disable();
+                    Wait(Core::Thread::STOPPED | Core::Thread::BLOCKED, Core::infinite);
                 }
 
                 void Post(
                     const WPEFramework::Exchange::IPowerManager::PowerState currentState,
                     const WPEFramework::Exchange::IPowerManager::PowerState newState)
                 {
-                    _queue.Post(Transition{currentState, newState});
+                    if (!_queue.Post(Transition{currentState, newState})) {
+                        LOGERR("Power transition dropped (queue disabled): %d --> %d", static_cast<int>(currentState), static_cast<int>(newState));
+                    }
                 }
 
             private:
@@ -147,6 +153,7 @@ namespace WPEFramework {
                 void OnPowerModeChanged(const WPEFramework::Exchange::IPowerManager::PowerState currentState, const WPEFramework::Exchange::IPowerManager::PowerState newState) override
                 {
                     // Hand off to the dedicated queue; do not call _bluetooth.onPowerModeChanged() directly from here.
+                    std::lock_guard<std::mutex> lock(_bluetooth.m_powerModeQueueLock);
                     if (_bluetooth.m_powerModeEventQueue) {
                         _bluetooth.m_powerModeEventQueue->Post(currentState, newState);
                     }
@@ -205,9 +212,9 @@ namespace WPEFramework {
         private: /*internal methods*/
             void getStatusSupport(string& status);
             bool isAdapterDiscoverable();
-            string startDeviceDiscovery(int timeout, const string &discProfile = "LOUDSPEAKER, HEADPHONES, WEARABLE HEADSET, HIFI AUDIO DEVICE, KEYBOARD, MOUSE, JOYSTICK");  //default behaviour is to scan audio devices and gamepads
+            string startDeviceDiscovery(int timeout, const string &discProfile = "");  //no profile: the backend applies its default scan (audio devices and gamepads on BTMgr; all devices, RCUs included, on the SDK)
             bool stopDeviceDiscovery();
-            void startDiscoveryTimer(int msec);
+            void startDiscoveryTimer(uint32_t msec);
             void stopDiscoveryTimer();
             void onDiscoveryTimer();
             JsonArray getDiscoveredDevices();
@@ -225,11 +232,11 @@ namespace WPEFramework {
             bool setAudioControlCommand(long long int  deviceID, const string &audioCtrlCmd);
             bool setEventResponse(long long int  deviceID, const string &eventType, const string &respValue);
             bool parseDeviceID(const std::string& deviceIDStr,long long int& deviceID);
+            std::string toCacheKey(const std::string& deviceIDStr);
             JsonObject getDeviceInfo(long long int deviceID);
             JsonObject getMediaTrackInfo(long long int deviceID);
             bool setDeviceVolumeMuteProperties(long long int  deviceID, const string &deviceProfile, unsigned char ui8volume, unsigned char mute);
             JsonObject getDeviceVolumeMuteProperties(long long int  deviceID, const string &deviceProfile);
-            BTRMGR_DeviceOperationType_t btmgrDeviceOperationTypeFromString(const string &deviceProfile);
             void notifyAutoConnectStatusChanged(const string& deviceID, const bool enable);
 
         public:
@@ -271,11 +278,7 @@ namespace WPEFramework {
             static const string EVT_CONNECTION_REQUEST;
 
             static const string EVT_PLAYBACK_REQUEST;
-            static const string EVT_PLAYBACK_STARTED;
-            static const string EVT_PLAYBACK_PAUSED;
-            static const string EVT_PLAYBACK_RESUMED;
-            static const string EVT_PLAYBACK_STOPPED;
-            static const string EVT_PLAYBACK_ENDED;
+            static const string EVT_PLAYBACK_CHANGE;
 
             static const string EVT_PLAYBACK_POSITION;
             static const string EVT_PLAYBACK_NEW_TRACK;
@@ -296,8 +299,6 @@ namespace WPEFramework {
             END_INTERFACE_MAP
 
         public:
-            static Bluetooth* _instance;
-            void notifyEventWrapper (BTRMGR_EventMessage_t &eventMsg);
             void onPowerModeChanged(const WPEFramework::Exchange::IPowerManager::PowerState currentState, const WPEFramework::Exchange::IPowerManager::PowerState newState);
 
         private:
@@ -338,16 +339,28 @@ namespace WPEFramework {
             static const string CMD_AUDIO_CTRL_UNKNOWN;
 
             uint32_t m_apiVersionNumber;
-            // Assuming that there will be only one threaded call at a time (which is the case for Bluetooth)
-            // Otherwise we might need a thread for each async command for better performance
-            Utils::ThreadRAII m_executionThread;
+            // Guards m_discoveryRunning and the scan start/stop sequence; recursive because
+            // startDeviceDiscovery()/onDiscoveryTimer() call stopDeviceDiscovery().
+            Core::CriticalSection m_discoveryLock;
             bool m_discoveryRunning;
             DiscoveryTimer m_discoveryTimer;
             friend class DiscoveryTimer;
+            // Parts of onPowerModeChanged(), which holds m_powerModeLock around both.
+            void applyDevicePowerPolicy(const WPEFramework::Exchange::IPowerManager::PowerState currentState, const WPEFramework::Exchange::IPowerManager::PowerState newState);
+            void applyGamepadPowerPolicy(const WPEFramework::Exchange::IPowerManager::PowerState currentState, const WPEFramework::Exchange::IPowerManager::PowerState newState);
+
             PowerManagerInterfaceRef m_powerManagerPlugin;
             Core::Sink<PowerManagerNotification> m_powerManagerNotification;
+            // Guards the m_powerModeEventQueue pointer (read by the notification callback, reset by Deinitialize()).
+            // Never held while the queue is destroyed: ~PowerModeEventQueue joins a thread that takes m_powerModeLock.
+            std::mutex m_powerModeQueueLock;
             std::unique_ptr<PowerModeEventQueue> m_powerModeEventQueue;
+            // Serializes onPowerModeChanged() between the queue thread and Initialize()'s initial call.
+            std::mutex m_powerModeLock;
             BluetoothDeviceManager m_bluetoothDeviceManager;
+            BtAdapter m_btAdapter;
+            // Set once Initialize() has finished; the power-on reconnect only runs from notifications after that.
+            std::atomic<bool> m_startupComplete{false};
         };
 
     } // Plugin
