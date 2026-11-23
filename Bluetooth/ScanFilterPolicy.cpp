@@ -28,6 +28,7 @@ namespace Plugin {
 namespace {
 
 constexpr uint16_t kRemoteControlAppearance = 0x0180; // Intentionally unchanged: exact match, as btrCore/BTMgr (ui16Appearance == BTRMGR_REMOTE_CONTROL_APPEARANCE); do not loosen.
+constexpr uint16_t kLeHidAppearance         = 0x03C4; // BTRCORE_LE_HID_DEVICE_APPEARANCE
 constexpr size_t   kOuiLength               = 8; // "AA:BB:CC"
 
 // Same lists as btrCore's BTRCORE_REMOTE_OUI_VALUES / BTRCORE_AMAZON_OUI_VALUES.
@@ -49,6 +50,22 @@ const char* const kAmazonOuis[] = {
     "EC:FD:86", // AmazonController-0B0
     nullptr
 };
+
+// Same list as btrCore's BTRCORE_GOOGLE_OUI_VALUES.
+const char* const kGoogleOuis[] = {
+    "61:47:AA", // Stadia8ZSF-5e22
+    "EF:6F:4D", // StadiaJVRN-58e0
+    "CA:7B:25", // Stadia2TFX-0fa6
+    nullptr
+};
+
+// HID over GATT service, as the 16-bit value or in the Bluetooth base UUID form BlueZ reports.
+bool isHidOverGattUuid(const std::string& uuid) {
+    std::string lower = uuid;
+    std::transform(lower.begin(), lower.end(), lower.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+    return lower == "1812" || lower == "00001812-0000-1000-8000-00805f9b34fb";
+}
 
 bool contains(const std::string& haystack, const char* needle) {
     return haystack.find(needle) != std::string::npos;
@@ -94,6 +111,24 @@ bool ScanFilterPolicy::hasOui(const std::string& mac, const char* const* ouis) {
 // static
 bool ScanFilterPolicy::isRemoteControl(const std::string& mac, uint16_t appearance) {
     return appearance == kRemoteControlAppearance || hasOui(mac, kRemoteOuis);
+}
+
+// static
+bool ScanFilterPolicy::isStadiaGamepad(const std::string& mac, const std::string& name) {
+    // Intentionally unchanged: the name match stays case-sensitive (strstr) as in btrCore; do not loosen.
+    return hasOui(mac, kGoogleOuis) || contains(name, "Stadia");
+}
+
+// static
+bool ScanFilterPolicy::isLeHidDevice(const std::string& mac,
+                                     const std::string& name,
+                                     uint16_t appearance,
+                                     uint32_t classOfDevice,
+                                     const std::vector<std::string>& uuids) {
+    if (classOfDevice != 0 || isRemoteControl(mac, appearance)) return false;
+    return appearance == kLeHidAppearance
+        || std::any_of(uuids.begin(), uuids.end(), isHidOverGattUuid)
+        || isStadiaGamepad(mac, name);
 }
 
 // static

@@ -59,7 +59,9 @@ bool AuthBridge::isGamepad(const std::string& mac, const bluetooth::DeviceProper
 
 bool AuthBridge::isManagedHidDevice(const std::string& deviceType, const std::string& mac,
                                     const bluetooth::DeviceProperties& props) {
-    return isHidType(deviceType) && !isRemoteControl(mac, props);
+    // A Stadia controller may not classify as HID (no appearance or HID UUID, e.g. after a reboot); BTMgr treats it as a gamepad.
+    return (isHidType(deviceType) || ScanFilterPolicy::isStadiaGamepad(mac, props.name.value_or("")))
+        && !isRemoteControl(mac, props);
 }
 
 std::string AuthBridge::resolveDeviceType(const std::shared_ptr<bluetooth::Device>& device, const std::string& handleStr) {

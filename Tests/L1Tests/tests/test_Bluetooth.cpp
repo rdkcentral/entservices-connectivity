@@ -2641,6 +2641,35 @@ TEST(ScanFilterPolicyTest, modeFromProfile_MapsLegacyProfiles)
     EXPECT_EQ(Mode::Le,          ScanFilterPolicy::modeFromProfile("LE TILE"));
 }
 
+TEST(ScanFilterPolicyTest, isStadiaGamepad_MatchesGoogleOuiOrName)
+{
+    EXPECT_TRUE(ScanFilterPolicy::isStadiaGamepad("61:47:AA:01:02:03", ""));
+    EXPECT_TRUE(ScanFilterPolicy::isStadiaGamepad("ef:6f:4d:01:02:03", ""));
+    EXPECT_TRUE(ScanFilterPolicy::isStadiaGamepad("CA:7B:25:01:02:03", ""));
+    EXPECT_TRUE(ScanFilterPolicy::isStadiaGamepad("11:22:33:44:55:66", "Stadia2TFX-0fa6"));
+    EXPECT_FALSE(ScanFilterPolicy::isStadiaGamepad("11:22:33:44:55:66", "stadia"));
+    EXPECT_FALSE(ScanFilterPolicy::isStadiaGamepad("11:22:33:44:55:66", "Gamepad"));
+}
+
+TEST(ScanFilterPolicyTest, isLeHidDevice_MatchesAppearanceHidUuidOrStadia)
+{
+    const std::string mac = "11:22:33:44:55:66";
+    EXPECT_TRUE(ScanFilterPolicy::isLeHidDevice(mac, "Pad", 0x03C4, 0, {}));
+    EXPECT_TRUE(ScanFilterPolicy::isLeHidDevice(mac, "Pad", 0, 0, {"00001812-0000-1000-8000-00805F9B34FB"}));
+    EXPECT_TRUE(ScanFilterPolicy::isLeHidDevice(mac, "Pad", 0, 0, {"1812"}));
+    EXPECT_TRUE(ScanFilterPolicy::isLeHidDevice("CA:7B:25:01:02:03", "", 0, 0, {}));
+    EXPECT_TRUE(ScanFilterPolicy::isLeHidDevice(mac, "Stadia2TFX-0fa6", 0, 0, {}));
+    EXPECT_FALSE(ScanFilterPolicy::isLeHidDevice(mac, "Pad", 0, 0, {"0000110b-0000-1000-8000-00805f9b34fb"}));
+    EXPECT_FALSE(ScanFilterPolicy::isLeHidDevice(mac, "Pad", 0, 0, {}));
+}
+
+TEST(ScanFilterPolicyTest, isLeHidDevice_SkipsClassicDevicesAndRemoteControls)
+{
+    EXPECT_FALSE(ScanFilterPolicy::isLeHidDevice("11:22:33:44:55:66", "Stadia", 0x03C4, 0x002508, {"1812"}));
+    EXPECT_FALSE(ScanFilterPolicy::isLeHidDevice("11:22:33:44:55:66", "RCU", 0x0180, 0, {"1812"}));
+    EXPECT_FALSE(ScanFilterPolicy::isLeHidDevice("E8:0F:C8:01:02:03", "RCU", 0x03C4, 0, {"1812"}));
+}
+
 TEST(ScanFilterPolicyTest, shouldSkipDiscovered_ExplicitProfileSkipsRemoteControls)
 {
     using Mode = ScanFilterPolicy::Mode;

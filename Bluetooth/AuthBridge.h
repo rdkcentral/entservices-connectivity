@@ -121,7 +121,7 @@ public:
     // LE gamepad or classic Joystick/Gamepad class of device, excluding RDK remote controls.
     static bool isGamepad(const std::string& mac, const bluetooth::DeviceProperties& props);
     // HID device that is not an RDK remote control, as BTMgr's standby handling selects: remote controls
-    // are needed to wake the box and are left alone.
+    // are needed to wake the box and are left alone. A Stadia controller counts as HID even when its type is unknown.
     static bool isManagedHidDevice(const std::string& deviceType, const std::string& mac,
                                    const bluetooth::DeviceProperties& props);
 

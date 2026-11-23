@@ -21,6 +21,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace WPEFramework {
 namespace Plugin {
@@ -53,6 +54,18 @@ public:
 
     // RDK remote controls (GAP appearance 0x0180 or a known RCU OUI) are not reported by a scan with an explicit profile.
     static bool isRemoteControl(const std::string& mac, uint16_t appearance);
+
+    // Google Stadia controller as btrCore identifies it: a Google OUI, or "Stadia" in the name. Needed because BlueZ
+    // may report neither appearance nor the HID service UUID for it, e.g. after a reboot.
+    static bool isStadiaGamepad(const std::string& mac, const std::string& name);
+
+    // LE HID device whose auto-connect the plugin manages (BTMgr's LE action list): appearance 0x03C4, the HID over GATT
+    // service UUID (0x1812) or a Stadia controller. Classic (non-zero class of device) devices and RDK remotes are excluded.
+    static bool isLeHidDevice(const std::string& mac,
+                              const std::string& name,
+                              uint16_t appearance,
+                              uint32_t classOfDevice,
+                              const std::vector<std::string>& uuids);
 
     // Best-effort device type from BlueZ's Icon property (derived by BlueZ from class, appearance and UUIDs),
     // for devices DeviceTypeClassifier cannot place. Returns "UNKNOWN DEVICE" when the icon says nothing.

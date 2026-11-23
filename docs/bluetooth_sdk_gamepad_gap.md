@@ -8,6 +8,7 @@ Sources: `btrMgr_ConnectionInAuthCb` and related code in `bluetooth_mgr/src/ifce
 
 - BTMgr denies an incoming HID connection from a device that is not paired. This covers every HID device (gamepad, keyboard, mouse, remote), not only gamepads.
 - The plugin sends the request to the client, which can accept it.
+- **Owner: SDK** (agreed with the SDK team). Nothing to do in the plugin.
 
 ## 2. Hold-off after a disconnect (10 s)
 
@@ -24,12 +25,14 @@ Sources: `btrMgr_ConnectionInAuthCb` and related code in `bluetooth_mgr/src/ifce
 - Each denial restarts the 10 s timer, unless gamepad standby mode is on.
 - BTMgr's source comment says these gamepads reconnect by themselves almost as soon as they start to disconnect.
 - The plugin has no hold-off.
+- **Owner: SDK** (agreed with the SDK team). Nothing to do in the plugin.
 
 ## 3. Gamepad RFC gate
 
 - BTMgr reads `Device.DeviceInfo.X_RDKCENTRAL-COM_RFC.Feature.BTR.GamePad.Enable` once at startup. It is forced on for Raspberry Pi builds.
 - When it is off, BTMgr rejects incoming gamepad connections, hides gamepads from the discovered-devices list, and ignores status callbacks for gamepads.
 - The plugin has no RFC check.
+- **Owner: open.** The SDK team said this is business logic and may belong in the plugin; being confirmed with them.
 
 ## 4. Unsupported Xbox Gen4 gamepad filter
 
@@ -39,13 +42,14 @@ Sources: `btrMgr_ConnectionInAuthCb` and related code in `bluetooth_mgr/src/ifce
 
 ## 5. Other gamepad-specific BTMgr code (not analyzed)
 
-- A delay before reporting out-of-range for the Xbox Elite (`gEliteIncomCon`).
-- PS4 and Stadia special cases (`btrMgr_IsPS4Gamepad`, `BTRMGR_STADIA_*`).
-- BTMgr unpairs an LE gamepad that was the last pairing attempt (`ghBTRMgrDevHdlLastPaired`).
+- A delay before reporting out-of-range for the Xbox Elite (`gEliteIncomCon`): handled in the SDK (same as section 2).
+- PS4 special case (`btrMgr_IsPS4Gamepad`): handled in the SDK.
+- BTMgr unpairs an LE gamepad that pairs within 2 minutes of a reported pairing failure (`ghBTRMgrDevHdlLastPaired`): handled in the SDK.
 
 ## Already mirrored in the plugin
 
 - Gamepad standby mode: reject gamepad connections in standby, remove and restore auto-connect, hold discovery events.
+- Stadia special case, in the plugin as agreed with the SDK team: auto-connect is removed and restored (`setAutoconnectOff()` / `setAutoconnectOn()`) only for paired LE HID devices. A device is LE HID if its appearance is 0x03C4, its UUIDs contain 1812, or it is a Stadia controller (MAC starts with 61:47:AA, EF:6F:4D or CA:7B:25, or the name contains "Stadia"). RDK remotes and classic (non-zero class of device) devices are skipped. See `ScanFilterPolicy::isLeHidDevice`.
 - Gamepads are never auto-accepted.
 - Client answer windows of 2 s (classic gamepad) and 20 s (LE gamepad).
 

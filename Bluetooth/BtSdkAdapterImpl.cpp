@@ -1016,14 +1016,17 @@ void BtSdkAdapterImpl::setGamepadStandbyMode(bool standby) {
     // Before the loops below, so a gamepad connecting meanwhile is already rejected.
     if (standby) m_gamepadStandby = true;
 
-    // BTMgr's auto-connect list only holds LE devices (no Class of Device).
+    // BTMgr's auto-connect list only holds LE HID devices: appearance 0x03C4, HID over GATT UUID or a Stadia controller.
     struct Managed { std::shared_ptr<bluetooth::Device> device; std::string handle; std::string type; bool le; };
     std::vector<Managed> managed;
     for (auto& device : managedHidDevices()) {
         std::string mac;
         device->address(mac);
         bluetooth::DeviceProperties props;
-        const bool le = device->getAllProperties(props) && props.classOfDevice.value_or(0) == 0;
+        const bool le = device->getAllProperties(props)
+            && ScanFilterPolicy::isLeHidDevice(mac, props.name.value_or(""), props.appearance.value_or(0),
+                                               props.classOfDevice.value_or(0),
+                                               props.uuids.value_or(std::vector<std::string>{}));
         std::string handle = DeviceRegistry::deriveHandle(mac);
         if (!DeviceRegistry::isValidHandle(handle)) continue;
         std::string type = m_authBridge->resolveDeviceType(device, handle);
